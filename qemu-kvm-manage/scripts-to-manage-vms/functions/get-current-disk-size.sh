@@ -22,7 +22,7 @@ get_current_disk_size() {
         return 1
     fi
     
-    local vm_disk_path="/kvm-hub/vms/${vm_hostname}/${vm_hostname}.qcow2"
+    local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
     
     if [ ! -f "${vm_disk_path}" ]; then
         print_warning "VM disk not found at: ${vm_disk_path}"

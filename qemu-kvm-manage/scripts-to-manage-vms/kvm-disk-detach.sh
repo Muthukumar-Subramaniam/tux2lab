@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl disk-detach [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm disk-detach [OPTIONS] [hostname]
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -d, --disks <list>   Comma-separated list of disk targets to detach (e.g., vdb,vdc)
@@ -19,10 +19,10 @@ Arguments:
   hostname             Name of the VM to detach disks from (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl disk-detach vm1                     # Interactive mode - select disks
-  qlabvmctl disk-detach -f vm1                  # Force power-off if running
-  qlabvmctl disk-detach -d vdb,vdc vm1          # Detach specific disks
-  qlabvmctl disk-detach -f -d vdb,vdc vm1       # Fully automated
+  tux2lab vm disk-detach vm1                     # Interactive mode - select disks
+  tux2lab vm disk-detach -f vm1                  # Force power-off if running
+  tux2lab vm disk-detach -d vdb,vdc vm1          # Detach specific disks
+  tux2lab vm disk-detach -f -d vdb,vdc vm1       # Fully automated
 "
 }
 
@@ -172,7 +172,7 @@ else
     fn_shutdown_or_poweroff
 fi
 
-VM_DIR="/kvm-hub/vms/${qemu_kvm_hostname}"
+VM_DIR="/tux2lab-data/vms/${qemu_kvm_hostname}"
 
 # Verify VM directory exists
 if [[ ! -d "$VM_DIR" ]]; then
@@ -281,7 +281,7 @@ if [[ "$confirm" != "yes" ]]; then
 fi
 
 # Ensure detached disks directory exists
-DETACHED_DIR="/kvm-hub/detached-data-disks"
+DETACHED_DIR="/tux2lab-data/detached-data-disks"
 sudo mkdir -p "$DETACHED_DIR"
 sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$DETACHED_DIR"
 

@@ -16,7 +16,7 @@ if command -v dmidecode &>/dev/null; then
     fi
 fi
 
-LAB_ENV_VARS_FILE="/kvm-hub/lab_environment_vars"
+LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
 if [ -f "$LAB_ENV_VARS_FILE" ]; then
     source "$LAB_ENV_VARS_FILE"
 else

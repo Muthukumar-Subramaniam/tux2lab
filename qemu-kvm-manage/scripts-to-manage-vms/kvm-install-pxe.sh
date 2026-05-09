@@ -17,7 +17,7 @@ SUPPORTS_VERSION="yes"
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl install-pxe [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm install-pxe [OPTIONS] [hostname]
 Options:
   -c, --console        Attach console during installation (single VM only)
   -d, --distro         Specify OS distribution
@@ -30,12 +30,12 @@ Arguments:
   hostname             Name of the VM to install via PXE boot (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl install-pxe vm1                              # Install single VM (latest)
-  qlabvmctl install-pxe vm1 --console                    # Install and attach console
-  qlabvmctl install-pxe vm1 --distro almalinux           # Install with AlmaLinux (latest)
-  qlabvmctl install-pxe vm1 -d almalinux -v previous     # Install with AlmaLinux 9
-  qlabvmctl install-pxe --hosts vm1,vm2,vm3              # Install multiple VMs
-  qlabvmctl install-pxe -H vm1,vm2,vm3 -d ubuntu-lts     # Install multiple with Ubuntu LTS (latest)
+  tux2lab vm install-pxe vm1                              # Install single VM (latest)
+  tux2lab vm install-pxe vm1 --console                    # Install and attach console
+  tux2lab vm install-pxe vm1 --distro almalinux           # Install with AlmaLinux (latest)
+  tux2lab vm install-pxe vm1 -d almalinux -v previous     # Install with AlmaLinux 9
+  tux2lab vm install-pxe --hosts vm1,vm2,vm3              # Install multiple VMs
+  tux2lab vm install-pxe -H vm1,vm2,vm3 -d ubuntu-lts     # Install multiple with Ubuntu LTS (latest)
 "
 }
 

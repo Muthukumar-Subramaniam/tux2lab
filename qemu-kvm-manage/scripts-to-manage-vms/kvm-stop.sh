@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl stop [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm stop [OPTIONS] [hostname]
 Options:
   -f, --force          Skip confirmation prompt and force power-off
   -H, --hosts <list>   Comma-separated list of VM hostnames to stop
@@ -19,10 +19,10 @@ Arguments:
   hostname             Name of the VM to Power-OFF (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl stop vm1                    # Stop single VM with confirmation
-  qlabvmctl stop -f vm1                 # Stop single VM without confirmation
-  qlabvmctl stop --hosts vm1,vm2,vm3    # Stop multiple VMs with confirmation
-  qlabvmctl stop -f --hosts vm1,vm2     # Stop multiple VMs without confirmation
+  tux2lab vm stop vm1                    # Stop single VM with confirmation
+  tux2lab vm stop -f vm1                 # Stop single VM without confirmation
+  tux2lab vm stop --hosts vm1,vm2,vm3    # Stop multiple VMs with confirmation
+  tux2lab vm stop -f --hosts vm1,vm2     # Stop multiple VMs without confirmation
 "
 }
 

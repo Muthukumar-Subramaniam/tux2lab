@@ -37,12 +37,4 @@ else
     qemu_kvm_hostname="${qemu_kvm_hostname}.${lab_infra_domain_name}"
 fi
 
-# Check for self-referential operations (after hostname is validated and normalized)
-if [[ "$allow_self_reference_mode" != "ALLOW_SELF_REFERENCE" ]]; then
-    if [[ -n "${KVM_TOOL_EXECUTED_FROM:-}" && "${KVM_TOOL_EXECUTED_FROM}" == "${qemu_kvm_hostname}" ]]; then
-        print_error "This operation is not allowed to avoid self-referential KVM actions."
-        print_info "You are running a KVM management action for the lab infra server from the infra server itself."
-        print_info "To perform this operation, run it from the Linux workstation hosting the QEMU/KVM setup."
-        exit 1
-    fi
-fi
+

@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl disk-attach [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm disk-attach [OPTIONS] [hostname]
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -d, --disks <list>   Comma-separated list of disk files to attach from detached storage
@@ -19,10 +19,10 @@ Arguments:
   hostname             Name of the VM to attach disks to (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl disk-attach vm1                     # Interactive mode - select disks
-  qlabvmctl disk-attach -f vm1                  # Force power-off if running
-  qlabvmctl disk-attach -d disk1.qcow2,disk2.qcow2 vm1  # Attach specific disks
-  qlabvmctl disk-attach -f -d disk1.qcow2 vm2   # Fully automated
+  tux2lab vm disk-attach vm1                     # Interactive mode - select disks
+  tux2lab vm disk-attach -f vm1                  # Force power-off if running
+  tux2lab vm disk-attach -d disk1.qcow2,disk2.qcow2 vm1  # Attach specific disks
+  tux2lab vm disk-attach -f -d disk1.qcow2 vm2   # Fully automated
 "
 }
 
@@ -154,8 +154,8 @@ fn_shutdown_or_poweroff() {
     esac
 }
 
-VM_DIR="/kvm-hub/vms/${qemu_kvm_hostname}"
-DETACHED_DIR="/kvm-hub/detached-data-disks"
+VM_DIR="/tux2lab-data/vms/${qemu_kvm_hostname}"
+DETACHED_DIR="/tux2lab-data/detached-data-disks"
 
 # Verify VM directory exists
 if [[ ! -d "$VM_DIR" ]]; then

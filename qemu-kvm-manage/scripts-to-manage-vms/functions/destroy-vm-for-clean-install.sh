@@ -29,8 +29,8 @@ destroy_vm_for_clean_install() {
     fi
     
     # Delete VM folder and contents
-    print_task "Deleting VM folder /kvm-hub/vms/${vm_hostname}..."
-    if sudo rm -rf "/kvm-hub/vms/${vm_hostname}"; then
+    print_task "Deleting VM folder /tux2lab-data/vms/${vm_hostname}..."
+    if sudo rm -rf "/tux2lab-data/vms/${vm_hostname}"; then
         print_task_done
     else
         print_task_fail

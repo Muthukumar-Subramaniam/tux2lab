@@ -7,7 +7,7 @@
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 if [ "$#" -ne 0 ]; then
-    echo -e "\n❌ $(basename $0) does not take any arguments.\n"
+    echo -e "\n❌ 'tux2lab vm list' does not take any arguments.\n"
     exit 1
 fi
 

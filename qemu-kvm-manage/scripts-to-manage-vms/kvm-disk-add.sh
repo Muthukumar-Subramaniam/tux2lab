@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl disk-add [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm disk-add [OPTIONS] [hostname]
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -n, --count <num>    Number of disks to add (1-10, default: prompt)
@@ -20,10 +20,10 @@ Arguments:
   hostname             Name of the VM to add disks to (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl disk-add vm1                        # Interactive mode with prompts
-  qlabvmctl disk-add -f vm1                     # Force power-off if running
-  qlabvmctl disk-add -n 2 -s 10 vm1             # Add 2x10GB disks with prompts
-  qlabvmctl disk-add -f -n 3 -s 20 vm1          # Fully automated: 3x20GB disks
+  tux2lab vm disk-add vm1                        # Interactive mode with prompts
+  tux2lab vm disk-add -f vm1                     # Force power-off if running
+  tux2lab vm disk-add -n 2 -s 10 vm1             # Add 2x10GB disks with prompts
+  tux2lab vm disk-add -f -n 3 -s 20 vm1          # Fully automated: 3x20GB disks
 "
 }
 
@@ -222,7 +222,7 @@ else
     done
 fi
 
-VM_DIR="/kvm-hub/vms/${qemu_kvm_hostname}"
+VM_DIR="/tux2lab-data/vms/${qemu_kvm_hostname}"
 
 # Verify VM directory exists
 if [[ ! -d "$VM_DIR" ]]; then

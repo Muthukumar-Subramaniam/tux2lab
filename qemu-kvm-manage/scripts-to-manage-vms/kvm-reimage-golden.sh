@@ -21,7 +21,7 @@ SUPPORTS_VERSION="yes"
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl reimage-golden [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm reimage-golden [OPTIONS] [hostname]
 Options:
   -c, --console        Attach console during reimage (single VM only)
   -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
@@ -36,14 +36,14 @@ Arguments:
   hostname             Name of the VM to reimage via golden image disk (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl reimage-golden vm1                                   # Reimage single VM
-  qlabvmctl reimage-golden vm1 --console                         # Reimage and attach console
-  qlabvmctl reimage-golden vm1 --clean-install                   # Reimage with default specs
-  qlabvmctl reimage-golden vm1 --distro almalinux                # Reimage with AlmaLinux (latest)
-  qlabvmctl reimage-golden vm1 -d ubuntu-lts -v previous         # Reimage with Ubuntu 22.04
-  qlabvmctl reimage-golden -f vm1                                # Reimage without confirmation
-  qlabvmctl reimage-golden --hosts vm1,vm2,vm3 -d ubuntu-lts     # Reimage multiple with Ubuntu LTS
-  qlabvmctl reimage-golden -H vm1,vm2,vm3 --clean-install       # Reimage multiple with defaults
+  tux2lab vm reimage-golden vm1                                   # Reimage single VM
+  tux2lab vm reimage-golden vm1 --console                         # Reimage and attach console
+  tux2lab vm reimage-golden vm1 --clean-install                   # Reimage with default specs
+  tux2lab vm reimage-golden vm1 --distro almalinux                # Reimage with AlmaLinux (latest)
+  tux2lab vm reimage-golden vm1 -d ubuntu-lts -v previous         # Reimage with Ubuntu 22.04
+  tux2lab vm reimage-golden -f vm1                                # Reimage without confirmation
+  tux2lab vm reimage-golden --hosts vm1,vm2,vm3 -d ubuntu-lts     # Reimage multiple with Ubuntu LTS
+  tux2lab vm reimage-golden -H vm1,vm2,vm3 --clean-install       # Reimage multiple with defaults
 "
 }
 
@@ -84,15 +84,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Check for self-referential operation
-    if [[ -n "${KVM_TOOL_EXECUTED_FROM:-}" && "${KVM_TOOL_EXECUTED_FROM}" == "${qemu_kvm_hostname}" ]]; then
-        print_error "Cannot reimage VM '$qemu_kvm_hostname': Operation blocked to avoid self-referential KVM actions."
-        print_info "You are running a KVM reimage action for the lab infra server from the infra server itself."
-        print_info "To perform this operation, run it from the Linux workstation hosting the QEMU/KVM setup."
-        FAILED_VMS+=("$qemu_kvm_hostname")
-        continue
-    fi
-
     # Prevent reimaging of lab infra server
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-lab-infra-protection.sh
     if ! check_lab_infra_protection "$qemu_kvm_hostname"; then
@@ -120,15 +111,15 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Golden images follow pattern: {distro}-golden-image-{version}.{domain}.qcow2
         golden_image_pattern="${NORMALIZED_DISTRO}-golden-image-${VERSION_TYPE}.*.qcow2"
-        if ! ls /kvm-hub/golden-images-disk-store/${golden_image_pattern} &>/dev/null; then
+        if ! ls /tux2lab-data/golden-images-disk-store/${golden_image_pattern} &>/dev/null; then
             print_error "Golden image not found for '${OS_DISTRO}' (${VERSION_TYPE})"
             print_info "Available golden images:"
-            if ls /kvm-hub/golden-images-disk-store/*.qcow2 &>/dev/null; then
-                for f in /kvm-hub/golden-images-disk-store/*.qcow2; do basename "$f"; done | sed -E 's/^(.+)-golden-image-(latest|previous)\..*$/\1 (\2)/' | sort -u | sed 's/^/  - /'
+            if ls /tux2lab-data/golden-images-disk-store/*.qcow2 &>/dev/null; then
+                for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do basename "$f"; done | sed -E 's/^(.+)-golden-image-(latest|previous)\..*$/\1 (\2)/' | sort -u | sed 's/^/  - /'
             else
                 echo "  (none)"
             fi
-            print_info "Use 'qlabvmctl build-golden-image --distro ${OS_DISTRO} --version ${VERSION_TYPE}' to create it"
+            print_info "Use 'tux2lab vm build-golden-image --distro ${OS_DISTRO} --version ${VERSION_TYPE}' to create it"
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -199,7 +190,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Construct golden image FQDN matching ksmanager's format
     golden_image_fqdn="${OS_DISTRO}-golden-image-${VERSION_TYPE}.${lab_infra_domain_name}"
-    golden_qcow2_disk_path="/kvm-hub/golden-images-disk-store/${golden_image_fqdn}.qcow2"
+    golden_qcow2_disk_path="/tux2lab-data/golden-images-disk-store/${golden_image_fqdn}.qcow2"
 
     # Shut down VM if running
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
@@ -241,7 +232,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         # Default path: preserve disk size
         print_task "Reimaging VM '${qemu_kvm_hostname}' by replacing qcow2 disk..."
         
-        vm_qcow2_disk_path="/kvm-hub/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
+        vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-current-disk-size.sh
         get_current_disk_size "$qemu_kvm_hostname"

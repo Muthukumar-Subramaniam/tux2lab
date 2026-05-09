@@ -12,7 +12,7 @@ vm_hostname_arg=""
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl console [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm console [OPTIONS] [hostname]
 Options:
   -h, --help           Show this help message
 
@@ -20,7 +20,7 @@ Arguments:
   hostname             Name of the VM to access console (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl console vm1                   # Access console of VM
+  tux2lab vm console vm1                   # Access console of VM
   
 Note: Press Ctrl+] to exit the console.
 "

@@ -21,7 +21,7 @@ SUPPORTS_VERSION="yes"
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl reimage-pxe [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm reimage-pxe [OPTIONS] [hostname]
 Options:
   -c, --console        Attach console during reimage (single VM only)
   -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
@@ -36,14 +36,14 @@ Arguments:
   hostname             Name of the VM to reimage via PXE boot (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl reimage-pxe vm1                                   # Reimage single VM
-  qlabvmctl reimage-pxe vm1 --console                         # Reimage and attach console
-  qlabvmctl reimage-pxe vm1 --clean-install                   # Reimage with default specs
-  qlabvmctl reimage-pxe vm1 --distro almalinux                # Reimage with AlmaLinux (latest)
-  qlabvmctl reimage-pxe vm1 -d rocky -v previous              # Reimage with Rocky Linux 9
-  qlabvmctl reimage-pxe -f vm1                                # Reimage without confirmation
-  qlabvmctl reimage-pxe --hosts vm1,vm2,vm3 -d ubuntu-lts     # Reimage multiple with Ubuntu LTS
-  qlabvmctl reimage-pxe -H vm1,vm2,vm3 --clean-install       # Reimage multiple with defaults
+  tux2lab vm reimage-pxe vm1                                   # Reimage single VM
+  tux2lab vm reimage-pxe vm1 --console                         # Reimage and attach console
+  tux2lab vm reimage-pxe vm1 --clean-install                   # Reimage with default specs
+  tux2lab vm reimage-pxe vm1 --distro almalinux                # Reimage with AlmaLinux (latest)
+  tux2lab vm reimage-pxe vm1 -d rocky -v previous              # Reimage with Rocky Linux 9
+  tux2lab vm reimage-pxe -f vm1                                # Reimage without confirmation
+  tux2lab vm reimage-pxe --hosts vm1,vm2,vm3 -d ubuntu-lts     # Reimage multiple with Ubuntu LTS
+  tux2lab vm reimage-pxe -H vm1,vm2,vm3 --clean-install       # Reimage multiple with defaults
 "
 }
 
@@ -68,15 +68,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Check if VM exists
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
     if ! check_vm_exists "$qemu_kvm_hostname" "reimage"; then
-        FAILED_VMS+=("$qemu_kvm_hostname")
-        continue
-    fi
-
-    # Check for self-referential operation
-    if [[ -n "${KVM_TOOL_EXECUTED_FROM:-}" && "${KVM_TOOL_EXECUTED_FROM}" == "${qemu_kvm_hostname}" ]]; then
-        print_error "Cannot reimage VM '$qemu_kvm_hostname': Operation blocked to avoid self-referential KVM actions."
-        print_info "You are running a KVM reimage action for the lab infra server from the infra server itself."
-        print_info "To perform this operation, run it from the Linux workstation hosting the QEMU/KVM setup."
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -178,7 +169,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         # Default path: preserve disk size
         print_info "Reimaging VM \"$qemu_kvm_hostname\" by replacing its qcow2 disk with a new one..."
         
-        vm_qcow2_disk_path="/kvm-hub/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
+        vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-current-disk-size.sh
         get_current_disk_size "$qemu_kvm_hostname"

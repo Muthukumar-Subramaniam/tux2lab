@@ -9,7 +9,7 @@ source /tux2lab/common-utils/color-functions.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl resize [-f] [memory <GiB>] [cpu <count>] [disk <GiB>] [hostname]
+    print_cyan "Usage: tux2lab vm resize [-f] [memory <GiB>] [cpu <count>] [disk <GiB>] [hostname]
 
 Resources (can be combined in any order):
   memory <GiB>         Set VM memory — power of 2 (2, 4, 8, 16...), less than host memory
@@ -25,12 +25,12 @@ Arguments:
   hostname             Name of the VM to resize (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl resize vm1                              # Interactive mode
-  qlabvmctl resize -f memory 8 vm1                  # Set memory to 8 GiB
-  qlabvmctl resize -f cpu 4 vm1                     # Set vCPUs to 4
-  qlabvmctl resize -f disk 50 vm1                   # Set OS disk to 50 GiB
-  qlabvmctl resize -f memory 8 cpu 4 vm1            # Set memory and CPU together
-  qlabvmctl resize -f disk 50 memory 8 cpu 4 vm1    # Resize all three at once
+  tux2lab vm resize vm1                              # Interactive mode
+  tux2lab vm resize -f memory 8 vm1                  # Set memory to 8 GiB
+  tux2lab vm resize -f cpu 4 vm1                     # Set vCPUs to 4
+  tux2lab vm resize -f disk 50 vm1                   # Set OS disk to 50 GiB
+  tux2lab vm resize -f memory 8 cpu 4 vm1            # Set memory and CPU together
+  tux2lab vm resize -f disk 50 memory 8 cpu 4 vm1    # Resize all three at once
 "
 }
 
@@ -258,7 +258,7 @@ validate_cpu_args() {
 }
 
 validate_disk_args() {
-    vm_qcow2_disk_path="/kvm-hub/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
+    vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
 
     if [ ! -f "$vm_qcow2_disk_path" ]; then
         print_error "OS disk image not found at $vm_qcow2_disk_path"
@@ -418,7 +418,7 @@ resize_vm_disk() {
     else
         # current_disk_gib may not be set if interactive mode (no validate_disk_args call)
         if [[ -z "$current_disk_gib" ]]; then
-            vm_qcow2_disk_path="/kvm-hub/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
+            vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
 
             if [ ! -f "$vm_qcow2_disk_path" ]; then
 print_error "OS disk image not found at $vm_qcow2_disk_path"

@@ -10,8 +10,8 @@ set -uo pipefail
 source /tux2lab/common-utils/color-functions.sh
 
 # Source lab environment variables
-if [[ -f /kvm-hub/lab_environment_vars ]]; then
-    source /kvm-hub/lab_environment_vars
+if [[ -f /tux2lab-data/lab_environment_vars ]]; then
+    source /tux2lab-data/lab_environment_vars
 else
     print_error "Lab environment not configured. Run deploy-lab-infra-server.sh first."
     exit 1
@@ -45,7 +45,7 @@ fn_usage() {
     cat << EOF
 $(print_notify "IPv6 Default Route Manager")
 
-Usage: qlabvmctl ipv6-route [OPTION]
+Usage: tux2lab vm ipv6-route [OPTION]
 
 Options:
     enable      Enable IPv6 default route on all running VMs
@@ -55,10 +55,10 @@ Options:
     status      Show IPv6 route status for all VMs
 
 Examples:
-    qlabvmctl ipv6-route enable      # Enable IPv6 default route
-    qlabvmctl ipv6-route disable     # Remove IPv6 default route
-    qlabvmctl ipv6-route check       # Test connectivity and show status
-    qlabvmctl ipv6-route auto        # Auto-configure based on connectivity
+    tux2lab vm ipv6-route enable      # Enable IPv6 default route
+    tux2lab vm ipv6-route disable     # Remove IPv6 default route
+    tux2lab vm ipv6-route check       # Test connectivity and show status
+    tux2lab vm ipv6-route auto        # Auto-configure based on connectivity
 
 Note: This script manages the default IPv6 route. Local IPv6 subnet routes
       are always present regardless of this setting.
@@ -192,7 +192,7 @@ fn_enable_all() {
         echo ""
         print_error "Cannot enable IPv6 default routes: No IPv6 internet connectivity"
         print_info "Routes will not be configured until IPv6 internet is available"
-        print_info "Use 'qlabvmctl ipv6-route auto' to auto-configure based on connectivity"
+        print_info "Use 'tux2lab vm ipv6-route auto' to auto-configure based on connectivity"
         return 1
     fi
     
@@ -288,7 +288,7 @@ fn_check_and_report() {
     print_notify "Recommendation:"
     
     if ping6 -c 2 -W 3 "$IPV6_TEST_HOST" &>/dev/null; then
-        print_info "IPv6 internet is available. Run 'qlabvmctl ipv6-route enable' to enable default routes."
+        print_info "IPv6 internet is available. Run 'tux2lab vm ipv6-route enable' to enable default routes."
     else
         print_info "No IPv6 internet. Current configuration (routes disabled) is optimal."
     fi

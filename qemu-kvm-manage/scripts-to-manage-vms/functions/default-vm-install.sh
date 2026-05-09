@@ -1,6 +1,6 @@
 # Set default values if not provided
-DISK_PATH="${DISK_PATH:-/kvm-hub/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2}"
-NVRAM_PATH="${NVRAM_PATH:-/kvm-hub/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}_VARS.fd}"
+DISK_PATH="${DISK_PATH:-/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2}"
+NVRAM_PATH="${NVRAM_PATH:-/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}_VARS.fd}"
 
 VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 

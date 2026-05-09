@@ -21,7 +21,7 @@ create_vm_disk() {
         return 1
     fi
     
-    local vm_disk_path="/kvm-hub/vms/${vm_hostname}/${vm_hostname}.qcow2"
+    local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
     
     print_task "Creating new disk ${vm_disk_path} with ${disk_size_gib} GiB..."
     

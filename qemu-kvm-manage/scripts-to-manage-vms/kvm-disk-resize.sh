@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl disk-resize [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm disk-resize [OPTIONS] [hostname]
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -d, --disk <disk>    Disk target to resize (e.g., vdb, vdc,vdd, all, default: prompt)
@@ -20,15 +20,15 @@ Arguments:
   hostname             Name of the VM (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl disk-resize vm1                      # Interactive mode with prompts
-  qlabvmctl disk-resize -f vm1                   # Force power-off if running
-  qlabvmctl disk-resize -d vdb -g 5 vm1          # Add 5GiB to vdb with prompts
-  qlabvmctl disk-resize -f -d vdc -g 10 vm1      # Fully automated: add 10GiB to vdc
-  qlabvmctl disk-resize -f -d vdc,vdd -g 10 vm1  # Fully automated: add 10GiB to vdc and vdd
-  qlabvmctl disk-resize -f -d all -g 10 vm1      # Fully automated: add 10GiB to all additional disks
+  tux2lab vm disk-resize vm1                      # Interactive mode with prompts
+  tux2lab vm disk-resize -f vm1                   # Force power-off if running
+  tux2lab vm disk-resize -d vdb -g 5 vm1          # Add 5GiB to vdb with prompts
+  tux2lab vm disk-resize -f -d vdc -g 10 vm1      # Fully automated: add 10GiB to vdc
+  tux2lab vm disk-resize -f -d vdc,vdd -g 10 vm1  # Fully automated: add 10GiB to vdc and vdd
+  tux2lab vm disk-resize -f -d all -g 10 vm1      # Fully automated: add 10GiB to all additional disks
 
 Note: This script only resizes additional disks (vdb, vdc, etc.). 
-      Use 'qlabvmctl resize -t disk' for OS disk (vda) resizing.
+      Use 'tux2lab vm resize -t disk' for OS disk (vda) resizing.
 "
 }
 
@@ -174,7 +174,7 @@ fn_shutdown_or_poweroff() {
     esac
 }
 
-VM_DIR="/kvm-hub/vms/${qemu_kvm_hostname}"
+VM_DIR="/tux2lab-data/vms/${qemu_kvm_hostname}"
 
 # Verify VM directory exists
 if [[ ! -d "$VM_DIR" ]]; then
@@ -209,7 +209,7 @@ done
 if (( ${#ADDITIONAL_DISKS[@]} == 0 )); then
     print_error "No additional disks found for VM \"$qemu_kvm_hostname\"."
     print_info "This script only resizes additional disks (vdb, vdc, etc.)."
-    print_info "Use 'qlabvmctl resize -t disk' to resize the OS disk."
+    print_info "Use 'tux2lab vm resize -t disk' to resize the OS disk."
     exit 1
 fi
 

@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl nic-remove [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm nic-remove [OPTIONS] [hostname]
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -m, --macs <list>    Comma-separated list of MAC addresses to remove
@@ -19,10 +19,10 @@ Arguments:
   hostname             Name of the VM to remove NICs from (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl nic-remove vm1                              # Interactive mode - select NICs
-  qlabvmctl nic-remove -f vm1                           # Force power-off if running
-  qlabvmctl nic-remove -m 52:54:00:aa:bb:cc vm1        # Remove specific NIC
-  qlabvmctl nic-remove -f -m 52:54:00:11:22:33 vm2     # Fully automated
+  tux2lab vm nic-remove vm1                              # Interactive mode - select NICs
+  tux2lab vm nic-remove -f vm1                           # Force power-off if running
+  tux2lab vm nic-remove -m 52:54:00:aa:bb:cc vm1        # Remove specific NIC
+  tux2lab vm nic-remove -f -m 52:54:00:11:22:33 vm2     # Fully automated
 "
 }
 

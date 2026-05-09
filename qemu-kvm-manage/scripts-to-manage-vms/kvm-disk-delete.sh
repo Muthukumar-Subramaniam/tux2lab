@@ -9,14 +9,14 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl disk-delete [OPTIONS]
+    print_cyan "Usage: tux2lab vm disk-delete [OPTIONS]
 Options:
   -d, --disks <list>   Comma-separated list of disk files to delete from detached storage
   -h, --help           Show this help message
 
 Examples:
-  qlabvmctl disk-delete                         # Interactive mode - select disks
-  qlabvmctl disk-delete -d disk1.qcow2,disk2.qcow2  # Delete specific disks
+  tux2lab vm disk-delete                         # Interactive mode - select disks
+  tux2lab vm disk-delete -d disk1.qcow2,disk2.qcow2  # Delete specific disks
 
 WARNING:
   This permanently deletes disk files from detached storage.
@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-DETACHED_DIR="/kvm-hub/detached-data-disks"
+DETACHED_DIR="/tux2lab-data/detached-data-disks"
 
 # Check detached disks directory
 if [[ ! -d "$DETACHED_DIR" ]]; then

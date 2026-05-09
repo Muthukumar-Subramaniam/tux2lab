@@ -17,7 +17,7 @@ delete_vm_disk() {
         return 1
     fi
     
-    local vm_disk_path="/kvm-hub/vms/${vm_hostname}/${vm_hostname}.qcow2"
+    local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
     sudo rm -f "${vm_disk_path}"
     
     return 0

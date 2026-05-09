@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl nic-add [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm nic-add [OPTIONS] [hostname]
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -c, --count <num>    Number of NICs to add (1-10, default: 1)
@@ -20,11 +20,11 @@ Arguments:
   hostname             Name of the VM to add NICs to (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl nic-add vm1                         # Interactive mode - add 1 NIC
-  qlabvmctl nic-add -f vm1                      # Force power-off if running
-  qlabvmctl nic-add -c 2 vm1                    # Add 2 NICs
-  qlabvmctl nic-add -n br0 vm1                  # Add NIC to specific bridge
-  qlabvmctl nic-add -f -c 3 -n default vm2       # Fully automated
+  tux2lab vm nic-add vm1                         # Interactive mode - add 1 NIC
+  tux2lab vm nic-add -f vm1                      # Force power-off if running
+  tux2lab vm nic-add -c 2 vm1                    # Add 2 NICs
+  tux2lab vm nic-add -n br0 vm1                  # Add NIC to specific bridge
+  tux2lab vm nic-add -f -c 3 -n default vm2       # Fully automated
 "
 }
 

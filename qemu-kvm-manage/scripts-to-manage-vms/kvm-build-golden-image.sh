@@ -13,7 +13,7 @@ VERSION_TYPE=""
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl build-golden-image [OPTIONS]
+    print_cyan "Usage: tux2lab vm build-golden-image [OPTIONS]
 Description:
     Creates a golden image disk by installing a VM via PXE boot.
     The VM will be automatically removed after the disk is created.
@@ -25,10 +25,10 @@ Options:
     -h, --help           Show this help message
 
 Examples:
-    qlabvmctl build-golden-image                       # Build golden image (will prompt for distro)
-    qlabvmctl build-golden-image -d almalinux          # Build AlmaLinux 10 (latest) golden image
-    qlabvmctl build-golden-image -d rocky -v previous  # Build Rocky Linux 9 (previous) golden image
-    qlabvmctl build-golden-image --distro ubuntu-lts   # Build Ubuntu LTS 24.04 (latest) golden image
+    tux2lab vm build-golden-image                       # Build golden image (will prompt for distro)
+    tux2lab vm build-golden-image -d almalinux          # Build AlmaLinux 10 (latest) golden image
+    tux2lab vm build-golden-image -d rocky -v previous  # Build Rocky Linux 9 (previous) golden image
+    tux2lab vm build-golden-image --distro ubuntu-lts   # Build Ubuntu LTS 24.04 (latest) golden image
 "
 }
 
@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            print_error "$(basename $0) does not accept positional arguments."
+            print_error "'tux2lab vm build-golden-image' does not accept positional arguments."
             fn_show_help
             exit 1
             ;;
@@ -111,12 +111,12 @@ fi
 
 qemu_kvm_hostname="$EXTRACTED_HOSTNAME"
 
-mkdir -p /kvm-hub/golden-images-disk-store
+mkdir -p /tux2lab-data/golden-images-disk-store
 
 # Golden image filename format: {hostname-fqdn}.qcow2
 # Example: almalinux-golden-image-latest.lab.local.qcow2
 # The hostname from ksmanager already includes the version
-golden_image_path="/kvm-hub/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
+golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
 
 # Check if golden image already exists
 if [ -f "${golden_image_path}" ]; then
@@ -137,9 +137,9 @@ if [ -f "${golden_image_path}" ]; then
         * )
             print_info "Keeping existing golden image \"${qemu_kvm_hostname}\". Cleaning up ksmanager databases..."
             if $lab_infra_server_mode_is_host; then
-                ksmanager "$qemu_kvm_hostname" --remove-host || true
+                /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host || true
             else
-                ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "ksmanager $qemu_kvm_hostname --remove-host" || true
+                ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" || true
             fi
             exit 0
             ;;
@@ -150,7 +150,7 @@ print_info "Starting installation of VM \"${qemu_kvm_hostname}\" to create golde
 
 # Set custom paths for golden image creation
 DISK_PATH="${golden_image_path}"
-NVRAM_PATH="/kvm-hub/golden-images-disk-store/${qemu_kvm_hostname}_VARS.fd"
+NVRAM_PATH="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}_VARS.fd"
 VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 
 # Run virt-install with console attachment (don't use shared function to avoid complexity)
@@ -194,11 +194,11 @@ fi
 # Clean up ksmanager databases (DNS, MAC cache, kickstart, iPXE, DHCP)
 print_info "Cleaning up ksmanager databases for temporary VM..."
 if $lab_infra_server_mode_is_host; then
-    if ! ksmanager "$qemu_kvm_hostname" --remove-host; then
+    if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
         print_warning "Could not clean up ksmanager databases."
     fi
 else
-    if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "ksmanager $qemu_kvm_hostname --remove-host"; then
+    if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host"; then
         print_warning "Could not clean up ksmanager databases."
     fi
 fi

@@ -11,7 +11,7 @@ ETC_HOSTS_FILE='/etc/hosts'
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl remove [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm remove [OPTIONS] [hostname]
 Options:
   -f, --force                      Skip confirmation prompt (except for lab infra server)
   --ignore-ksmanager-cleanup       Skip cleanup of ksmanager databases (DNS, MAC, kickstart, iPXE, DHCP)
@@ -22,11 +22,11 @@ Arguments:
   hostname                         Name of the VM to be deleted permanently (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl remove vm1                             # Remove single VM with confirmation
-  qlabvmctl remove -f vm1                          # Remove single VM without confirmation
-  qlabvmctl remove --ignore-ksmanager-cleanup vm1  # Remove VM but keep ksmanager data
-  qlabvmctl remove --hosts vm1,vm2,vm3             # Remove multiple VMs with confirmation
-  qlabvmctl remove -f --hosts vm1,vm2              # Remove multiple VMs without confirmation
+  tux2lab vm remove vm1                             # Remove single VM with confirmation
+  tux2lab vm remove -f vm1                          # Remove single VM without confirmation
+  tux2lab vm remove --ignore-ksmanager-cleanup vm1  # Remove VM but keep ksmanager data
+  tux2lab vm remove --hosts vm1,vm2,vm3             # Remove multiple VMs with confirmation
+  tux2lab vm remove -f --hosts vm1,vm2              # Remove multiple VMs without confirmation
 
 Note: Lab infra server always requires special confirmation regardless of -f flag.
 "
@@ -96,9 +96,9 @@ remove_vm() {
     print_task_done
     
     # Remove VM directory
-    if [ -n "$vm_name" ] && [ -d "/kvm-hub/vms/$vm_name" ]; then
+    if [ -n "$vm_name" ] && [ -d "/tux2lab-data/vms/$vm_name" ]; then
         print_task "Removing VM directory..."
-        if sudo rm -rf "/kvm-hub/vms/$vm_name" 2>/dev/null; then
+        if sudo rm -rf "/tux2lab-data/vms/$vm_name" 2>/dev/null; then
             print_task_done
         else
             print_task_fail
@@ -122,11 +122,11 @@ remove_vm() {
         print_info "Skipping ksmanager cleanup (--ignore-ksmanager-cleanup flag)."
     else
         if $lab_infra_server_mode_is_host; then
-            if ! ksmanager "$vm_name" --remove-host; then
+            if ! /tux2lab/ks-manage/ksmanager.sh "$vm_name" --remove-host; then
                 print_warning "Could not clean up ksmanager databases."
             fi
         else
-            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "ksmanager $vm_name --remove-host"; then
+            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $vm_name --remove-host"; then
                 print_warning "Could not clean up ksmanager databases."
             fi
         fi

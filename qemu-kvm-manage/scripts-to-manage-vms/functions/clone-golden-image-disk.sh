@@ -22,8 +22,8 @@ clone_golden_image_disk() {
     
     # Construct golden image FQDN matching ksmanager's format
     local golden_image_fqdn="${os_distro}-golden-image-${version}.${lab_infra_domain_name}"
-    local golden_image_path="/kvm-hub/golden-images-disk-store/${golden_image_fqdn}.qcow2"
-    local vm_disk_path="/kvm-hub/vms/${vm_hostname}/${vm_hostname}.qcow2"
+    local golden_image_path="/tux2lab-data/golden-images-disk-store/${golden_image_fqdn}.qcow2"
+    local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
     
     print_task "Cloning golden image disk for '${vm_hostname}'..."
     

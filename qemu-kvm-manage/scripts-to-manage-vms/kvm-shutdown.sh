@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl shutdown [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm shutdown [OPTIONS] [hostname]
 Options:
   -f, --force          Skip confirmation prompt and force graceful shutdown
   -H, --hosts <list>   Comma-separated list of VM hostnames to shutdown
@@ -19,10 +19,10 @@ Arguments:
   hostname             Name of the VM to gracefully shutdown (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl shutdown vm1                    # Shutdown single VM with confirmation
-  qlabvmctl shutdown -f vm1                 # Shutdown single VM without confirmation
-  qlabvmctl shutdown --hosts vm1,vm2,vm3    # Shutdown multiple VMs with confirmation
-  qlabvmctl shutdown -f --hosts vm1,vm2     # Shutdown multiple VMs without confirmation
+  tux2lab vm shutdown vm1                    # Shutdown single VM with confirmation
+  tux2lab vm shutdown -f vm1                 # Shutdown single VM without confirmation
+  tux2lab vm shutdown --hosts vm1,vm2,vm3    # Shutdown multiple VMs with confirmation
+  tux2lab vm shutdown -f --hosts vm1,vm2     # Shutdown multiple VMs without confirmation
 "
 }
 

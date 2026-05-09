@@ -62,8 +62,8 @@ show_vm_operation_summary() {
         if [[ -n "$additional_info" ]]; then
             print_info "${additional_info}"
         fi
-        print_info "To monitor progress: qlabvmctl console <hostname>"
-        print_info "To check VM status: qlabvmctl list"
+        print_info "To monitor progress: tux2lab vm console <hostname>"
+        print_info "To check VM status: tux2lab vm list"
     fi
 
     # Return failure if any VMs failed

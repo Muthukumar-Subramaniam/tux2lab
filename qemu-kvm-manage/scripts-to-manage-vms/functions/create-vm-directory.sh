@@ -18,8 +18,8 @@ create_vm_directory() {
         return 1
     fi
     
-    if ! mkdir -p "/kvm-hub/vms/${vm_hostname}"; then
-        print_error "Failed to create VM directory: /kvm-hub/vms/${vm_hostname}"
+    if ! mkdir -p "/tux2lab-data/vms/${vm_hostname}"; then
+        print_error "Failed to create VM directory: /tux2lab-data/vms/${vm_hostname}"
         return 1
     fi
     

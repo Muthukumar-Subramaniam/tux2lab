@@ -9,7 +9,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: qlabvmctl restart [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm restart [OPTIONS] [hostname]
 Options:
   -f, --force          Skip confirmation prompt and force cold restart
   -H, --hosts <list>   Comma-separated list of VM hostnames to restart
@@ -19,10 +19,10 @@ Arguments:
   hostname             Name of the VM to do cold restart (optional, will prompt if not given)
 
 Examples:
-  qlabvmctl restart vm1                    # Restart single VM with confirmation
-  qlabvmctl restart -f vm1                 # Restart single VM without confirmation
-  qlabvmctl restart --hosts vm1,vm2,vm3    # Restart multiple VMs with confirmation
-  qlabvmctl restart -f --hosts vm1,vm2     # Restart multiple VMs without confirmation
+  tux2lab vm restart vm1                    # Restart single VM with confirmation
+  tux2lab vm restart -f vm1                 # Restart single VM without confirmation
+  tux2lab vm restart --hosts vm1,vm2,vm3    # Restart multiple VMs with confirmation
+  tux2lab vm restart -f --hosts vm1,vm2     # Restart multiple VMs without confirmation
 "
 }
 
@@ -52,7 +52,7 @@ restart_vm() {
     if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$vm_name"; then
         print_task_fail
         print_error "VM is not running"
-        print_info "If you want to start the VM, use: qlabvmctl start $vm_name"
+        print_info "If you want to start the VM, use: tux2lab vm start $vm_name"
         return 1
     fi
     

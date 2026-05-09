@@ -5,7 +5,7 @@
 #----------------------------------------------------------------------------------------#
 # Script Name : kvm-info.sh
 # Description : Display detailed information about VM(s) - IP stack, storage, birthdate, uptime, CPU, memory
-# Usage       : qlabvmctl info [hostname] or qlabvmctl info -H host1,host2,host3
+# Usage       : tux2lab vm info [hostname] or tux2lab vm info -H host1,host2,host3
 
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
@@ -21,7 +21,7 @@ ssh_options="-o StrictHostKeyChecking=no \
 
 # Display usage information
 show_usage() {
-    print_cyan "Usage: qlabvmctl info [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm info [OPTIONS] [hostname]
 
 Display detailed VM information including IP stack, storage, birthdate, uptime, CPU, and memory.
 
@@ -38,9 +38,9 @@ BEHAVIOR:
     - With -H flag: Shows info for specified comma-separated VMs
 
 EXAMPLES:
-    qlabvmctl info                    # Show info for all running VMs
-    qlabvmctl info vm1                # Show info for vm1
-    qlabvmctl info -H vm1,vm2,vm3     # Show info for vm1, vm2, and vm3
+    tux2lab vm info                    # Show info for all running VMs
+    tux2lab vm info vm1                # Show info for vm1
+    tux2lab vm info -H vm1,vm2,vm3     # Show info for vm1, vm2, and vm3
 
 INFORMATION DISPLAYED:
     - Hostname and VM state
