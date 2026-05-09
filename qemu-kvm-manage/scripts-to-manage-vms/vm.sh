@@ -3,9 +3,9 @@
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
-# Script Name : qlabvmctl
-# Description : Unified command-line interface for managing KVM lab VMs
-# Usage       : qlabvmctl <subcommand> [options] [args]
+# Script Name : vm.sh
+# Description : VM subcommand dispatcher for the tux2lab CLI
+# Usage       : tux2lab vm <subcommand> [options] [args]
 
 set -euo pipefail
 
@@ -16,11 +16,11 @@ source /tux2lab/common-utils/color-functions.sh
 SCRIPT_DIR="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
 
 # Version - read from project_version.json
-VERSION=$(grep -o '"message": *"[^"]*"' /tux2lab/project_version.json | cut -d'"' -f4)
+VERSION=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"' -f4)
 
 # Show version
 show_version() {
-    print_cyan "qlabvmctl - QEMU/KVM Lab VM Management Tool
+    print_cyan "tux2lab vm - QEMU/KVM Lab VM Management Tool
 ├─ Version    : $VERSION
 ├─ Repository : https://github.com/Muthukumar-Subramaniam/tux2lab
 └─ Issues     : https://github.com/Muthukumar-Subramaniam/tux2lab/issues"
@@ -31,7 +31,7 @@ show_usage() {
     show_version
     echo ""
     print_cyan "USAGE:
-    qlabvmctl <subcommand> [options] [arguments]
+    tux2lab vm <subcommand> [options] [arguments]
 
 VM DEPLOYMENT:
     build-golden-image      Build a golden image for an OS
@@ -69,10 +69,10 @@ OPTIONS:
     -v, --version           Show version information
 
 NOTES:
-    - Use 'qlabvmctl <subcommand> --help' to see help for a specific subcommand
-    - Use 'qlabstart' to start the lab infrastructure
-    - Use 'qlabhealth' to check lab infrastructure health
-    - Use 'qlabdnsbinder' to manage DNS records for lab infrastructure"
+    - Use 'tux2lab vm <subcommand> --help' to see help for a specific subcommand
+    - Use 'tux2lab start' to start the lab infrastructure
+    - Use 'tux2lab health' to check lab infrastructure health
+    - Use 'tux2lab dns' to manage DNS records for lab infrastructure"
 }
 
 # Main logic
@@ -113,7 +113,7 @@ main() {
         *)
             print_error "Unknown subcommand: $subcommand"
             echo
-            echo "Run 'qlabvmctl --help' to see available subcommands"
+            echo "Run 'tux2lab vm --help' to see available subcommands"
             exit 1
             ;;
     esac

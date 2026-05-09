@@ -27,9 +27,9 @@ print_info "The following actions will be performed:
   - Grant passwordless sudo privileges to user '$USER'
   - Install QEMU/KVM hypervisor and virtualization packages
   - Install and configure libvirtd daemon service
-  - Create /kvm-hub directory for VM storage and management
+  - Create /tux2lab-data directory for VM storage and management
   - Set up custom labbr0 bridge network with dual-stack (IPv4/IPv6) support
-  - Install custom VM management tools (qlabvmctl, qlabstart, qlabhealth, qlabdnsbinder)"
+  - Install custom VM management tool (tux2lab)"
 echo ""
 read -p "Are you sure you want to continue? (yes/no): " confirm
 if [[ "$confirm" != "yes" ]]; then
@@ -70,13 +70,13 @@ print_info "Enabling and starting libvirtd..."
 sudo systemctl enable --now libvirtd
 sudo systemctl status libvirtd -l --no-pager
 
-print_task "Creating /kvm-hub/vms to manage VMs"
-sudo mkdir -p /kvm-hub/vms || {
-    print_error "Failed to create /kvm-hub/vms directory."
+print_task "Creating /tux2lab-data/vms to manage VMs"
+sudo mkdir -p /tux2lab-data/vms || {
+    print_error "Failed to create /tux2lab-data/vms directory."
     exit 1
 }
-sudo chown -R "$USER":"$(id -g)" /kvm-hub || {
-    print_error "Failed to change ownership of /kvm-hub directory."
+sudo chown -R "$USER":"$(id -g)" /tux2lab-data || {
+    print_error "Failed to change ownership of /tux2lab-data directory."
     exit 1
 }
 print_task_done
@@ -140,14 +140,11 @@ fi
 
 print_task "Creating custom tools to manage QEMU/KVM"
 scripts_directory="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
-sudo ln -sf "$scripts_directory/qlabvmctl.sh" /usr/local/bin/qlabvmctl
-sudo ln -sf "$scripts_directory/qlabstart.sh" /usr/local/bin/qlabstart
-sudo ln -sf "$scripts_directory/qlabhealth.sh" /usr/local/bin/qlabhealth
-sudo ln -sf "$scripts_directory/qlabdnsbinder.sh" /usr/local/bin/qlabdnsbinder
+sudo ln -sf "$scripts_directory/tux2lab.sh" /usr/local/bin/tux2lab
 print_task_done
 
-print_task "Installing bash completion for qlabvmctl"
-sudo ln -sf "$scripts_directory/qlabvmctl-completion.bash" /etc/bash_completion.d/qlabvmctl-completion.bash
+print_task "Installing bash completion for tux2lab"
+sudo ln -sf "$scripts_directory/tux2lab-completion.bash" /etc/bash_completion.d/tux2lab-completion.bash
 print_task_done
 
 print_success "QEMU/KVM setup completed successfully!"

@@ -1,6 +1,6 @@
 #!/bin/bash
 #----------------------------------------------------------------------------------------#
-# Script Name: qlabdnsbinder                                                             #
+# Script Name: dns.sh                                                               #
 # Description: Manage DNS records for the KVM lab infrastructure                         #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
@@ -8,12 +8,6 @@
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
-
-if [[ -n "${KVM_TOOL_EXECUTED_FROM:-}" ]]; then
-    print_error "Detected execution from the lab infra server."
-    print_info "Please run the 'dnsbinder' utility directly with sudo to manage lab infra DNS."
-    exit 1
-fi
 
 print_task "Enabling DNS of lab infra with resolvectl"
 
@@ -44,7 +38,7 @@ fi
 print_info "Invoking dnsbinder utility from lab infra server..."
 
 if $lab_infra_server_mode_is_host; then
-    sudo dnsbinder "$@"
+    sudo /tux2lab/named-manage/dnsbinder.sh "$@"
     exit_code=$?
 else
     # Check if this is a file-based operation (-cf or -df)
@@ -74,14 +68,14 @@ else
         fi
         
         # Execute dnsbinder with remote temp file
-        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "sudo dnsbinder ${file_based_option} '${remote_temp_file}'"
+        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}'"
         exit_code=$?
         
         # Cleanup remote temp file
         ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "rm -f ${remote_temp_file}" >/dev/null 2>&1
     else
         # Regular options - forward as-is
-        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "sudo dnsbinder $(printf '%q ' "$@")"
+        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "sudo /tux2lab/named-manage/dnsbinder.sh $(printf '%q ' "$@")"
         exit_code=$?
     fi
 fi

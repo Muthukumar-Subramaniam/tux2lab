@@ -1,6 +1,6 @@
 #!/bin/bash
 #----------------------------------------------------------------------------------------#
-# Script Name: qlabhealth                                                                #
+# Script Name: health.sh                                                            #
 # Description: KVM Lab Infrastructure Health Check Tool                                  #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #

@@ -1,6 +1,6 @@
 #!/bin/bash
 #----------------------------------------------------------------------------------------#
-# Script Name: qlabstart                                                                 #
+# Script Name: start.sh                                                             #
 # Description: Start the KVM lab infrastructure and verify essential services            #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
