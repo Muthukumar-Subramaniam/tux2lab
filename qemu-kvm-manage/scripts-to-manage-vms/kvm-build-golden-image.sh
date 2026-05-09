@@ -13,7 +13,7 @@ VERSION_TYPE=""
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm build-golden-image [OPTIONS]
+    print_cyan "Usage: tux2lab golden-image create [OPTIONS]
 Description:
     Creates a golden image disk by installing a VM via PXE boot.
     The VM will be automatically removed after the disk is created.
@@ -25,10 +25,10 @@ Options:
     -h, --help           Show this help message
 
 Examples:
-    tux2lab vm build-golden-image                       # Build golden image (will prompt for distro/version)
-    tux2lab vm build-golden-image -d almalinux          # Build AlmaLinux golden image (will prompt for version)
-    tux2lab vm build-golden-image -d rocky -v 9         # Build Rocky Linux 9 golden image
-    tux2lab vm build-golden-image -d ubuntu-lts -v 24.04  # Build Ubuntu LTS 24.04 golden image
+    tux2lab golden-image create                             # Build golden image (will prompt for distro/version)
+    tux2lab golden-image create -d almalinux                # Build AlmaLinux golden image (will prompt for version)
+    tux2lab golden-image create -d rocky -v 9               # Build Rocky Linux 9 golden image
+    tux2lab golden-image create -d ubuntu-lts -v 24.04      # Build Ubuntu LTS 24.04 golden image
 "
 }
 
@@ -63,7 +63,7 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            print_error "'tux2lab vm build-golden-image' does not accept positional arguments."
+            print_error "'tux2lab golden-image create' does not accept positional arguments."
             fn_show_help
             exit 1
             ;;

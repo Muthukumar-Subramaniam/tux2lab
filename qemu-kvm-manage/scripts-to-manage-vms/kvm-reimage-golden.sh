@@ -119,7 +119,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             else
                 echo "  (none)"
             fi
-            print_info "Use 'tux2lab vm build-golden-image --distro ${OS_DISTRO} --version ${VERSION_TYPE}' to create it"
+            print_info "Use 'tux2lab golden-image create --distro ${OS_DISTRO} --version ${VERSION_TYPE}' to create it"
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi

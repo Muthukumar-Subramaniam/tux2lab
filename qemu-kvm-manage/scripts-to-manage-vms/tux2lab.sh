@@ -35,6 +35,7 @@ show_usage() {
 
 COMMANDS:
     vm          Manage KVM virtual machines
+    golden-image Manage golden image disks for OS provisioning
     distro      Manage OS distributions for PXE provisioning
     start       Start the lab infrastructure
     health      Check lab infrastructure health
@@ -47,11 +48,10 @@ OPTIONS:
 EXAMPLES:
     tux2lab vm list                  # List all VMs and their status
     tux2lab vm install-pxe vm1      # Deploy VM using PXE boot
+    tux2lab golden-image list        # List available golden images
+    tux2lab golden-image create      # Build a golden image
     tux2lab distro list              # List distro readiness status
     tux2lab distro setup             # Setup a distro for PXE provisioning
-    tux2lab start                   # Start lab infrastructure
-    tux2lab health                  # Check lab infrastructure health
-    tux2lab dns -c vm1 10.0.0.5     # Create DNS record
 
 Use 'tux2lab <command> --help' for more information about a specific command."
 }
@@ -80,6 +80,9 @@ main() {
             ;;
         distro)
             exec "$SCRIPT_DIR/distro.sh" "$@"
+            ;;
+        golden-image)
+            exec "$SCRIPT_DIR/golden-image.sh" "$@"
             ;;
         start)
             exec "$SCRIPT_DIR/start.sh" "$@"

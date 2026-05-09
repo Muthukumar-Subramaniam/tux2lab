@@ -34,7 +34,6 @@ show_usage() {
     tux2lab vm <subcommand> [options] [arguments]
 
 VM DEPLOYMENT:
-    build-golden-image      Build a golden image for an OS
     install-golden          Deploy VM(s) from golden image
     install-pxe             Deploy VM(s) using PXE boot
     reimage-golden          Reinstall VM(s) from golden image
@@ -70,6 +69,8 @@ OPTIONS:
 
 NOTES:
     - Use 'tux2lab vm <subcommand> --help' to see help for a specific subcommand
+    - Use 'tux2lab golden-image create' to build golden image disks
+    - Use 'tux2lab distro setup' to prepare OS distributions for PXE boot
     - Use 'tux2lab start' to start the lab infrastructure
     - Use 'tux2lab health' to check lab infrastructure health
     - Use 'tux2lab dns' to manage DNS records for lab infrastructure"
@@ -102,7 +103,8 @@ main() {
             script_name="kvm-${subcommand}.sh"
             ;;
         build-golden-image)
-            script_name="kvm-build-golden-image.sh"
+            print_info "This command has moved. Use: tux2lab golden-image create"
+            exit 1
             ;;
         disk-add|disk-resize|disk-attach|disk-detach|disk-delete|nic-add|nic-remove)
             script_name="kvm-${subcommand}.sh"
