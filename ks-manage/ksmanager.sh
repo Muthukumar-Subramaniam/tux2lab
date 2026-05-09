@@ -942,17 +942,17 @@ fn_select_os_distro() {
         menu+="  q)  Quit"
         
         print_notify "$menu"
-        echo -n "Enter option number (default: AlmaLinux): "
+        echo -n "Enter option number: "
         read distro_choice
 
         case "${distro_choice}" in
-            1 | "" ) os_distribution="almalinux" ;;
-            2 )      os_distribution="rocky" ;;
-            3 )      os_distribution="oraclelinux" ;;
-            4 )      os_distribution="centos-stream" ;;
-            5 )      os_distribution="rhel" ;;
-            6 )      os_distribution="ubuntu-lts" ;;
-            7 )      os_distribution="opensuse-leap" ;;
+            1 ) os_distribution="almalinux" ;;
+            2 ) os_distribution="rocky" ;;
+            3 ) os_distribution="oraclelinux" ;;
+            4 ) os_distribution="centos-stream" ;;
+            5 ) os_distribution="rhel" ;;
+            6 ) os_distribution="ubuntu-lts" ;;
+            7 ) os_distribution="opensuse-leap" ;;
             q | Q )  print_info "Operation cancelled by user."; exit 130 ;;
             * ) print_error "Invalid option. Please try again."; fn_select_os_distro; return ;;
         esac
@@ -960,30 +960,23 @@ fn_select_os_distro() {
 
     # Select version (if not set via --version flag)
     if [[ -z "${version}" ]]; then
-        local default_ver=$(fn_get_default_version "$os_distribution")
         local available_versions=(${DISTRO_AVAILABLE_VERSIONS[$os_distribution]})
         
         local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$os_distribution]}:\n"
         for i in "${!available_versions[@]}"; do
             local ver="${available_versions[$i]}"
             local status=$(fn_check_distro_availability "$os_distribution" "$ver")
-            local default_marker=""
-            if [[ "$ver" == "$default_ver" ]]; then
-                default_marker=" [default]"
-            fi
-            printf -v line "  %d)  %-12s %s%s\n" $((i+1)) "${ver}" "${status}" "${default_marker}"
+            printf -v line "  %d)  %-12s %s\n" $((i+1)) "${ver}" "${status}"
             menu+="${line}"
         done
         menu+="  q)  Quit"
         
         print_notify "$menu"
-        echo -n "Enter option number (default: ${default_ver}): "
+        echo -n "Enter option number: "
         read version_choice
 
         if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
             print_info "Operation cancelled by user."; exit 130
-        elif [[ -z "${version_choice}" ]]; then
-            version="${default_ver}"
         elif [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
             version="${available_versions[$((version_choice-1))]}"
         else

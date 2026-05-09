@@ -211,33 +211,46 @@ EOF
 
 	cat > "${SANDBOX_HUB}/ks-manage/distro-versions.conf" <<'EOF'
 #!/usr/bin/env bash
-declare -A DISTRO_LATEST_VERSIONS=(
-	[almalinux]="10"
-	[rocky]="10"
-	[oraclelinux]="9"
-	[centos-stream]="10"
-	[rhel]="10"
-	[ubuntu-lts]="24.04"
-	[opensuse-leap]="15.6"
+declare -A DISTRO_AVAILABLE_VERSIONS=(
+	[almalinux]="10 9"
+	[rocky]="10 9"
+	[oraclelinux]="10 9"
+	[centos-stream]="10 9"
+	[rhel]="10 9"
+	[ubuntu-lts]="24.04 22.04"
+	[opensuse-leap]="15.6 15.5"
 )
-declare -A DISTRO_PREVIOUS_VERSIONS=(
-	[almalinux]="9"
-	[rocky]="9"
-	[oraclelinux]="8"
-	[centos-stream]="9"
-	[rhel]="9"
-	[ubuntu-lts]="22.04"
-	[opensuse-leap]="15.5"
+declare -A DISTRO_DISPLAY_NAMES=(
+	[almalinux]="AlmaLinux"
+	[rocky]="Rocky Linux"
+	[oraclelinux]="OracleLinux"
+	[centos-stream]="CentOS Stream"
+	[rhel]="Red Hat Enterprise Linux"
+	[ubuntu-lts]="Ubuntu Server LTS"
+	[opensuse-leap]="openSUSE Leap"
 )
+fn_is_valid_version() {
+	local distro_base="$1"
+	local version="$2"
+	local versions="${DISTRO_AVAILABLE_VERSIONS[$distro_base]}"
+	[[ " $versions " == *" $version "* ]]
+}
+fn_get_distro_family() {
+	local distro_base="$1"
+	case "$distro_base" in
+		almalinux|rocky|oraclelinux|centos-stream|rhel) echo "redhat-based" ;;
+		*) echo "$distro_base" ;;
+	esac
+}
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/ks-templates/redhat-based-latest-ks.cfg" <<'EOF'
+	cat > "${SANDBOX_HUB}/ks-manage/ks-templates/redhat-based-10-ks.cfg" <<'EOF'
 hostname=get_hostname
 domain=get_ipv4_domain
 gw=get_ipv4_gateway
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/ipxe-templates/ipxe-template-redhat-based-auto-latest.ipxe" <<'EOF'
+	cat > "${SANDBOX_HUB}/ks-manage/ipxe-templates/ipxe-template-redhat-based.ipxe" <<'EOF'
 #!ipxe
 set host get_hostname
 set domain get_ipv4_domain

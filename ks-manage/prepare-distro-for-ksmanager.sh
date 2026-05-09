@@ -88,10 +88,10 @@ fn_select_os_distro() {
   menu+="  q)  Quit"
   
   print_notify "$menu"
-  echo -n "Enter option number (default: AlmaLinux): "
+  echo -n "Enter option number: "
   read os_distribution
   case "$os_distribution" in
-    1 | "" ) DISTRO="almalinux" ;;
+    1 ) DISTRO="almalinux" ;;
     2 ) DISTRO="rocky" ;;
     3 ) DISTRO="oraclelinux" ;;
     4 ) DISTRO="centos-stream" ;;
@@ -105,30 +105,23 @@ fn_select_os_distro() {
 
 fn_select_version() {
   local distro="$1"
-  local default_ver=$(fn_get_default_version "$distro")
   local available_versions=(${DISTRO_AVAILABLE_VERSIONS[$distro]})
   
   local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$distro]}:\n"
   for i in "${!available_versions[@]}"; do
     local ver="${available_versions[$i]}"
     local status=$(fn_get_distro_status_display "$distro" "$ver")
-    local default_marker=""
-    if [[ "$ver" == "$default_ver" ]]; then
-      default_marker=" [default]"
-    fi
-    printf -v line "  %d)  %-12s %s%s\n" $((i+1)) "${ver}" "${status}" "${default_marker}"
+    printf -v line "  %d)  %-12s %s\n" $((i+1)) "${ver}" "${status}"
     menu+="${line}"
   done
   menu+="  q)  Quit"
   
   print_notify "$menu"
-  echo -n "Enter option number (default: ${default_ver}): "
+  echo -n "Enter option number: "
   read version_choice
 
   if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
     print_notify "Exiting the utility $(basename $0) !\n"; exit 0
-  elif [[ -z "${version_choice}" ]]; then
-    VERSION="${default_ver}"
   elif [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
     VERSION="${available_versions[$((version_choice-1))]}"
   else
@@ -307,10 +300,12 @@ else
     fi
   fi
 
-  # Default to newest version if not specified
+  # Require explicit version when using non-interactive mode
   if [[ -z "$VERSION" ]]; then
-    VERSION=$(fn_get_default_version "$DISTRO")
-    print_info "No version specified, defaulting to ${VERSION}"
+    print_error "The --version option is required when --distro is specified."
+    print_info "Available versions for ${DISTRO}: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
+    print_usage
+    exit 1
   fi
 fi
 
