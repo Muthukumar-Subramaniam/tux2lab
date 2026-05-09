@@ -25,7 +25,7 @@ FAIL_COUNT=0
 
 cleanup() {
 	rm -rf "${TEST_ROOT}"
-	rm -rf "${KSMANAGER_HUB_DIR}" "${IPXE_DIR}" "${LAB_ROOT}/almalinux-latest"
+	rm -rf "${KSMANAGER_HUB_DIR}" "${IPXE_DIR}" "${LAB_ROOT}/almalinux/10"
 }
 trap cleanup EXIT
 
@@ -285,8 +285,8 @@ dnsbinder_ipv6_prefix=64
 dnsbinder_ipv6_ula_subnet=fd00:1::/64
 EOF
 
-	mkdir -p "${LAB_ROOT}/almalinux-latest"
-	printf 'AlmaLinux Mock\n' > "${LAB_ROOT}/almalinux-latest/.discinfo"
+	mkdir -p "${LAB_ROOT}/almalinux/10"
+	printf 'AlmaLinux Mock\n' > "${LAB_ROOT}/almalinux/10/.discinfo"
 }
 
 run_ksmanager() {

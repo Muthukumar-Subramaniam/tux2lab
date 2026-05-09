@@ -48,15 +48,15 @@
     opts: "bind,ro,uid={{ ansible_facts.env.mgmt_super_user }},gid={{ ansible_facts.env.mgmt_super_user }}"
     state: mounted
 
-- name: Create almalinux-latest mount point under /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}
+- name: Create AlmaLinux 10 mount point under /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}
   file:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/almalinux-latest"
+    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/almalinux/10"
     state: directory
 
 - name: Mount AlmaLinux ISO from CD-ROM and update an entry in fstab as well 
   become: true
   ansible.posix.mount:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/almalinux-latest"
+    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/almalinux/10"
     src: "{{ ansible_facts.env.default_linux_distro_iso_path }}"
     fstype: iso9660
     opts: "uid={{ ansible_facts.env.mgmt_super_user }},gid={{ ansible_facts.env.mgmt_super_user }}"
