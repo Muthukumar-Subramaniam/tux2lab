@@ -2,13 +2,15 @@
 #----------------------------------------------------------------------------------------#
 # Script Name: distro.sh                                                                 #
 # Description: Manage OS distributions for PXE provisioning                              #
+# Invoked by : tux2lab distro {list|setup|cleanup} [distro] [--version ver]              #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
-source /tux2lab/ks-manage/distro-versions.conf
+
+readonly PREPARE_SCRIPT="/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh"
 
 show_distro_help() {
     print_cyan "USAGE:
@@ -29,34 +31,14 @@ EXAMPLES:
     tux2lab distro cleanup almalinux --version 10"
 }
 
-# Run a command on the infra server (locally in HOST mode, via SSH in VM mode)
+# Run prepare-distro-for-ksmanager.sh on the infra server
 run_on_infra_server() {
-    local cmd="$1"
     if $lab_infra_server_mode_is_host; then
-        eval "$cmd"
+        "${PREPARE_SCRIPT}" "$@"
     else
         ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t \
-            "${lab_infra_admin_username}@${lab_infra_server_hostname}" "$cmd"
-    fi
-}
-
-distro_list() {
-    run_on_infra_server "/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --list"
-}
-
-distro_setup() {
-    if [[ $# -eq 0 ]]; then
-        run_on_infra_server "/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --setup"
-    else
-        run_on_infra_server "/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --setup $*"
-    fi
-}
-
-distro_cleanup() {
-    if [[ $# -eq 0 ]]; then
-        run_on_infra_server "/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --cleanup"
-    else
-        run_on_infra_server "/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --cleanup $*"
+            "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
+            "${PREPARE_SCRIPT}" "$@"
     fi
 }
 
@@ -71,13 +53,13 @@ shift
 
 case "$subcommand" in
     list)
-        distro_list
+        run_on_infra_server --list
         ;;
     setup)
-        distro_setup "$@"
+        run_on_infra_server --setup "$@"
         ;;
     cleanup)
-        distro_cleanup "$@"
+        run_on_infra_server --cleanup "$@"
         ;;
     *)
         print_error "Unknown distro subcommand: $subcommand"

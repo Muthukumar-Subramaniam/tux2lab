@@ -1,5 +1,8 @@
 #!/bin/bash
 #----------------------------------------------------------------------------------------#
+# Script Name : prepare-distro-for-ksmanager.sh
+# Description : Manage OS distribution ISOs for PXE provisioning on the lab infra server
+# Invoked by  : tux2lab distro {list|setup|cleanup} [distro] [--version ver]
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#
@@ -7,41 +10,44 @@
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/ks-manage/distro-versions.conf
 
+# ====== ACCESS CONTROL ======
 if [[ "$USER" != "$mgmt_super_user" ]]; then
-	print_error "Access denied. Only infra management super user '${mgmt_super_user}' is authorized to run this tool."
-	print_error "Also if the user itself is ${mgmt_super_user}, Please do not elevate access again with sudo.\n"
-    	exit 1
+    print_error "Access denied. Only infra management super user '${mgmt_super_user}' is authorized to run this tool."
+    print_error "If the user itself is ${mgmt_super_user}, please do not elevate access again with sudo."
+    exit 1
 fi
 
 set -euo pipefail
 
 : "${dnsbinder_server_fqdn:?Must set dnsbinder_server_fqdn}"
+: "${dnsbinder_domain:?Must set dnsbinder_domain}"
 : "${mgmt_super_user:?Must set mgmt_super_user}"
 
-# Validate required commands are installed
-REQUIRED_COMMANDS=("wget" "curl" "mountpoint" "sed" "awk" "grep")
+# ====== CONSTANTS ======
+readonly ISO_DIR="/${dnsbinder_server_fqdn}/iso-files"
+readonly FSTAB="/etc/fstab"
+readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
+readonly DISTRO_KEYS=("almalinux" "rocky" "oraclelinux" "centos-stream" "rhel" "ubuntu-lts" "opensuse-leap")
+
+# ====== DEPENDENCY CHECK ======
 MISSING_COMMANDS=()
-
-for cmd in "${REQUIRED_COMMANDS[@]}"; do
-  if ! command -v "$cmd" &> /dev/null; then
-    MISSING_COMMANDS+=("$cmd")
-  fi
+for cmd in wget curl mountpoint sed awk grep; do
+    command -v "$cmd" &>/dev/null || MISSING_COMMANDS+=("$cmd")
 done
-
 if [[ ${#MISSING_COMMANDS[@]} -gt 0 ]]; then
-  print_error "Missing required commands: ${MISSING_COMMANDS[*]}"
-  print_info "Please install the missing tools before running this script."
-  exit 1
+    print_error "Missing required commands: ${MISSING_COMMANDS[*]}"
+    print_info "Please install the missing tools before running this script."
+    exit 1
 fi
 
-ISO_DIR="/${dnsbinder_server_fqdn}/iso-files"
-FSTAB="/etc/fstab"
-
+# ====== USAGE ======
 print_usage() {
-  print_info "Usage:
-    $(basename $0) --list
-    $(basename $0) --setup <distro> --version <version>
-    $(basename $0) --cleanup <distro> --version <version>
+    print_info "Usage: tux2lab distro <subcommand> [distro] [--version <version>]
+
+Subcommands:
+    list                                List all distros with readiness status
+    setup [distro --version ver]        Download ISO and mount for PXE provisioning
+    cleanup [distro --version ver]      Unmount and remove ISO for a distro
 
 Supported distros:
     almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap
@@ -50,360 +56,362 @@ Version:
     The actual version number, e.g. 9, 10, 22.04, 24.04, 15.5, 15.6"
 }
 
+# ====== HELPER FUNCTIONS ======
+
 fn_is_distro_ready() {
-  local os_distribution="$1"
-  local ver="$2"
-  local mount_dir="/${dnsbinder_server_fqdn}/${os_distribution}/${ver}"
-  
-  if mountpoint -q "$mount_dir"; then
-    return 0  # Ready
-  else
-    return 1  # Not Ready
-  fi
+    local distro="$1" ver="$2"
+    mountpoint -q "/${dnsbinder_server_fqdn}/${distro}/${ver}" 2>/dev/null
 }
 
-fn_get_distro_status_display() {
-  local os_distribution="$1"
-  local ver="$2"
-  
-  if fn_is_distro_ready "$os_distribution" "$ver"; then
-    print_green "[Ready]" nskip
-  else
-    print_yellow "[Not-Ready]" nskip
-  fi
+fn_has_golden_image() {
+    local distro="$1" ver="$2"
+    [[ -f "${GOLDEN_IMAGE_DIR}/${distro}-golden-image-${ver}.${dnsbinder_domain}.qcow2" ]]
 }
 
-fn_list_distros() {
-  printf "\n  %-20s %-12s %-14s %-18s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
-  printf "  %-20s %-12s %-14s %-18s\n" "------" "-------" "---------" "------------"
+fn_validate_distro() {
+    local distro="$1"
+    if [[ -z "${DISTRO_AVAILABLE_VERSIONS[$distro]+set}" ]]; then
+        print_error "Unknown distro: ${distro}"
+        print_info "Supported distros: ${DISTRO_KEYS[*]}"
+        exit 1
+    fi
+}
 
-  for distro in almalinux rocky oraclelinux centos-stream rhel ubuntu-lts opensuse-leap; do
-    local versions="${DISTRO_AVAILABLE_VERSIONS[$distro]}"
-    for ver in $versions; do
-      local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${ver}"
-      local pxe_status
-      if mountpoint -q "$mount_dir" 2>/dev/null; then
-        pxe_status=$(print_green "Ready" nskip)
-      else
-        pxe_status=$(print_yellow "Not-Ready" nskip)
-      fi
+fn_validate_version() {
+    local distro="$1" version="$2"
+    if ! fn_is_valid_version "$distro" "$version"; then
+        print_error "Invalid version '${version}' for ${distro}."
+        print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$distro]}"
+        exit 1
+    fi
+}
 
-      local golden_fqdn="${distro}-golden-image-${ver}.${dnsbinder_domain}"
-      local golden_status
-      if [[ -f "/tux2lab-data/golden-images-disk-store/${golden_fqdn}.qcow2" ]]; then
-        golden_status=$(print_green "Available" nskip)
-      else
-        golden_status=$(print_yellow "Not-Built" nskip)
-      fi
+# ====== INTERACTIVE SELECTION ======
 
-      printf "  %-20s %-12s %-14s %-18s\n" "${DISTRO_DISPLAY_NAMES[$distro]}" "$ver" "$pxe_status" "$golden_status"
+fn_select_distro() {
+    local action_title="$1"
+
+    local menu="Please select the OS distribution to ${action_title}:\n"
+    for i in "${!DISTRO_KEYS[@]}"; do
+        local key="${DISTRO_KEYS[$i]}"
+        printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${DISTRO_DISPLAY_NAMES[$key]}" "${DISTRO_AVAILABLE_VERSIONS[$key]}"
+        menu+="${line}"
     done
-  done
-  echo
-}
+    menu+="  q)  Quit"
 
-fn_select_os_distro() {
-  local action_title="$1"
-  
-  local -a distro_keys=("almalinux" "rocky" "oraclelinux" "centos-stream" "rhel" "ubuntu-lts" "opensuse-leap")
-  
-  local menu="Please select the OS distribution to ${action_title}:\n"
-  for i in "${!distro_keys[@]}"; do
-    local key="${distro_keys[$i]}"
-    local name="${DISTRO_DISPLAY_NAMES[$key]}"
-    local versions="${DISTRO_AVAILABLE_VERSIONS[$key]}"
-    printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${name}" "${versions}"
-    menu+="${line}"
-  done
-  menu+="  q)  Quit"
-  
-  print_notify "$menu"
-  echo -n "Enter option number: "
-  read os_distribution
-  case "$os_distribution" in
-    1 ) DISTRO="almalinux" ;;
-    2 ) DISTRO="rocky" ;;
-    3 ) DISTRO="oraclelinux" ;;
-    4 ) DISTRO="centos-stream" ;;
-    5 ) DISTRO="rhel" ;;
-    6 ) DISTRO="ubuntu-lts" ;;
-    7 ) DISTRO="opensuse-leap" ;;
-    q | Q ) print_notify "Exiting the utility $(basename $0) !\n"; exit 0 ;;
-    * ) print_error "Invalid option! Please try again."; fn_select_os_distro "$action_title" ;;
-  esac
+    print_notify "$menu"
+    echo -n "Enter option number: "
+    read -r distro_choice
+
+    if [[ "${distro_choice}" == "q" || "${distro_choice}" == "Q" ]]; then
+        print_info "Operation cancelled by user."
+        exit 130
+    fi
+
+    if [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#DISTRO_KEYS[@]} )); then
+        DISTRO="${DISTRO_KEYS[$((distro_choice-1))]}"
+    else
+        print_error "Invalid option. Please try again."
+        fn_select_distro "$action_title"
+    fi
 }
 
 fn_select_version() {
-  local distro="$1"
-  local available_versions=(${DISTRO_AVAILABLE_VERSIONS[$distro]})
-  
-  local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$distro]}:\n"
-  for i in "${!available_versions[@]}"; do
-    local ver="${available_versions[$i]}"
-    local status=$(fn_get_distro_status_display "$distro" "$ver")
-    printf -v line "  %d)  %-12s %s\n" $((i+1)) "${ver}" "${status}"
-    menu+="${line}"
-  done
-  menu+="  q)  Quit"
-  
-  print_notify "$menu"
-  echo -n "Enter option number: "
-  read version_choice
+    local distro="$1"
+    local available_versions=(${DISTRO_AVAILABLE_VERSIONS[$distro]})
 
-  if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
-    print_notify "Exiting the utility $(basename $0) !\n"; exit 0
-  elif [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
-    VERSION="${available_versions[$((version_choice-1))]}"
-  else
-    print_error "Invalid option. Please try again."
-    fn_select_version "$distro"
-  fi
-}
-
-prepare_iso() {
-  local distro="$1" iso_file="$2" iso_url="$3"
-  local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${VERSION}"
-  local iso_path="${ISO_DIR}/${iso_file}"
-
-  print_info "Ensuring ISO directory exists..."
-  sudo mkdir -p "$ISO_DIR"
-  sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$ISO_DIR"
-
-  if [[ -f "$iso_path" ]]; then
-    print_info "ISO already exists: $iso_path\n"
-  else
-    print_info "Downloading ISO from $iso_url\n"
-    if ! wget --continue --output-document="$iso_path" "$iso_url"; then
-      print_error "Failed to download ISO from $iso_url"
-      print_info "Cleaning up partial download..."
-      sudo rm -f "$iso_path"
-      exit 1
-    fi
-    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$iso_path"
-    print_success "Download complete and ownership set.\n"
-  fi
-
-  print_info "Preparing mount point: $mount_dir"
-  sudo mkdir -p "$mount_dir"
-  sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$mount_dir"
-  local fstab_entry="$iso_path $mount_dir iso9660 uid=${mgmt_super_user},gid=${mgmt_super_user} 0 0"
-  if ! grep -qF "$fstab_entry" "$FSTAB"; then
-    print_info "Adding mount entry to /etc/fstab\n"
-    if ! echo "$fstab_entry" | sudo tee -a "$FSTAB" > /dev/null; then
-      print_error "Failed to add fstab entry"
-      print_info "Cleaning up ISO file..."
-      sudo rm -f "$iso_path"
-      exit 1
-    fi
-    sudo systemctl daemon-reload
-  else
-    print_info "fstab already contains ISO mount entry.\n"
-  fi
-
-  if ! mountpoint -q "$mount_dir"; then
-    print_info "Mounting ISO to $mount_dir\n"
-    if ! sudo mount "$mount_dir"; then
-      print_error "Failed to mount ISO at $mount_dir"
-      print_info "Cleaning up..."
-      sudo sed -i "\|${mount_dir}|d" "$FSTAB"
-      sudo systemctl daemon-reload
-      sudo rm -f "$iso_path"
-      sudo rm -rf "$mount_dir"
-      exit 1
-    fi
-    print_success "ISO mounted.\n"
-  else
-    print_info "ISO already mounted.\n"
-  fi
-
-  print_success "All done for $distro ${VERSION}.\n"
-}
-
-prepare_rhel() {
-  local distro="rhel"
-  
-  print_info "Login from a browser with your Red Hat Developer Subscription!"
-  read -rp "Enter the link to download RHEL ${VERSION} ISO : " iso_url
-
-  prepare_iso "$distro" "${ISO_FILENAMES[rhel:${VERSION}]}" "$iso_url"
-}
-
-prepare_ubuntu() {
-  local distro="ubuntu-lts"
-  prepare_iso "$distro" "${ISO_FILENAMES[ubuntu-lts:${VERSION}]}" "${ISO_URLS[ubuntu-lts:${VERSION}]}"
-}
-
-prepare_oraclelinux() {
-  local distro="oraclelinux"
-  prepare_iso "$distro" "${ISO_FILENAMES[oraclelinux:${VERSION}]}" "${ISO_URLS[oraclelinux:${VERSION}]}"
-}
-
-cleanup_distro() {
-  local distro="$1"
-  local iso_file="$2"
-  local iso_path="${ISO_DIR}/${iso_file}"
-  local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${VERSION}"
-
-  print_warning "This will delete ISO and mount point for $distro ${VERSION}."
-  read -p "Are you sure you want to continue? (yes/no): " confirm
-  if [[ "$confirm" != "yes" ]]; then
-    print_error "Cleanup aborted."
-    exit 1
-  fi
-
-  sudo rm -f $iso_path
-
-  if [[ -n "$mount_dir" && -d "$mount_dir" ]]; then
-    if mountpoint -q "$mount_dir"; then
-      print_task "Unmounting $mount_dir..."
-      if sudo umount "$mount_dir"; then
-        print_task_done
-      else
-        print_task_fail
-        print_error "Failed to unmount $mount_dir. Please check if it's in use."
-        exit 1
-      fi
-    fi
-    sudo rm -rf "$mount_dir"
-  fi
-
-  print_info "Cleaning up /etc/fstab entries for '${distro}/${VERSION}'"
-  sudo sed -i "\|${distro}/${VERSION}|d" "$FSTAB"
-  sudo systemctl daemon-reexec
-
-  print_success "Cleanup completed for $distro ${VERSION}.\n"
-}
-
-# Menu mode when no args
-if [[ $# -lt 1 ]]; then
-  print_info "No arguments provided. Launching interactive mode.
-What would you like to do?
-  1) Setup Distro
-  2) Cleanup Distro
-  q) Quit"
-  echo -n "Enter option (default: 1): "
-  read action
-  case "$action" in
-    1 | "" ) MODE="--setup" ; MENU_TITLE="setup" ;;
-    2 ) MODE="--cleanup" ; MENU_TITLE="cleanup" ;;
-    q | Q ) print_notify "Exiting the utility $(basename $0) !\n"; exit 0 ;;
-    * ) print_error "Invalid choice. Exiting."; exit 1 ;;
-  esac
-  
-  fn_select_os_distro "$MENU_TITLE"
-  fn_select_version "$DISTRO"
-else
-  MODE="$1"
-  DISTRO="${2:-}"
-
-  if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then
-    print_usage
-    exit 0
-  fi
-
-  if [[ "$MODE" == "--list" ]]; then
-    fn_list_distros
-    exit 0
-  fi
-
-  if [[ "$MODE" != "--setup" && "$MODE" != "--cleanup" ]]; then
-    print_error "Invalid mode: $MODE"
-    print_usage
-    exit 1
-  fi
-
-  if [[ -z "$DISTRO" ]]; then
-    # No distro specified — go interactive
-    MENU_TITLE=""
-    [[ "$MODE" == "--setup" ]] && MENU_TITLE="setup" || MENU_TITLE="cleanup"
-    fn_select_os_distro "$MENU_TITLE"
-    fn_select_version "$DISTRO"
-  else
-    # Parse --version parameter
-    VERSION=""
-    if [[ $# -ge 3 ]]; then
-      if [[ "$3" == "--version" && -n "${4:-}" ]]; then
-        VERSION="$4"
-        if ! fn_is_valid_version "$DISTRO" "$VERSION"; then
-          print_error "Invalid version '${VERSION}' for ${DISTRO}."
-          print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
-          exit 1
+    local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$distro]}:\n"
+    for i in "${!available_versions[@]}"; do
+        local ver="${available_versions[$i]}"
+        local status
+        if fn_is_distro_ready "$distro" "$ver"; then
+            status=$(print_green "[Ready]" nskip)
+        else
+            status=$(print_yellow "[Not-Ready]" nskip)
         fi
-      else
-        print_error "Invalid parameter: $3"
-        print_usage
-        exit 1
-      fi
+        printf -v line "  %d)  %-12s %s\n" $((i+1)) "${ver}" "${status}"
+        menu+="${line}"
+    done
+    menu+="  q)  Quit"
+
+    print_notify "$menu"
+    echo -n "Enter option number: "
+    read -r version_choice
+
+    if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
+        print_info "Operation cancelled by user."
+        exit 130
     fi
 
-    # Require explicit version when using non-interactive mode
-    if [[ -z "$VERSION" ]]; then
-      print_error "The --version option is required when --distro is specified."
-      print_info "Available versions for ${DISTRO}: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
-      print_usage
-      exit 1
+    if [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
+        VERSION="${available_versions[$((version_choice-1))]}"
+    else
+        print_error "Invalid option. Please try again."
+        fn_select_version "$distro"
     fi
-  fi
+}
+
+# ====== LIST ======
+
+fn_list_distros() {
+    printf "\n  %-20s %-12s %-14s %-18s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
+    printf "  %-20s %-12s %-14s %-18s\n" "------" "-------" "---------" "------------"
+
+    for distro in "${DISTRO_KEYS[@]}"; do
+        for ver in ${DISTRO_AVAILABLE_VERSIONS[$distro]}; do
+            local pxe_status golden_status
+            if fn_is_distro_ready "$distro" "$ver"; then
+                pxe_status=$(print_green "Ready" nskip)
+            else
+                pxe_status=$(print_yellow "Not-Ready" nskip)
+            fi
+            if fn_has_golden_image "$distro" "$ver"; then
+                golden_status=$(print_green "Available" nskip)
+            else
+                golden_status=$(print_yellow "Not-Built" nskip)
+            fi
+            printf "  %-20s %-12s %-14s %-18s\n" "${DISTRO_DISPLAY_NAMES[$distro]}" "$ver" "$pxe_status" "$golden_status"
+        done
+    done
+    echo
+}
+
+# ====== SETUP ======
+
+fn_get_iso_url() {
+    local distro="$1" version="$2"
+
+    # RHEL requires manual download — prompt for URL
+    if [[ "$distro" == "rhel" ]]; then
+        print_info "Login from a browser with your Red Hat Developer Subscription!"
+        read -rp "Enter the link to download RHEL ${version} ISO: " iso_url
+        if [[ -z "$iso_url" ]]; then
+            print_error "No URL provided. Aborting."
+            exit 1
+        fi
+        echo "$iso_url"
+        return
+    fi
+
+    local url="${ISO_URLS[${distro}:${version}]:-}"
+    if [[ -z "$url" ]]; then
+        print_error "No ISO URL configured for ${distro} ${version}."
+        exit 1
+    fi
+    echo "$url"
+}
+
+fn_setup_distro() {
+    local distro="$1" version="$2"
+
+    if fn_is_distro_ready "$distro" "$version"; then
+        print_warning "Distro '${DISTRO_DISPLAY_NAMES[$distro]} ${version}' is already set up."
+        print_info "To re-setup, run cleanup first: tux2lab distro cleanup ${distro} --version ${version}"
+        exit 1
+    fi
+
+    local iso_file="${ISO_FILENAMES[${distro}:${version}]:-}"
+    if [[ -z "$iso_file" ]]; then
+        print_error "No ISO filename configured for ${distro} ${version}."
+        exit 1
+    fi
+
+    local iso_url
+    iso_url=$(fn_get_iso_url "$distro" "$version")
+
+    local iso_path="${ISO_DIR}/${iso_file}"
+    local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${version}"
+
+    # Ensure ISO directory exists
+    print_task "Ensuring ISO directory exists..."
+    sudo mkdir -p "$ISO_DIR"
+    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$ISO_DIR"
+    print_task_done
+
+    # Download ISO if not present
+    if [[ -f "$iso_path" ]]; then
+        print_info "ISO already exists: ${iso_path}"
+    else
+        print_info "Downloading ISO from ${iso_url}"
+        if ! wget --continue --output-document="$iso_path" "$iso_url"; then
+            print_error "Failed to download ISO from ${iso_url}"
+            print_info "Cleaning up partial download..."
+            sudo rm -f "$iso_path"
+            exit 1
+        fi
+        sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$iso_path"
+        print_success "Download complete."
+    fi
+
+    # Create mount point
+    print_task "Preparing mount point: ${mount_dir}"
+    sudo mkdir -p "$mount_dir"
+    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$mount_dir"
+    print_task_done
+
+    # Add fstab entry
+    local fstab_entry="${iso_path} ${mount_dir} iso9660 uid=${mgmt_super_user},gid=${mgmt_super_user} 0 0"
+    if ! grep -qF "$fstab_entry" "$FSTAB"; then
+        print_task "Adding mount entry to /etc/fstab..."
+        if ! echo "$fstab_entry" | sudo tee -a "$FSTAB" >/dev/null; then
+            print_task_fail
+            print_error "Failed to add fstab entry. Cleaning up..."
+            sudo rm -f "$iso_path"
+            sudo rm -rf "$mount_dir"
+            exit 1
+        fi
+        sudo systemctl daemon-reload
+        print_task_done
+    else
+        print_info "fstab already contains ISO mount entry."
+    fi
+
+    # Mount ISO
+    if ! mountpoint -q "$mount_dir"; then
+        print_task "Mounting ISO to ${mount_dir}..."
+        if ! sudo mount "$mount_dir"; then
+            print_task_fail
+            print_error "Failed to mount ISO at ${mount_dir}. Cleaning up..."
+            sudo sed -i "\|${mount_dir}|d" "$FSTAB"
+            sudo systemctl daemon-reload
+            sudo rm -f "$iso_path"
+            sudo rm -rf "$mount_dir"
+            exit 1
+        fi
+        print_task_done
+    else
+        print_info "ISO already mounted."
+    fi
+
+    print_success "Setup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+}
+
+# ====== CLEANUP ======
+
+fn_cleanup_distro() {
+    local distro="$1" version="$2"
+
+    local iso_file="${ISO_FILENAMES[${distro}:${version}]:-}"
+    if [[ -z "$iso_file" ]]; then
+        print_error "No ISO filename configured for ${distro} ${version}."
+        exit 1
+    fi
+
+    local iso_path="${ISO_DIR}/${iso_file}"
+    local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${version}"
+
+    if ! fn_is_distro_ready "$distro" "$version" && [[ ! -f "$iso_path" ]]; then
+        print_info "Nothing to clean up for ${DISTRO_DISPLAY_NAMES[$distro]} ${version} (not set up)."
+        exit 0
+    fi
+
+    print_warning "This will delete ISO and mount point for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+    read -rp "Are you sure you want to continue? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+        print_info "Cleanup aborted."
+        exit 0
+    fi
+
+    # Unmount if mounted
+    if [[ -d "$mount_dir" ]] && mountpoint -q "$mount_dir"; then
+        print_task "Unmounting ${mount_dir}..."
+        if sudo umount "$mount_dir"; then
+            print_task_done
+        else
+            print_task_fail
+            print_error "Failed to unmount ${mount_dir}. Please check if it's in use."
+            exit 1
+        fi
+    fi
+
+    # Remove mount directory
+    if [[ -d "$mount_dir" ]]; then
+        sudo rm -rf "$mount_dir"
+    fi
+
+    # Remove ISO file
+    if [[ -f "$iso_path" ]]; then
+        print_task "Removing ISO file..."
+        sudo rm -f "$iso_path"
+        print_task_done
+    fi
+
+    # Clean fstab
+    print_task "Cleaning /etc/fstab entries..."
+    sudo sed -i "\|${distro}/${version}|d" "$FSTAB"
+    sudo systemctl daemon-reexec
+    print_task_done
+
+    print_success "Cleanup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+}
+
+# ====== ARG PARSING ======
+
+if [[ $# -lt 1 ]]; then
+    print_usage
+    exit 1
 fi
 
-# Main logic
+MODE="$1"
+shift
+
 case "$MODE" in
-  --setup)
-    if fn_is_distro_ready "$DISTRO" "$VERSION"; then
-      print_warning "Distro '${DISTRO} ${VERSION}' already appears to be prepared."
-      print_info "Please cleanup first using: $(basename $0) --cleanup ${DISTRO} --version ${VERSION}"
-      exit 1
+    -h|--help)
+        print_usage
+        exit 0
+        ;;
+    --list)
+        fn_list_distros
+        exit 0
+        ;;
+    --setup|--cleanup)
+        ;;
+    *)
+        print_error "Invalid mode: ${MODE}"
+        print_usage
+        exit 1
+        ;;
+esac
+
+# Parse distro and version from remaining args
+DISTRO="${1:-}"
+VERSION=""
+
+if [[ -z "$DISTRO" ]]; then
+    # Interactive mode — prompt for distro and version
+    local_action="setup"
+    [[ "$MODE" == "--cleanup" ]] && local_action="cleanup"
+    fn_select_distro "$local_action"
+    fn_select_version "$DISTRO"
+else
+    # Non-interactive mode — validate distro
+    fn_validate_distro "$DISTRO"
+    shift
+
+    # Parse --version
+    if [[ $# -ge 2 && "$1" == "--version" ]]; then
+        VERSION="$2"
+        fn_validate_version "$DISTRO" "$VERSION"
+    elif [[ $# -ge 1 ]]; then
+        print_error "Unexpected parameter: $1"
+        print_usage
+        exit 1
     fi
 
-    case "$DISTRO" in
-      almalinux)
-        prepare_iso "almalinux" "${ISO_FILENAMES[almalinux:${VERSION}]}" \
-          "${ISO_URLS[almalinux:${VERSION}]}"
-        ;;
-      rocky)
-        prepare_iso "rocky" "${ISO_FILENAMES[rocky:${VERSION}]}" \
-          "${ISO_URLS[rocky:${VERSION}]}"
-        ;;
-      oraclelinux)
-        prepare_oraclelinux
-        ;;
-      centos-stream)
-        prepare_iso "centos-stream" "${ISO_FILENAMES[centos-stream:${VERSION}]}" \
-          "${ISO_URLS[centos-stream:${VERSION}]}"
-        ;;
-      rhel)
-        prepare_rhel
-        ;;
-      ubuntu-lts)
-        prepare_ubuntu
-        ;;
-      opensuse-leap)
-        prepare_iso "opensuse-leap" "${ISO_FILENAMES[opensuse-leap:${VERSION}]}" \
-          "${ISO_URLS[opensuse-leap:${VERSION}]}"
-        ;;
-      *)
-        print_error "Unknown distro: $DISTRO"
+    if [[ -z "$VERSION" ]]; then
+        print_error "The --version option is required."
+        print_info "Available versions for ${DISTRO}: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
         exit 1
+    fi
+fi
+
+# ====== DISPATCH ======
+
+case "$MODE" in
+    --setup)
+        fn_setup_distro "$DISTRO" "$VERSION"
         ;;
-    esac
-    ;;
-  --cleanup)
-    case "$DISTRO" in
-      almalinux)       cleanup_distro "almalinux" "${ISO_FILENAMES[almalinux:${VERSION}]}" ;;
-      rocky)           cleanup_distro "rocky" "${ISO_FILENAMES[rocky:${VERSION}]}" ;;
-      oraclelinux)     cleanup_distro "oraclelinux" "${ISO_FILENAMES[oraclelinux:${VERSION}]}" ;;
-      centos-stream)   cleanup_distro "centos-stream" "${ISO_FILENAMES[centos-stream:${VERSION}]}" ;;
-      rhel)            cleanup_distro "rhel" "${ISO_FILENAMES[rhel:${VERSION}]}" ;;
-      ubuntu-lts)      cleanup_distro "ubuntu-lts" "${ISO_FILENAMES[ubuntu-lts:${VERSION}]}" ;;
-      opensuse-leap)   cleanup_distro "opensuse-leap" "${ISO_FILENAMES[opensuse-leap:${VERSION}]}" ;;
-      *)
-        print_error "Unknown distro: $DISTRO"
-        exit 1
+    --cleanup)
+        fn_cleanup_distro "$DISTRO" "$VERSION"
         ;;
-    esac
-    ;;
-  *)
-    print_usage
-    exit 1
-    ;;
 esac
