@@ -1187,8 +1187,6 @@ fn_set_environment() {
         fi
         fn_replace_token_in_file "${working_file}" "get_hostname" "${kickstart_short_hostname}"
         fn_replace_token_in_file "${working_file}" "get_lab_infra_server_hostname" "${lab_infra_server_hostname}"
-        fn_replace_token_in_file "${working_file}" "get_win_hostname" "${win_hostname}"
-        fn_replace_token_in_file "${working_file}" "get_rhel_activation_key" "${rhel_activation_key}"
         fn_replace_token_in_file "${working_file}" "get_time_of_last_update" "${time_of_last_update}"
         fn_replace_token_in_file "${working_file}" "get_mgmt_super_user" "${mgmt_super_user}"
         fn_replace_token_in_file "${working_file}" "get_os_name_and_version" "${os_name_and_version}"

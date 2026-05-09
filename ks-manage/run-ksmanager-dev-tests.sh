@@ -298,23 +298,23 @@ test_create_host_noninteractive() {
 	local mac="aa:bb:cc:dd:ee:01"
 	local mac_ipxe="aa-bb-cc-dd-ee-01"
 
-	run_ksmanager "${host}" --distro almalinux --version latest --mac "${mac}" --qemu-kvm >"${TEST_ROOT}/ksmanager_test_create.log" 2>&1
+	run_ksmanager "${host}" --distro almalinux --version 10 --mac "${mac}" --qemu-kvm >"${TEST_ROOT}/ksmanager_test_create.log" 2>&1
 	local rc=$?
 	assert_eq "create-host exits 0" "${rc}" "0"
 
 	assert_true "mac cache exists" test -f "${KSMANAGER_HUB_DIR}/mac-address-cache"
 	assert_true "cache contains host" grep -q "^${host} " "${KSMANAGER_HUB_DIR}/mac-address-cache"
-	assert_true "kickstart file created" test -f "${KSMANAGER_HUB_DIR}/kickstarts/${host}/redhat-based-latest-ks.cfg"
+	assert_true "kickstart file created" test -f "${KSMANAGER_HUB_DIR}/kickstarts/${host}/redhat-based-10-ks.cfg"
 	assert_true "ipxe file created" test -f "${IPXE_DIR}/${mac_ipxe}.ipxe"
-	assert_true "hostname token replaced" grep -q "hostname=node1" "${KSMANAGER_HUB_DIR}/kickstarts/${host}/redhat-based-latest-ks.cfg"
+	assert_true "hostname token replaced" grep -q "hostname=node1" "${KSMANAGER_HUB_DIR}/kickstarts/${host}/redhat-based-10-ks.cfg"
 }
 
 test_parallel_same_host_single_cache_row() {
 	local host="node2.example.test"
 
-	run_ksmanager "${host}" --distro almalinux --version latest --mac aa:bb:cc:dd:ee:02 --qemu-kvm >"${TEST_ROOT}/ksmanager_test_p1.log" 2>&1 &
+	run_ksmanager "${host}" --distro almalinux --version 10 --mac aa:bb:cc:dd:ee:02 --qemu-kvm >"${TEST_ROOT}/ksmanager_test_p1.log" 2>&1 &
 	local p1=$!
-	run_ksmanager "${host}" --distro almalinux --version latest --mac aa:bb:cc:dd:ee:03 --qemu-kvm >"${TEST_ROOT}/ksmanager_test_p2.log" 2>&1 &
+	run_ksmanager "${host}" --distro almalinux --version 10 --mac aa:bb:cc:dd:ee:03 --qemu-kvm >"${TEST_ROOT}/ksmanager_test_p2.log" 2>&1 &
 	local p2=$!
 	wait "$p1"
 	local r1=$?
@@ -332,7 +332,7 @@ test_parallel_same_host_single_cache_row() {
 test_parallel_remove_host_safe() {
 	local host="node3.example.test"
 
-	run_ksmanager "${host}" --distro almalinux --version latest --mac aa:bb:cc:dd:ee:04 --qemu-kvm >"${TEST_ROOT}/ksmanager_test_seed.log" 2>&1
+	run_ksmanager "${host}" --distro almalinux --version 10 --mac aa:bb:cc:dd:ee:04 --qemu-kvm >"${TEST_ROOT}/ksmanager_test_seed.log" 2>&1
 
 	run_ksmanager "${host}" --remove-host >"${TEST_ROOT}/ksmanager_test_rm1.log" 2>&1 &
 	local p1=$!
@@ -361,7 +361,7 @@ test_json_provision_result() {
 	local host="node4.example.test"
 	local mac="aa:bb:cc:dd:ee:05"
 
-	run_ksmanager "${host}" --distro almalinux --version latest --mac "${mac}" --qemu-kvm >"${TEST_ROOT}/ksmanager_test_json.log" 2>&1
+	run_ksmanager "${host}" --distro almalinux --version 10 --mac "${mac}" --qemu-kvm >"${TEST_ROOT}/ksmanager_test_json.log" 2>&1
 	local rc=$?
 	assert_eq "json-test create exits 0" "${rc}" "0"
 

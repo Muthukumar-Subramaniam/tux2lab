@@ -216,7 +216,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Clone golden image disk
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/clone-golden-image-disk.sh
-        if ! clone_golden_image_disk "$qemu_kvm_hostname" "${OS_DISTRO}"; then
+        if ! clone_golden_image_disk "$qemu_kvm_hostname" "${OS_DISTRO}" "${VERSION_TYPE}"; then
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi

@@ -10,7 +10,7 @@ virt_install_error=$(sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${V
   --memory 2048 \
   --vcpus 2 \
   --disk path=${DISK_PATH},size=20,bus=virtio,boot.order=1 \
-  --os-variant almalinux9 \
+  --os-variant ${OS_VARIANT:-almalinux9} \
   --network network=default,model=virtio,mac=${GENERATED_MAC},boot.order=2 \
   --graphics none \
   --noautoconsole \
