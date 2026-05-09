@@ -65,13 +65,7 @@ OPTIONS:
     -v, --version           Show version information
 
 NOTES:
-    - Use 'tux2lab vm <subcommand> --help' to see help for a specific subcommand
-    - Use 'tux2lab golden-image create' to build golden image disks
-    - Use 'tux2lab distro setup' to prepare OS distributions for PXE boot
-    - Use 'tux2lab ipv6-route' to manage IPv6 default routes on VMs
-    - Use 'tux2lab start' to start the lab infrastructure
-    - Use 'tux2lab health' to check lab infrastructure health
-    - Use 'tux2lab dns' to manage DNS records for lab infrastructure"
+    - Use 'tux2lab vm <subcommand> --help' to see help for a specific subcommand"
 }
 
 # Main logic
