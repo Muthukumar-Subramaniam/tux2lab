@@ -1,0 +1,10 @@
++--------------------------------------------------------------+
+|           Welcome! This host can be your playground          |
++--------------------------------------------------------------+
+| Go ahead with your experiments.                              |
+| Break. Fix. Rebuild. Repeat.                                 |
+| Just keep your lab infra in your mind.                       |
++--------------------------------------------------------------+
+| Bug report, suggestion, or query? Drop it here:              |
+| https://github.com/Muthukumar-Subramaniam/tux2lab/issues  |
++--------------------------------------------------------------+

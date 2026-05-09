@@ -1,0 +1,72 @@
+---
+# tasks file for generate_ssh_keys_of_server
+- name: Ensure .ssh directories exist with correct permissions
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: '0700'
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+  loop:
+    - { path: "/root/.ssh", owner: "root" }
+    - { path: "/home/{{ ansible_facts.env.mgmt_super_user }}/.ssh", owner: "{{ ansible_facts.env.mgmt_super_user }}" }
+
+- name: Generate SSH key for root
+  become: true
+  ansible.builtin.openssh_keypair:
+    path: /root/.ssh/id_rsa
+    type: rsa
+    size: 4096
+    owner: root
+    group: root
+    mode: '0600'
+    comment: "root@{{ ansible_facts.env.dnsbinder_server_fqdn }}"
+    force: false
+
+- name: Generate SSH key for {{ ansible_facts.env.mgmt_super_user }}
+  become: true
+  ansible.builtin.openssh_keypair:
+    path: "/home/{{ ansible_facts.env.mgmt_super_user }}/.ssh/id_rsa"
+    type: rsa
+    size: 4096
+    owner: "{{ ansible_facts.env.mgmt_super_user }}"
+    group: "{{ ansible_facts.env.mgmt_super_user }}"
+    mode: '0600'
+    comment: "{{ ansible_facts.env.mgmt_super_user }}@{{ ansible_facts.env.dnsbinder_server_fqdn }}"
+    force: false
+
+- name: Read root public key
+  become: true
+  ansible.builtin.slurp:
+    src: /root/.ssh/id_rsa.pub
+  register: root_pubkey
+
+- name: Read {{ ansible_facts.env.mgmt_super_user }} public key
+  become: true
+  ansible.builtin.slurp:
+    src: "/home/{{ ansible_facts.env.mgmt_super_user }}/.ssh/id_rsa.pub"
+  register: mgmt_user_pubkey
+
+- name: Set authorized_keys for root
+  become: true
+  ansible.builtin.blockinfile:
+    path: /root/.ssh/authorized_keys
+    create: yes
+    mode: '0600'
+    owner: root
+    group: root
+    marker: "# === ssh-pub-keys-handled-by-ansible-playbook-build-server {mark} ==="
+    block: |
+      {{ root_pubkey['content'] | b64decode }}
+      {{ mgmt_user_pubkey['content'] | b64decode }}
+
+- name: Set authorized_keys for {{ ansible_facts.env.mgmt_super_user }}
+  ansible.builtin.blockinfile:
+    path: "/home/{{ ansible_facts.env.mgmt_super_user }}/.ssh/authorized_keys"
+    create: yes
+    mode: '0600'
+    marker: "# === ssh-pub-keys-handled-by-ansible-playbook-build-server {mark} ==="
+    block: |
+      {{ root_pubkey['content'] | b64decode }}
+      {{ mgmt_user_pubkey['content'] | b64decode }}

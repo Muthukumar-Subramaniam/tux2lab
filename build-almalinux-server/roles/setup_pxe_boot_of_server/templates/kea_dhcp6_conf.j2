@@ -1,0 +1,49 @@
+{
+  "Dhcp6": {
+    "control-socket": {
+      "socket-type": "unix",
+      "socket-name": "/run/kea/kea6-ctrl-socket"
+    },
+    "interfaces-config": {
+      "interfaces": [ "{{ ansible_facts.env.mgmt_interface_name }}" ]
+    },
+    "lease-database": {
+      "type": "memfile"
+    },
+    "valid-lifetime": 3600,
+    "renew-timer": 900,
+    "rebind-timer": 1800,
+    "preferred-lifetime": 1800,
+    "hooks-libraries": [
+      {
+        "library": "/usr/lib64/kea/hooks/libdhcp_lease_cmds.so"
+      }
+    ],
+    "subnet6": [
+      {
+        "id": 1,
+        "subnet": "{{ ansible_facts.env.dnsbinder_ipv6_ula_subnet }}",
+        "interface": "{{ ansible_facts.env.mgmt_interface_name }}",
+        "pools": [
+          {
+            "pool": "{{ ansible_facts.env.dnsbinder_ipv6_ula_subnet | regex_replace('::/.*$', '') }}:{{ '%02x%02x' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[0] | int, ansible_facts.env.dnsbinder_last24_subnet.split('.')[1] | int) }}:{{ '00%02x' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[2] | int) }}:{{ '%02x%02x' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[0] | int, ansible_facts.env.dnsbinder_last24_subnet.split('.')[1] | int) }}:{{ '%02x9c' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[2] | int) }} - {{ ansible_facts.env.dnsbinder_ipv6_ula_subnet | regex_replace('::/.*$', '') }}:{{ '%02x%02x' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[0] | int, ansible_facts.env.dnsbinder_last24_subnet.split('.')[1] | int) }}:{{ '00%02x' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[2] | int) }}:{{ '%02x%02x' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[0] | int, ansible_facts.env.dnsbinder_last24_subnet.split('.')[1] | int) }}:{{ '%02xfe' | format(ansible_facts.env.dnsbinder_last24_subnet.split('.')[2] | int) }}"
+          }
+        ],
+        "option-data": [
+          {
+            "name": "dns-servers",
+            "data": "{{ ansible_facts.env.dnsbinder_server_ipv6_address }}"
+          },
+          {
+            "name": "domain-search",
+            "data": "{{ ansible_facts.env.dnsbinder_domain }}"
+          },
+          {
+            "name": "bootfile-url",
+            "data": "tftp://[{{ ansible_facts.env.dnsbinder_server_ipv6_address }}]/ipxe.efi"
+          }
+        ]
+      }
+    ]
+  }
+}

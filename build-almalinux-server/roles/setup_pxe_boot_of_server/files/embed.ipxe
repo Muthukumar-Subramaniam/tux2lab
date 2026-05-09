@@ -1,0 +1,6 @@
+#!ipxe
+dhcp
+set myhexmac ${net0/mac}
+set mymachexhyp ${net0/mac:hexhyp}
+echo Initiating iPXE boot for MAC ${myhexmac} ...
+chain http://lab-infra-server.${domain}/ipxe/${mymachexhyp}.ipxe || exit

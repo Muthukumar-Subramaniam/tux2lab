@@ -1,0 +1,17 @@
+network:
+    version: 2
+    ethernets:
+        eth0:
+            dhcp4: false
+            dhcp6: false
+            accept-ra: false
+            addresses:
+              - get_ipv4_address/get_ipv4_prefix
+              - get_ipv6_address/get_ipv6_prefix
+            routes:
+              - to: default
+                via: get_ipv4_gateway
+                on-link: True
+            nameservers:
+              addresses: [get_ipv4_nameserver, get_ipv6_nameserver]
+              search: [get_ipv4_domain]

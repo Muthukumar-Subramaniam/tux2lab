@@ -1,0 +1,3 @@
+/tux2lab *.{{ ansible_facts.env.dnsbinder_domain }}(ro,no_subtree_check,no_root_squash,crossmnt)
+/{{ ansible_facts.env.dnsbinder_server_fqdn }} *.{{ ansible_facts.env.dnsbinder_domain }}(ro,no_subtree_check,no_root_squash,crossmnt)
+/lab-share *.{{ ansible_facts.env.dnsbinder_domain }}(rw,no_subtree_check,no_root_squash,crossmnt)

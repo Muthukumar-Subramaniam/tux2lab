@@ -1,0 +1,325 @@
+<?xml version="1.0"?>
+<!DOCTYPE profile>
+<profile xmlns="http://www.suse.com/1.0/yast2ns" xmlns:config="http://www.suse.com/1.0/configns">
+  <add-on t="map">
+    <add_on_products t="list">
+      <listentry t="map">
+        <alias>lab-repo-oss</alias>
+        <media_url>http://get_lab_infra_server_hostname/opensuse-leap/get_version/</media_url>
+        <name>Lab OSS Repository</name>
+        <priority t="integer">99</priority>
+        <product_dir>/</product_dir>
+      </listentry>
+      <listentry t="map">
+        <alias>online-repo-non-oss</alias>
+        <media_url>http://download.opensuse.org/distribution/leap/get_opensuse_version_number/repo/non-oss/</media_url>
+        <name>Online Non-OSS Repository</name>
+        <priority t="integer">99</priority>
+        <product_dir>/</product_dir>
+      </listentry>
+    </add_on_products>
+  </add-on>
+  <bootloader t="map">
+    <global t="map">
+      <append>console=ttyS0,115200n8 splash=silent preempt=full mitigations=auto quiet security=apparmor</append>
+      <cpu_mitigations>auto</cpu_mitigations>
+      <gfxmode>text</gfxmode>
+      <hiddenmenu>false</hiddenmenu>
+      <os_prober>false</os_prober>
+      <secure_boot>false</secure_boot>
+      <update_nvram>true</update_nvram>
+      <terminal>serial</terminal>
+      <timeout t="integer">8</timeout>
+    </global>
+    <loader_type>grub2-efi</loader_type>
+  </bootloader>
+  <firewall t="map">
+    <enable_firewall t="boolean">false</enable_firewall>
+  </firewall>
+  <general t="map">
+    <mode t="map">
+      <confirm t="boolean">false</confirm>
+      <final_reboot t="boolean">true</final_reboot>
+    </mode>
+  </general>
+  <networking t="map">
+    <dhcp_options t="map">
+      <dhclient_client_id/>
+      <dhclient_hostname_option>AUTO</dhclient_hostname_option>
+    </dhcp_options>
+    <dns t="map">
+      <dhcp_hostname t="boolean">false</dhcp_hostname>
+      <hostname>get_hostname.get_ipv4_domain</hostname>
+      <nameservers t="list">
+        <nameserver>get_ipv4_nameserver</nameserver>
+        <nameserver>get_ipv6_nameserver</nameserver>
+      </nameservers>
+      <resolv_conf_policy>auto</resolv_conf_policy>
+      <searchlist t="list">
+        <search>get_ipv4_domain</search>
+      </searchlist>
+    </dns>
+    <interfaces t="list">
+      <interface t="map">
+        <bootproto>static</bootproto>
+        <ipaddr>get_ipv4_address</ipaddr>
+        <name>eth0</name>
+        <prefixlen>get_ipv4_prefix</prefixlen>
+        <startmode>auto</startmode>
+        <aliases t="map">
+          <alias0 t="map">
+            <IPADDR>get_ipv6_address</IPADDR>
+            <PREFIXLEN>get_ipv6_prefix</PREFIXLEN>
+          </alias0>
+        </aliases>
+      </interface>
+    </interfaces>
+    <ipv6 t="boolean">true</ipv6>
+    <keep_install_network t="boolean">true</keep_install_network>
+    <managed t="boolean">false</managed>
+    <routing t="map">
+      <ipv4_forward t="boolean">false</ipv4_forward>
+      <ipv6_forward t="boolean">false</ipv6_forward>
+      <routes t="list">
+        <route t="map">
+          <destination>default</destination>
+          <device>eth0</device>
+          <gateway>get_ipv4_gateway</gateway>
+          <netmask>-</netmask>
+        </route>
+      </routes>
+    </routing>
+  </networking>
+  <ntp-client t="map">
+    <ntp_policy>auto</ntp_policy>
+    <ntp_servers t="list">
+      <ntp_server t="map">
+        <address>get_lab_infra_server_hostname</address>
+        <iburst t="boolean">true</iburst>
+        <offline t="boolean">false</offline>
+      </ntp_server>
+    </ntp_servers>
+    <ntp_sync>systemd</ntp_sync>
+  </ntp-client>
+  <partitioning t="list">
+    <drive t="map">
+      <device>/dev/get_disk_type_for_the_vm</device>
+      <disklabel>gpt</disklabel>
+      <partitions t="list">
+        <!-- EFI System Partition -->
+        <partition t="map">
+          <create t="boolean">true</create>
+          <filesystem t="symbol">vfat</filesystem>
+          <format t="boolean">true</format>
+          <fstopt>utf8</fstopt>
+          <mount>/boot/efi</mount>
+          <mountby t="symbol">uuid</mountby>
+          <partition_id t="integer">263</partition_id>
+          <partition_nr t="integer">1</partition_nr>
+          <resize t="boolean">false</resize>
+          <size>134217728</size> <!-- 128 MB -->
+        </partition>
+        <!-- Root partition (plain XFS) -->
+        <partition t="map">
+          <create t="boolean">true</create>
+          <filesystem t="symbol">xfs</filesystem>
+          <format t="boolean">true</format>
+          <mount>/</mount>
+          <mountby t="symbol">uuid</mountby>
+          <partition_id t="integer">131</partition_id> <!-- Linux filesystem type -->
+          <partition_nr t="integer">2</partition_nr>
+          <resize t="boolean">false</resize>
+          <size></size> <!-- use rest of disk -->
+        </partition>
+      </partitions>
+    </drive>
+  </partitioning>
+  <proxy t="map">
+    <enabled t="boolean">false</enabled>
+  </proxy>
+  <services-manager t="map">
+    <default_target>multi-user</default_target>
+    <services t="map">
+      <enable t="list">
+        <service>YaST2-Firstboot</service>
+        <service>YaST2-Second-Stage</service>
+        <service>apparmor</service>
+        <service>auditd</service>
+        <service>klog</service>
+        <service>chronyd</service>
+        <service>cron</service>
+        <service>cups</service>
+        <service>wickedd-auto4</service>
+        <service>wickedd-dhcp4</service>
+        <service>wickedd-dhcp6</service>
+        <service>wickedd-nanny</service>
+        <service>irqbalance</service>
+        <service>issue-generator</service>
+        <service>kbdsettings</service>
+        <service>mcelog</service>
+        <service>wicked</service>
+        <service>nscd</service>
+        <service>nvmefc-boot-connections</service>
+        <service>nvmf-autoconnect</service>
+        <service>postfix</service>
+        <service>purge-kernels</service>
+        <service>rsyslog</service>
+        <service>smartd</service>
+        <service>sshd</service>
+        <service>systemd-pstore</service>
+        <service>systemd-remount-fs</service>
+      </enable>
+    </services>
+  </services-manager>
+  <software t="map">
+    <install_recommended t="boolean">true</install_recommended>
+    <instsource/>
+    <packages t="list">
+      <package>xfsprogs</package>
+      <package>wicked</package>
+      <package>shim</package>
+      <package>os-prober</package>
+      <package>openssh</package>
+      <package>openSUSE-release</package>
+      <package>nvme-cli</package>
+      <package>numactl</package>
+      <package>mokutil</package>
+      <package>kexec-tools</package>
+      <package>irqbalance</package>
+      <package>grub2-x86_64-efi</package>
+      <package>glibc</package>
+      <package>dosfstools</package>
+      <package>chrony</package>
+      <package>autoyast2</package>
+      <package>tmux</package>
+      <package>tar</package>
+      <package>samba-client</package>
+      <package>autofs</package>
+      <package>python311</package>
+    </packages>
+    <patterns t="list">
+      <pattern>apparmor</pattern>
+      <pattern>base</pattern>
+      <pattern>documentation</pattern>
+      <pattern>enhanced_base</pattern>
+      <pattern>minimal_base</pattern>
+      <pattern>sw_management</pattern>
+      <pattern>yast2_basis</pattern>
+    </patterns>
+    <products t="list">
+      <product>Leap</product>
+    </products>
+  </software>
+  <ssh_import t="map">
+    <copy_config t="boolean">false</copy_config>
+    <import t="boolean">false</import>
+  </ssh_import>
+  <timezone t="map">
+    <timezone>UTC</timezone>
+  </timezone>
+  <user_defaults t="map">
+    <expire/>
+    <group>100</group>
+    <home>/home</home>
+    <inactive>-1</inactive>
+    <shell>/bin/bash</shell>
+    <umask>022</umask>
+  </user_defaults>
+  <users t="list">
+    <user t="map">
+      <authorized_keys t="list"/>
+      <encrypted t="boolean">true</encrypted>
+      <fullname>get_mgmt_super_user</fullname>
+      <gid>100</gid>
+      <home>/home/get_mgmt_super_user</home>
+      <home_btrfs_subvolume t="boolean">false</home_btrfs_subvolume>
+      <password_settings t="map">
+        <expire/>
+        <flag/>
+        <inact/>
+        <max>99999</max>
+        <min>0</min>
+        <warn>7</warn>
+      </password_settings>
+      <shell>/bin/bash</shell>
+      <uid>1000</uid>
+      <user_password>get_shadow_password_super_mgmt_user</user_password>
+      <username>get_mgmt_super_user</username>
+    </user>
+    <user t="map">
+      <authorized_keys t="list"/>
+      <encrypted t="boolean">true</encrypted>
+      <fullname>root</fullname>
+      <gid>0</gid>
+      <home>/root</home>
+      <home_btrfs_subvolume t="boolean">false</home_btrfs_subvolume>
+      <password_settings t="map">
+        <expire/>
+        <flag/>
+        <inact/>
+        <max/>
+        <min/>
+        <warn/>
+      </password_settings>
+      <shell>/bin/bash</shell>
+      <uid>0</uid>
+      <user_password>get_shadow_password_super_mgmt_user</user_password>
+      <username>root</username>
+    </user>
+  </users>
+  <scripts>
+    <post-scripts config:type="list">
+      <script>
+        <debug config:type="boolean">true</debug>
+        <feedback config:type="boolean">false</feedback>
+        <filename>my-script.sh</filename>
+        <interpreter>shell</interpreter>
+        <location><![CDATA[]]></location>
+        <notification>Running custom post-script</notification>
+        <source><![CDATA[
+	#!/bin/bash
+  /usr/bin/mkdir /etc/zypp/repos.d/original
+  /usr/bin/mv /etc/zypp/repos.d/*-update.repo /etc/zypp/repos.d/openSUSE* /etc/zypp/repos.d/original/
+  /usr/bin/unlink /usr/bin/python3 && /usr/bin/ln -s /usr/bin/python3.11 /usr/bin/python3
+	/usr/bin/wget -O /etc/motd http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/motd.txt
+  /usr/bin/date '+%Y-%m-%d %H:%M:%S %Z' > /etc/bigbang
+	/usr/bin/mkdir -p /home/get_mgmt_super_user/.ssh /root/.ssh
+	/usr/bin/chmod 0700 /home/get_mgmt_super_user/.ssh /root/.ssh
+	/usr/bin/wget -O /home/get_mgmt_super_user/.ssh/authorized_keys http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/authorized_keys
+	/usr/bin/wget -O /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa.pub http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/kvm_lab_global_id_rsa.pub
+  /usr/bin/wget -O /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/kvm_lab_global_id_rsa
+  /usr/bin/cp -p /home/get_mgmt_super_user/.ssh/{authorized_keys,kvm_lab_global_id_rsa.pub,kvm_lab_global_id_rsa} /root/.ssh/
+	/usr/bin/chmod 0600 /home/get_mgmt_super_user/.ssh/{authorized_keys,kvm_lab_global_id_rsa} /root/.ssh/{authorized_keys,kvm_lab_global_id_rsa}
+  /usr/bin/chmod 0644 /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa.pub /root/.ssh/kvm_lab_global_id_rsa.pub
+	/usr/bin/chown -R get_mgmt_super_user:users /home/get_mgmt_super_user/.ssh
+	/usr/bin/echo -e "HISTSIZE=-1\nHISTFILESIZE=-1" | /usr/bin/tee -a /home/get_mgmt_super_user/.bashrc /root/.bashrc
+	var_PS1_variable_get_mgmt_super_user=$(/usr/bin/curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-normal-user)
+	/usr/bin/echo "${var_PS1_variable_get_mgmt_super_user}" >> /home/get_mgmt_super_user/.bashrc
+	var_PS1_variable_root=$(/usr/bin/curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-root-user)
+	/usr/bin/echo "${var_PS1_variable_root}" >> /root/.bashrc
+	/usr/bin/echo "get_mgmt_super_user ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/get_mgmt_super_user
+	/usr/bin/wget -P /etc/pki/trust/anchors/ http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt && /usr/sbin/update-ca-certificates || true
+	/usr/bin/systemctl disable kdump
+	/usr/bin/echo 'kernel.hostname=get_hostname.get_ipv4_domain' > /etc/sysctl.d/hostname.conf 
+	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /etc/systemd/system/golden-image-setup.service http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.service
+	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /root/golden-image-setup.sh http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.sh
+	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
+	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /etc/systemd/system/golden-boot.service http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.service
+	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /root/golden-boot.sh http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.sh
+	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/ln -s /etc/systemd/system/golden-boot.service /etc/systemd/system/multi-user.target.wants/golden-boot.service
+	local_lab_info=$(/usr/bin/echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
+  /usr/bin/mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/kvm_lab_global_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-kvm-lab-global.conf
+	/usr/bin/ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
+	/usr/bin/mkdir /tux2lab /lab-share /lab-web-share
+	/usr/bin/sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
+	/usr/bin/echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
+	/usr/bin/cat << EOF > /etc/auto.master.d/auto-${local_lab_info}
+/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab
+/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/get_lab_infra_server_hostname
+/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share
+EOF
+        ]]></source>
+      </script>
+    </post-scripts>
+  </scripts>
+</profile>

@@ -1,0 +1,42 @@
+---
+# tasks file for configure_chronyd_service_of_server
+
+- name: Comment existing NTP pool from chrony
+  become: true
+  ansible.builtin.replace:
+    path: /etc/chrony.conf
+    regexp: '^pool '
+    replace: '#pool '
+
+- name: Configure custom NTP server with chrony
+  become: true
+  blockinfile:
+    marker: "# {mark} ntp-{{ ansible_facts.env.dnsbinder_server_fqdn }}-settings"
+    path: /etc/chrony.conf
+    block: |
+      # Use Google's NTP pool as time source
+      pool time.google.com iburst
+      # Allow NTP client access from local network.
+      bindaddress {{ ansible_facts.env.dnsbinder_server_ipv4_address }}
+      bindaddress {{ ansible_facts.env.dnsbinder_server_ipv6_address }}
+      allow {{ ansible_facts.env.dnsbinder_network_cidr }}
+      allow {{ ansible_facts.env.dnsbinder_ipv6_ula_subnet }}
+      # Serve time even if not synchronized to a time source.
+      local stratum 10
+    insertafter: EOF
+    backup: true
+
+- name: Enable and Start chronyd service
+  become: true
+  systemd_service:
+    name: chronyd
+    state: started
+    enabled: true
+
+- name: Restart chronyd service
+  become: true
+  systemd_service:
+    name: chronyd
+    state: restarted
+
+############################ EOF #############################

@@ -1,0 +1,5 @@
+#!ipxe
+dhcp
+set mymacaddress ${net0/mac:hexhyp}
+echo "iPXE boot from MAC : ${mymacaddress}"
+chain http://{{ ansible_facts.env.dnsbinder_server_fqdn }}/ipxe/${mymacaddress}.ipxe || exit

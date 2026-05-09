@@ -1,0 +1,83 @@
+---
+# tasks file for configure_nginx_web_server
+- name: Create directory /{{ ansible_facts.env.dnsbinder_server_fqdn }}
+  become: true
+  file:
+    path: "/{{ ansible_facts.env.dnsbinder_server_fqdn }}"
+    state: directory
+    owner: "{{ ansible_facts.env.mgmt_super_user }}"
+    group: "{{ ansible_facts.env.mgmt_super_user }}"
+
+- name: Comment out all server blocks in /etc/nginx/nginx.conf
+  become: true
+  command: sed -i '/server {/,/}/ s/^\([^#]\)/#\1/' /etc/nginx/nginx.conf
+
+- name: Build SSL certificate Subject Alternative Names
+  set_fact:
+    ssl_san: >-
+      DNS:{{ ansible_facts.env.dnsbinder_server_fqdn }},DNS:{{ ansible_facts.env.dnsbinder_server_short_name }},IP:{{ ansible_facts.env.dnsbinder_server_ipv4_address }},IP:{{ ansible_facts.env.dnsbinder_server_ipv6_address }}
+
+- name: Add lab-infra-server alias to SSL SANs if server short name is different
+  set_fact:
+    ssl_san: "{{ ssl_san }},DNS:lab-infra-server.{{ ansible_facts.env.dnsbinder_domain }},DNS:lab-infra-server"
+  when: ansible_facts.env.dnsbinder_server_short_name != "lab-infra-server"
+
+- name: Generate self-signed SSL private key
+  become: true
+  command: >
+    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048
+    -out /etc/pki/tls/private/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.key
+  args:
+    creates: "/etc/pki/tls/private/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.key"
+
+- name: Set permissions on SSL private key
+  become: true
+  file:
+    path: "/etc/pki/tls/private/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.key"
+    mode: '0600'
+
+- name: Generate self-signed SSL certificate
+  become: true
+  command: >
+    openssl req -new -x509
+    -key /etc/pki/tls/private/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.key
+    -out /etc/pki/tls/certs/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.crt
+    -days 3650
+    -subj "/O={{ ansible_facts.env.dnsbinder_server_fqdn }}/CN={{ ansible_facts.env.dnsbinder_server_fqdn }}"
+    -addext "subjectAltName={{ ssl_san }}"
+  args:
+    creates: "/etc/pki/tls/certs/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.crt"
+
+- name: Copy self-signed SSL certificate to system trust anchors
+  become: true
+  copy:
+    src: "/etc/pki/tls/certs/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.crt"
+    dest: "/etc/pki/ca-trust/source/anchors/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.crt"
+    remote_src: true
+    mode: '0644'
+
+- name: Update system CA trust
+  become: true
+  command: update-ca-trust
+  changed_when: false
+
+- name: Create custom nginx configuration for {{ ansible_facts.env.dnsbinder_server_fqdn }}
+  become: true
+  template:
+    src: custom_nginx_config.j2 
+    dest: "/etc/nginx/conf.d/{{ ansible_facts.env.dnsbinder_server_fqdn }}.conf"
+
+- name: Enable and Start nginx service
+  become: true
+  systemd_service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Restart nginx service
+  become: true
+  systemd_service:
+    name: nginx
+    state: restarted
+
+############################# EOF ##############################

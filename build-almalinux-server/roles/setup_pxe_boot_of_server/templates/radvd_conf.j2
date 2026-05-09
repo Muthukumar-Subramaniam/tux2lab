@@ -1,0 +1,36 @@
+# Router Advertisement Daemon configuration
+# For DHCPv6 in lab environment
+
+interface {{ ansible_facts.env.mgmt_interface_name }}
+{
+    # Send RAs every 30-100 seconds
+    MinRtrAdvInterval 30;
+    MaxRtrAdvInterval 100;
+    
+    # Advertise as a router
+    AdvSendAdvert on;
+    AdvManagedFlag on;        # M=1: Use DHCPv6 for addresses
+    AdvOtherConfigFlag on;    # O=1: Use DHCPv6 for DNS/options
+    
+    # Prefix announcement (no SLAAC)
+    prefix {{ ansible_facts.env.dnsbinder_ipv6_ula_subnet }}
+    {
+        AdvOnLink on;
+        AdvAutonomous off;    # A=0: Disable SLAAC, force DHCPv6
+        AdvRouterAddr on;
+        AdvValidLifetime 3600;
+        AdvPreferredLifetime 1800;
+    };
+    
+    # Advertise DNS server (this infra server)
+    RDNSS {{ ansible_facts.env.dnsbinder_server_ipv6_address }}
+    {
+        AdvRDNSSLifetime 600;  # > 2*MaxRtrAdvInterval (200)
+    };
+    
+    # Advertise DNS search domain
+    DNSSL {{ ansible_facts.env.dnsbinder_domain }}
+    {
+        AdvDNSSLLifetime 600;  # > 2*MaxRtrAdvInterval (200)
+    };
+};

@@ -1,0 +1,42 @@
+#!/usr/bin/env ansible-playbook
+#----------------------------------------------------------------------------------------#
+# If you encounter any issues with this script, or have suggestions or feature requests, #
+# please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
+#----------------------------------------------------------------------------------------#
+- name: Playbook to configure a general purpose automation server
+  hosts: localhost
+  roles:
+    - name: Set Environment Vars for the Playbook
+      role: setup_global_vars
+
+##    - name: Upgrade Packages
+##      role: upgrade-server
+
+    - name: Install Required Packages
+      role: install_required_packages
+
+##    - name: Generate SSH Keys
+##      role: generate_ssh_keys_of_server
+
+    - name: Apply Firewall Rules
+      role:  apply-firewall-rules
+
+    - name: Configure nginx Web Server
+      role: configure_nginx_web_server
+
+    - name: Configure NFS service
+      role: configure_nfs_service_of_server
+
+    - name: Configure Chronyd ( NTP ) service
+      role: configure_chronyd_service_of_server
+
+    - name: Configure command prompt and git prompt
+      role: configure_git_and_command_prompt
+
+    - name: Setup PXE boot environment
+      role: setup_pxe_boot_of_server
+
+    - name: Configure Lab Services Restart After IPv6
+      role: restart_lab_services_after_ipv6
+
+##################### EOF ##########################

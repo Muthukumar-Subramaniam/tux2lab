@@ -1,0 +1,12 @@
+[Unit]
+Description=Golden Image Setup (Post Login Unlock)
+After=network-online.target systemd-user-sessions.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /root/golden-image-setup.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

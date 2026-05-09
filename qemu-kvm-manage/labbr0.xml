@@ -1,0 +1,10 @@
+<network>
+  <name>default</name>
+  <bridge name='labbr0'/>
+  <forward mode='nat'/>
+  <ip address='10.10.20.1' netmask='255.255.252.0'>
+  </ip>
+  <ip family='ipv6' address='fd00:1234:1234:1234::1' prefix='64'>
+  </ip>
+  <dns enable='no'/>
+</network>
