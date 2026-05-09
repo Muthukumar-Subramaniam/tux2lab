@@ -35,6 +35,7 @@ show_usage() {
 
 COMMANDS:
     vm          Manage KVM virtual machines
+    distro      Manage OS distributions for PXE provisioning
     start       Start the lab infrastructure
     health      Check lab infrastructure health
     dns         Manage DNS records for lab infrastructure
@@ -46,6 +47,8 @@ OPTIONS:
 EXAMPLES:
     tux2lab vm list                  # List all VMs and their status
     tux2lab vm install-pxe vm1      # Deploy VM using PXE boot
+    tux2lab distro list              # List distro readiness status
+    tux2lab distro setup             # Setup a distro for PXE provisioning
     tux2lab start                   # Start lab infrastructure
     tux2lab health                  # Check lab infrastructure health
     tux2lab dns -c vm1 10.0.0.5     # Create DNS record
@@ -74,6 +77,9 @@ main() {
     case "$command" in
         vm)
             exec "$SCRIPT_DIR/vm.sh" "$@"
+            ;;
+        distro)
+            exec "$SCRIPT_DIR/distro.sh" "$@"
             ;;
         start)
             exec "$SCRIPT_DIR/start.sh" "$@"

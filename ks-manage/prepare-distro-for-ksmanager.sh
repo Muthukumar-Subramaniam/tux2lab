@@ -39,13 +39,14 @@ FSTAB="/etc/fstab"
 
 print_usage() {
   print_info "Usage:
-    $(basename $0) --setup <distro> [--version <version>]
-    $(basename $0) --cleanup <distro> [--version <version>]
+    $(basename $0) --list
+    $(basename $0) --setup <distro> --version <version>
+    $(basename $0) --cleanup <distro> --version <version>
 
 Supported distros:
     almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap
 
-Version (optional, defaults to newest available):
+Version:
     The actual version number, e.g. 9, 10, 22.04, 24.04, 15.5, 15.6"
 }
 
@@ -70,6 +71,35 @@ fn_get_distro_status_display() {
   else
     print_yellow "[Not-Ready]" nskip
   fi
+}
+
+fn_list_distros() {
+  printf "\n  %-20s %-12s %-14s %-18s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
+  printf "  %-20s %-12s %-14s %-18s\n" "------" "-------" "---------" "------------"
+
+  for distro in almalinux rocky oraclelinux centos-stream rhel ubuntu-lts opensuse-leap; do
+    local versions="${DISTRO_AVAILABLE_VERSIONS[$distro]}"
+    for ver in $versions; do
+      local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${ver}"
+      local pxe_status
+      if mountpoint -q "$mount_dir" 2>/dev/null; then
+        pxe_status=$(print_green "Ready" nskip)
+      else
+        pxe_status=$(print_yellow "Not-Ready" nskip)
+      fi
+
+      local golden_fqdn="${distro}-golden-image-${ver}.${dnsbinder_domain}"
+      local golden_status
+      if [[ -f "/tux2lab-data/golden-images-disk-store/${golden_fqdn}.qcow2" ]]; then
+        golden_status=$(print_green "Available" nskip)
+      else
+        golden_status=$(print_yellow "Not-Built" nskip)
+      fi
+
+      printf "  %-20s %-12s %-14s %-18s\n" "${DISTRO_DISPLAY_NAMES[$distro]}" "$ver" "$pxe_status" "$golden_status"
+    done
+  done
+  echo
 }
 
 fn_select_os_distro() {
@@ -271,6 +301,11 @@ else
     exit 0
   fi
 
+  if [[ "$MODE" == "--list" ]]; then
+    fn_list_distros
+    exit 0
+  fi
+
   if [[ "$MODE" != "--setup" && "$MODE" != "--cleanup" ]]; then
     print_error "Invalid mode: $MODE"
     print_usage
@@ -278,34 +313,36 @@ else
   fi
 
   if [[ -z "$DISTRO" ]]; then
-    print_error "Missing distro argument for $MODE."
-    print_usage
-    exit 1
-  fi
-
-  # Parse --version parameter (optional, defaults to newest)
-  VERSION=""
-  if [[ $# -ge 3 ]]; then
-    if [[ "$3" == "--version" && -n "${4:-}" ]]; then
-      VERSION="$4"
-      if ! fn_is_valid_version "$DISTRO" "$VERSION"; then
-        print_error "Invalid version '${VERSION}' for ${DISTRO}."
-        print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
+    # No distro specified — go interactive
+    MENU_TITLE=""
+    [[ "$MODE" == "--setup" ]] && MENU_TITLE="setup" || MENU_TITLE="cleanup"
+    fn_select_os_distro "$MENU_TITLE"
+    fn_select_version "$DISTRO"
+  else
+    # Parse --version parameter
+    VERSION=""
+    if [[ $# -ge 3 ]]; then
+      if [[ "$3" == "--version" && -n "${4:-}" ]]; then
+        VERSION="$4"
+        if ! fn_is_valid_version "$DISTRO" "$VERSION"; then
+          print_error "Invalid version '${VERSION}' for ${DISTRO}."
+          print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
+          exit 1
+        fi
+      else
+        print_error "Invalid parameter: $3"
+        print_usage
         exit 1
       fi
-    else
-      print_error "Invalid parameter: $3"
+    fi
+
+    # Require explicit version when using non-interactive mode
+    if [[ -z "$VERSION" ]]; then
+      print_error "The --version option is required when --distro is specified."
+      print_info "Available versions for ${DISTRO}: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
       print_usage
       exit 1
     fi
-  fi
-
-  # Require explicit version when using non-interactive mode
-  if [[ -z "$VERSION" ]]; then
-    print_error "The --version option is required when --distro is specified."
-    print_info "Available versions for ${DISTRO}: ${DISTRO_AVAILABLE_VERSIONS[$DISTRO]}"
-    print_usage
-    exit 1
   fi
 fi
 
