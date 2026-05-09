@@ -134,7 +134,7 @@ prepare_lab_infra_config() {
     fi
 
     # ISO setup
-    ISO_DIR="/iso-files"
+    ISO_DIR="/tux2lab-data/iso-files"
     ISO_NAME="AlmaLinux-10-latest-x86_64-dvd.iso"
 
     if [[ ! -f "${ISO_DIR}/${ISO_NAME}" ]]; then

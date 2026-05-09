@@ -6,7 +6,7 @@
 
 source /tux2lab/common-utils/color-functions.sh
 
-ISO_DIR="/iso-files"
+ISO_DIR="/tux2lab-data/iso-files"
 ISO_NAME="AlmaLinux-10-latest-x86_64-dvd.iso"
 ISO_URL="https://repo.almalinux.org/almalinux/10/isos/x86_64/$ISO_NAME"
 CHECKSUM_URL="https://repo.almalinux.org/almalinux/10/isos/x86_64/CHECKSUM"
