@@ -331,13 +331,13 @@ fn_configure_named_dns_server() {
     print_task "Fetching network information from the system..."
 
     if [[ "${KVM_HOST_MODE_SET}" == "true" ]]; then
-        source /kvm-hub/lab_environment_vars
+        source /tux2lab-data/lab_environment_vars
         v_dns_host_short_name="${lab_infra_server_hostname%%.*}"
         v_primary_interface='labbr0'
         v_primary_ip=$lab_infra_server_ipv4_address
         
         if [[ -z "${v_primary_ip}" ]]; then
-            print_error "Critical: lab_infra_server_ipv4_address is not defined in /kvm-hub/lab_environment_vars."
+            print_error "Critical: lab_infra_server_ipv4_address is not defined in /tux2lab-data/lab_environment_vars."
             print_error "DNS server IP address is required for dig queries."
             exit 1
         fi

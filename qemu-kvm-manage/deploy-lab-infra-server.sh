@@ -14,7 +14,7 @@ source /tux2lab/common-utils/color-functions.sh
 
 # Check if lab environment is already deployed
 check_existing_lab_deployment() {
-    local LAB_ENV_FILE="/kvm-hub/lab_environment_vars"
+    local LAB_ENV_FILE="/tux2lab-data/lab_environment_vars"
     local found_issues=0
   
     print_info "Checking for existing lab deployment..."
@@ -40,7 +40,7 @@ check_existing_lab_deployment() {
                 fi
         
                 # Check if VM disk exists
-                local VM_DIR="/kvm-hub/vms/${lab_infra_server_hostname}"
+                local VM_DIR="/tux2lab-data/vms/${lab_infra_server_hostname}"
                 if [[ -d "$VM_DIR" ]]; then
                     print_warning "  VM Directory: EXISTS at $VM_DIR"
                     found_issues=2
@@ -83,7 +83,7 @@ Re-running this script will OVERWRITE your existing setup.
     2. Manually remove the existing deployment:
         • Delete VM: sudo virsh undefine ${lab_infra_server_hostname:-lab-infra-server} --remove-all-storage
         • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
-    3. Remove lab config: sudo rm -rf /kvm-hub/lab_environment_vars
+    3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
     4. Remove SSH keys: rm -f ~/.ssh/kvm_lab_global_id_rsa*"
     
         read -rp "Do you understand the risks and want to FORCE re-deployment? (yes/NO): " force_confirm
@@ -126,8 +126,8 @@ prepare_lab_infra_config() {
         exit 1
     fi
 
-    if [[ ! -d /kvm-hub ]]; then
-        print_error "Directory /kvm-hub does not exist."
+    if [[ ! -d /tux2lab-data ]]; then
+        print_error "Directory /tux2lab-data does not exist."
         print_warning "Seems like your QEMU/KVM environment is not yet setup."
         print_info "Run the script \033[1msetup-qemu-kvm.sh\033[0m to configure your environment."
         exit 1
@@ -464,7 +464,7 @@ EOF
 
     print_task_done
     # Save all lab environment variables to file
-    LAB_ENV_VARS_FILE="/kvm-hub/lab_environment_vars"
+    LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
 
     print_info "Saving Lab Environment variables to: $LAB_ENV_VARS_FILE..."
 
@@ -504,7 +504,7 @@ deploy_lab_infra_server_vm() {
     print_info "Starting deployment of lab infra server on a dedicated VM..."
 
     # VM directory and disk path
-    VM_DIR="/kvm-hub/vms/${lab_infra_server_hostname}"
+    VM_DIR="/tux2lab-data/vms/${lab_infra_server_hostname}"
     VM_DISK_PATH="${VM_DIR}/${lab_infra_server_hostname}.qcow2"
 
     # Create VM directory if it doesn't exist

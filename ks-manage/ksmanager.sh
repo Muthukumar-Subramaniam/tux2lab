@@ -48,9 +48,9 @@ ksmanager_main_dir='/tux2lab/ks-manage'
 ksmanager_hub_dir="/${lab_infra_server_hostname}/ksmanager-hub"
 ipxe_web_dir="/${lab_infra_server_hostname}/ipxe"
 shadow_password_super_mgmt_user=$(sudo awk -F: -v user="${mgmt_super_user}" '$1 == user {print $2}' /etc/shadow)
-if [ -d "/kvm-hub" ]; then
-    if [ -f "/kvm-hub/lab_environment_vars" ]; then
-        source /kvm-hub/lab_environment_vars
+if [ -d "/tux2lab-data" ]; then
+    if [ -f "/tux2lab-data/lab_environment_vars" ]; then
+        source /tux2lab-data/lab_environment_vars
         shadow_password_super_mgmt_user=$lab_admin_shadow_password
     fi
 fi
