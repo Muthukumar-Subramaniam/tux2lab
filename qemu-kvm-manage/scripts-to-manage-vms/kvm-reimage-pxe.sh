@@ -27,7 +27,7 @@ Options:
   -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-  -v, --version        Specify OS version: latest (default) or previous
+  -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
   -f, --force          Skip confirmation prompt
   -H, --hosts          Specify multiple hostnames (comma-separated)
   -h, --help           Show this help message
@@ -39,10 +39,10 @@ Examples:
   tux2lab vm reimage-pxe vm1                                   # Reimage single VM
   tux2lab vm reimage-pxe vm1 --console                         # Reimage and attach console
   tux2lab vm reimage-pxe vm1 --clean-install                   # Reimage with default specs
-  tux2lab vm reimage-pxe vm1 --distro almalinux                # Reimage with AlmaLinux (latest)
-  tux2lab vm reimage-pxe vm1 -d rocky -v previous              # Reimage with Rocky Linux 9
+  tux2lab vm reimage-pxe vm1 --distro almalinux                # Reimage with AlmaLinux (will prompt for version)
+  tux2lab vm reimage-pxe vm1 -d rocky -v 9                     # Reimage with Rocky Linux 9
   tux2lab vm reimage-pxe -f vm1                                # Reimage without confirmation
-  tux2lab vm reimage-pxe --hosts vm1,vm2,vm3 -d ubuntu-lts     # Reimage multiple with Ubuntu LTS
+  tux2lab vm reimage-pxe --hosts vm1,vm2,vm3 -d ubuntu-lts -v 24.04  # Reimage multiple with Ubuntu 24.04
   tux2lab vm reimage-pxe -H vm1,vm2,vm3 --clean-install       # Reimage multiple with defaults
 "
 }

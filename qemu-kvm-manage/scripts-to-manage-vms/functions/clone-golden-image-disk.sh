@@ -13,9 +13,9 @@
 clone_golden_image_disk() {
     local vm_hostname="$1"
     local os_distro="$2"
-    local version="${3:-latest}"  # Default to newest if not provided
+    local version="$3"
     
-    if [[ -z "$vm_hostname" || -z "$os_distro" ]]; then
+    if [[ -z "$vm_hostname" || -z "$os_distro" || -z "$version" ]]; then
         print_error "clone_golden_image_disk: Missing required parameters."
         return 1
     fi

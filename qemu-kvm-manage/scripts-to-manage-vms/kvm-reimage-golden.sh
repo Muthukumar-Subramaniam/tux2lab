@@ -27,7 +27,7 @@ Options:
   -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-  -v, --version        Specify OS version: latest (default) or previous
+  -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
   -f, --force          Skip confirmation prompt
   -H, --hosts          Specify multiple hostnames (comma-separated)
   -h, --help           Show this help message
@@ -39,10 +39,10 @@ Examples:
   tux2lab vm reimage-golden vm1                                   # Reimage single VM
   tux2lab vm reimage-golden vm1 --console                         # Reimage and attach console
   tux2lab vm reimage-golden vm1 --clean-install                   # Reimage with default specs
-  tux2lab vm reimage-golden vm1 --distro almalinux                # Reimage with AlmaLinux (latest)
-  tux2lab vm reimage-golden vm1 -d ubuntu-lts -v previous         # Reimage with Ubuntu 22.04
+  tux2lab vm reimage-golden vm1 --distro almalinux                # Reimage with AlmaLinux (will prompt for version)
+  tux2lab vm reimage-golden vm1 -d ubuntu-lts -v 22.04            # Reimage with Ubuntu 22.04
   tux2lab vm reimage-golden -f vm1                                # Reimage without confirmation
-  tux2lab vm reimage-golden --hosts vm1,vm2,vm3 -d ubuntu-lts     # Reimage multiple with Ubuntu LTS
+  tux2lab vm reimage-golden --hosts vm1,vm2,vm3 -d ubuntu-lts -v 24.04  # Reimage multiple with Ubuntu 24.04
   tux2lab vm reimage-golden -H vm1,vm2,vm3 --clean-install       # Reimage multiple with defaults
 "
 }
@@ -52,7 +52,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/parse-vm-command
 parse_vm_command_args "$@"
 
 # Validate: if --version is specified without --distro, warn user
-if [[ -n "$VERSION_TYPE" && "$VERSION_TYPE" != "latest" && -z "$OS_DISTRO" ]]; then
+if [[ -n "$VERSION_TYPE" && -z "$OS_DISTRO" ]]; then
     print_warning "The --version option is specified without --distro."
     print_info "The version will be applied if OS is auto-detected from hostname pattern."
     print_info "If auto-detection fails, you'll be prompted to select OS distribution interactively."
@@ -115,7 +115,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             print_error "Golden image not found for '${OS_DISTRO}' (${VERSION_TYPE})"
             print_info "Available golden images:"
             if ls /tux2lab-data/golden-images-disk-store/*.qcow2 &>/dev/null; then
-                for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do basename "$f"; done | sed -E 's/^(.+)-golden-image-(latest|previous)\..*$/\1 (\2)/' | sort -u | sed 's/^/  - /'
+                for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do basename "$f"; done | sed -E 's/^(.+)-golden-image-([^.]+)\..*$/\1 (\2)/' | sort -u | sed 's/^/  - /'
             else
                 echo "  (none)"
             fi

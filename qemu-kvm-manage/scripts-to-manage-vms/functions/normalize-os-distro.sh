@@ -2,7 +2,7 @@
 # Function: normalize_os_distro
 # Description: Normalize OS distro names to standard formats, handling version suffixes
 # Parameters:
-#   $1 - OS distro name (OS_DISTRO) - may include -latest or -previous suffix
+#   $1 - OS distro name (OS_DISTRO)
 # Returns:
 #   0 - Success (sets NORMALIZED_OS_DISTRO and VERSION_TYPE globals)
 #   1 - Unrecognized distro
@@ -16,24 +16,8 @@ normalize_os_distro() {
         return 1
     fi
 
-    # Extract version suffix if present (-latest or -previous)
-    # Only set VERSION_TYPE if suffix is found in distro name
-    local base_distro="${os_distro}"
-    
-    if [[ "$os_distro" =~ -latest$ ]]; then
-        VERSION_TYPE="latest"
-        base_distro="${os_distro%-latest}"
-    elif [[ "$os_distro" =~ -previous$ ]]; then
-        VERSION_TYPE="previous"
-        base_distro="${os_distro%-previous}"
-    fi
-    
-    # If VERSION_TYPE is still empty at this point, default to "latest"
-    if [[ -z "$VERSION_TYPE" ]]; then
-        VERSION_TYPE="latest"
-    fi
-
     # Normalize OS distro names (case-insensitive exact match or known aliases)
+    local base_distro="${os_distro}"
     case "${base_distro,,}" in
         almalinux|alma)
             NORMALIZED_OS_DISTRO="almalinux"
@@ -59,7 +43,6 @@ normalize_os_distro() {
         *)
             print_error "Unrecognized OS distro: $base_distro"
             print_info "Supported distros: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap"
-            print_info "Optional suffixes: -latest (default), -previous"
             return 1
             ;;
     esac

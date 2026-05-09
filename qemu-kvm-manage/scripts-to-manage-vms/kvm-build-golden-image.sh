@@ -21,14 +21,14 @@ Description:
 Options:
     -d, --distro         Specify OS distribution
                                             (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-    -v, --version        Specify OS version: latest (default) or previous
+    -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
     -h, --help           Show this help message
 
 Examples:
-    tux2lab vm build-golden-image                       # Build golden image (will prompt for distro)
-    tux2lab vm build-golden-image -d almalinux          # Build AlmaLinux 10 (latest) golden image
-    tux2lab vm build-golden-image -d rocky -v previous  # Build Rocky Linux 9 (previous) golden image
-    tux2lab vm build-golden-image --distro ubuntu-lts   # Build Ubuntu LTS 24.04 (latest) golden image
+    tux2lab vm build-golden-image                       # Build golden image (will prompt for distro/version)
+    tux2lab vm build-golden-image -d almalinux          # Build AlmaLinux golden image (will prompt for version)
+    tux2lab vm build-golden-image -d rocky -v 9         # Build Rocky Linux 9 golden image
+    tux2lab vm build-golden-image -d ubuntu-lts -v 24.04  # Build Ubuntu LTS 24.04 golden image
 "
 }
 
@@ -50,12 +50,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--version)
             if [[ -z "$2" || "$2" == -* ]]; then
-                print_error "--version/-v requires 'latest' or 'previous'."
-                fn_show_help
-                exit 1
-            fi
-            if [[ "$2" != "latest" && "$2" != "previous" ]]; then
-                print_error "--version/-v must be 'latest' or 'previous'."
+                print_error "--version/-v requires a version number (e.g., 10, 9, 24.04, 15.6)."
                 fn_show_help
                 exit 1
             fi
@@ -82,10 +77,8 @@ if [[ -n "$VERSION_TYPE" && -z "$OS_DISTRO" ]]; then
     exit 1
 fi
 
-# Default VERSION_TYPE to "latest" if --distro is provided but --version is not
-if [[ -n "$OS_DISTRO" && -z "$VERSION_TYPE" ]]; then
-    VERSION_TYPE="latest"
-fi
+# Default VERSION_TYPE if --distro is provided but --version is not
+# (ksmanager will prompt for version interactively)
 
 # Generate unique MAC address for the VM
 print_task "Generating MAC address for golden image VM..."
@@ -114,7 +107,7 @@ qemu_kvm_hostname="$EXTRACTED_HOSTNAME"
 mkdir -p /tux2lab-data/golden-images-disk-store
 
 # Golden image filename format: {hostname-fqdn}.qcow2
-# Example: almalinux-golden-image-latest.lab.local.qcow2
+# Example: almalinux-golden-image-10.lab.local.qcow2
 # The hostname from ksmanager already includes the version
 golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
 
