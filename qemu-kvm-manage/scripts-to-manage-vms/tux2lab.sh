@@ -37,6 +37,7 @@ COMMANDS:
     vm          Manage KVM virtual machines
     golden-image Manage golden image disks for OS provisioning
     distro      Manage OS distributions for PXE provisioning
+    ipv6-route  Manage IPv6 default routes on lab VMs
     start       Start the lab infrastructure
     health      Check lab infrastructure health
     dns         Manage DNS records for lab infrastructure
@@ -52,6 +53,8 @@ EXAMPLES:
     tux2lab golden-image create      # Build a golden image
     tux2lab distro list              # List distro readiness status
     tux2lab distro setup             # Setup a distro for PXE provisioning
+    tux2lab ipv6-route status        # Show IPv6 route status for all VMs
+    tux2lab ipv6-route auto          # Auto-configure IPv6 routes
 
 Use 'tux2lab <command> --help' for more information about a specific command."
 }
@@ -83,6 +86,9 @@ main() {
             ;;
         golden-image)
             exec "$SCRIPT_DIR/golden-image.sh" "$@"
+            ;;
+        ipv6-route)
+            exec "$SCRIPT_DIR/ipv6-route.sh" "$@"
             ;;
         start)
             exec "$SCRIPT_DIR/start.sh" "$@"

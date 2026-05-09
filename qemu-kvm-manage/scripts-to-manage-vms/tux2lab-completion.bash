@@ -15,19 +15,22 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     
     # Top-level commands
-    local commands="vm golden-image distro start health dns version"
+    local commands="vm golden-image distro ipv6-route start health dns version"
     
     # Top-level options
     local options="-h --help -v --version"
     
     # VM subcommands
-    local vm_subcommands="install-golden install-pxe reimage-golden reimage-pxe start stop shutdown restart reboot remove list info console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove ipv6-route"
+    local vm_subcommands="install-golden install-pxe reimage-golden reimage-pxe start stop shutdown restart reboot remove list info console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove"
     
     # Distro subcommands
     local distro_subcommands="list setup cleanup"
     
     # Golden image subcommands
     local golden_image_subcommands="create list cleanup"
+    
+    # IPv6 route subcommands
+    local ipv6_route_subcommands="enable disable check auto status"
     
     # If we're completing the first argument (command)
     if [[ ${COMP_CWORD} -eq 1 ]]; then
@@ -77,6 +80,18 @@ _tux2lab_completions() {
         # Complete --version after distro name
         if [[ ${COMP_CWORD} -eq 4 ]] && [[ ${cur} == -* ]]; then
             COMPREPLY=( $(compgen -W "--version" -- "${cur}") )
+            return 0
+        fi
+    fi
+    
+    # If the first argument is "ipv6-route", complete ipv6-route subcommands
+    if [[ "${COMP_WORDS[1]}" == "ipv6-route" ]]; then
+        if [[ ${COMP_CWORD} -eq 2 ]]; then
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "${ipv6_route_subcommands}" -- "${cur}") )
+            fi
             return 0
         fi
     fi

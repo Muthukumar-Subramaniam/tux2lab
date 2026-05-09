@@ -60,9 +60,6 @@ VM CONFIGURATION:
     nic-add                 Add network interface to VM
     nic-remove              Remove network interface from VM
 
-NETWORK MANAGEMENT:
-    ipv6-route              Manage IPv6 default routes (enable/disable/auto/status)
-
 OPTIONS:
     -h, --help              Show this help message
     -v, --version           Show version information
@@ -71,6 +68,7 @@ NOTES:
     - Use 'tux2lab vm <subcommand> --help' to see help for a specific subcommand
     - Use 'tux2lab golden-image create' to build golden image disks
     - Use 'tux2lab distro setup' to prepare OS distributions for PXE boot
+    - Use 'tux2lab ipv6-route' to manage IPv6 default routes on VMs
     - Use 'tux2lab start' to start the lab infrastructure
     - Use 'tux2lab health' to check lab infrastructure health
     - Use 'tux2lab dns' to manage DNS records for lab infrastructure"
@@ -110,7 +108,8 @@ main() {
             script_name="kvm-${subcommand}.sh"
             ;;
         ipv6-route)
-            script_name="kvm-ipv6-route.sh"
+            print_info "This command has moved. Use: tux2lab ipv6-route"
+            exit 1
             ;;
         *)
             print_error "Unknown subcommand: $subcommand"
