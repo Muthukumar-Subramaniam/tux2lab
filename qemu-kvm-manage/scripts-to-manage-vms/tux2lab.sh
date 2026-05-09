@@ -46,16 +46,6 @@ OPTIONS:
     -h, --help              Show this help message
     -v, --version           Show version information
 
-EXAMPLES:
-    tux2lab vm list                  # List all VMs and their status
-    tux2lab vm install-pxe vm1      # Deploy VM using PXE boot
-    tux2lab golden-image list        # List available golden images
-    tux2lab golden-image create      # Build a golden image
-    tux2lab distro list              # List distro readiness status
-    tux2lab distro setup             # Setup a distro for PXE provisioning
-    tux2lab dns -c vm1 10.0.0.5     # Create DNS record
-    tux2lab ipv6-route status        # Show IPv6 route status for all VMs
-    tux2lab ipv6-route auto          # Auto-configure IPv6 routes
 
 Use 'tux2lab <command> --help' for more information about a specific command."
 }
