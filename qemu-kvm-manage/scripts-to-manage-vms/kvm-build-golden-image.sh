@@ -115,7 +115,7 @@ golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.q
 # Check if golden image already exists
 if [[ -f "${golden_image_path}" ]]; then
     print_warning "Golden image \"${qemu_kvm_hostname}\" already exists!"
-    read -p "Do you want to delete and recreate it? (yes/no): " answer
+    read -rp "Do you want to delete and recreate it? (yes/no): " answer
     echo -ne "\033[1A\033[2K"  # Move up one line and clear it
     case "$answer" in
         yes|YES)
@@ -149,23 +149,28 @@ VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 
 # Run virt-install with console attachment (don't use shared function to avoid complexity)
 if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MANAGER_DIR}/virt-install" \
-    --name ${qemu_kvm_hostname} \
+    --name "${qemu_kvm_hostname}" \
     --features acpi=on,apic=on \
     --memory 2048 \
     --vcpus 2 \
-    --disk path=${DISK_PATH},size=20,bus=virtio,boot.order=1 \
+    --disk "path=${DISK_PATH},size=20,bus=virtio,boot.order=1" \
     --os-variant almalinux9 \
-    --network network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2 \
+    --network "network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2" \
     --graphics none \
     --console pty,target_type=serial \
     --machine q35 \
     --watchdog none \
     --cpu host-model \
-    --boot loader=${OVMF_CODE_PATH},\
-nvram.template=${OVMF_VARS_PATH},\
-nvram=${NVRAM_PATH},\
-menu=on; then
-    print_error "VM installation failed."
+    --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH},nvram=${NVRAM_PATH},menu=on"; then
+    print_error "VM installation failed. Cleaning up..."
+    sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
+    sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
+    sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
+    if $lab_infra_server_mode_is_host; then
+        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    else
+        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" 2>/dev/null || true
+    fi
     exit 1
 fi
 
