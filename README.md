@@ -35,7 +35,7 @@ of creating something of my own and sharing it with anyone with similar interest
 
 tux2lab runs on your Linux workstation (the **KVM host**) and creates a private
 virtual network (`labbr0` bridge, `10.10.20.0/22` + IPv6 [ULA](https://en.wikipedia.org/wiki/Unique_local_address) `fd00:1234:1234:1234::/64`) with a central
-**infrastructure server** that provides all lab services:
+**lab infrastructure server** that provides all lab services:
 
 | Service | Software | Purpose |
 |---|---|---|
@@ -47,7 +47,7 @@ virtual network (`labbr0` bridge, `10.10.20.0/22` + IPv6 [ULA](https://en.wikipe
 | HTTP | nginx | ISO & kickstart file serving |
 | IPv6 RA | radvd | Router advertisements |
 
-### Deployment Modes
+### Lab Infrastructure Server — Deployment Modes
 
 | | **VM Mode** (Recommended) | **Host Mode** (Advanced) |
 |---|---|---|
