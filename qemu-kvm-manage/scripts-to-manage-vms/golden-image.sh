@@ -54,11 +54,20 @@ golden_image_list() {
         local filename
         filename=$(basename "$qcow2_file" .qcow2)
 
-        # Parse: {distro}-golden-image-{version}.{domain}
-        # Extract distro and version from the filename
-        local distro version
-        distro=$(echo "$filename" | sed -E 's/-golden-image-.*//')
-        version=$(echo "$filename" | sed -E 's/.*-golden-image-([^.]+)\..*/\1/')
+        # Parse: {distro}-{version}-golden-image.{domain}
+        # Extract distro and version by matching against known distro keys
+        local prefix distro version
+        prefix="${filename%%-golden-image.*}"
+        distro="$prefix"
+        version="unknown"
+        for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
+            if [[ "$prefix" == "${known_distro}-"* ]]; then
+                distro="$known_distro"
+                local version_raw="${prefix#${known_distro}-}"
+                version="${version_raw//-/.}"
+                break
+            fi
+        done
 
         local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
         local size
@@ -87,9 +96,18 @@ golden_image_cleanup() {
     for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
         local filename
         filename=$(basename "$qcow2_file" .qcow2)
-        local distro version
-        distro=$(echo "$filename" | sed -E 's/-golden-image-.*//')
-        version=$(echo "$filename" | sed -E 's/.*-golden-image-([^.]+)\..*/\1/')
+        local prefix distro version
+        prefix="${filename%%-golden-image.*}"
+        distro="$prefix"
+        version="unknown"
+        for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
+            if [[ "$prefix" == "${known_distro}-"* ]]; then
+                distro="$known_distro"
+                local version_raw="${prefix#${known_distro}-}"
+                version="${version_raw//-/.}"
+                break
+            fi
+        done
         local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
 
         image_files+=("$qcow2_file")

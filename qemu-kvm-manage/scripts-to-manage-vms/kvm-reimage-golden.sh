@@ -100,8 +100,8 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Check if golden image exists for specified distro
-    if [[ -n "$OS_DISTRO" ]]; then
+    # Check if golden image exists for specified distro and version
+    if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
         # Normalize OS distro name first for golden image check
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
         if ! normalize_os_distro "${OS_DISTRO}"; then
@@ -111,13 +111,24 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         fi
         NORMALIZED_DISTRO="$NORMALIZED_OS_DISTRO"
         
-        # Golden images follow pattern: {distro}-golden-image-{version}.{domain}.qcow2
-        golden_image_pattern="${NORMALIZED_DISTRO}-golden-image-${VERSION_TYPE}.*.qcow2"
+        # Golden images follow pattern: {distro}-{version}-golden-image.{domain}.qcow2
+        golden_image_pattern="${NORMALIZED_DISTRO}-${VERSION_TYPE//\./-}-golden-image.*.qcow2"
         if ! ls /tux2lab-data/golden-images-disk-store/${golden_image_pattern} &>/dev/null; then
             print_error "Golden image not found for '${OS_DISTRO}' (${VERSION_TYPE})"
             print_info "Available golden images:"
             if ls /tux2lab-data/golden-images-disk-store/*.qcow2 &>/dev/null; then
-                for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do basename "$f"; done | sed -E 's/^(.+)-golden-image-([^.]+)\..*$/\1 (\2)/' | sort -u | sed 's/^/  - /'
+                for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do
+                    local base
+                    base=$(basename "$f" .qcow2)
+                    local prefix="${base%%-golden-image.*}"
+                    for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
+                        if [[ "$prefix" == "${known_distro}-"* ]]; then
+                            local ver="${prefix#${known_distro}-}"
+                            echo "  - ${known_distro} (${ver//-/.})"
+                            break
+                        fi
+                    done
+                done | sort -u
             else
                 echo "  (none)"
             fi
@@ -191,7 +202,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fi
 
     # Construct golden image FQDN matching ksmanager's format
-    golden_image_fqdn="${OS_DISTRO}-golden-image-${VERSION_TYPE}.${lab_infra_domain_name}"
+    golden_image_fqdn="${OS_DISTRO}-${VERSION_TYPE//\./-}-golden-image.${lab_infra_domain_name}"
     golden_qcow2_disk_path="/tux2lab-data/golden-images-disk-store/${golden_image_fqdn}.qcow2"
 
     # Shut down VM if running

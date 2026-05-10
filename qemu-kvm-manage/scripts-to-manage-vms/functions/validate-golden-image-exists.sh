@@ -21,7 +21,7 @@ validate_golden_image_exists() {
     fi
     
     # Construct golden image FQDN matching ksmanager's format
-    local golden_image_fqdn="${os_distro}-golden-image-${version}.${lab_infra_domain_name}"
+    local golden_image_fqdn="${os_distro}-${version//\./-}-golden-image.${lab_infra_domain_name}"
     local golden_image_path="/tux2lab-data/golden-images-disk-store/${golden_image_fqdn}.qcow2"
     
     if [[ ! -f "${golden_image_path}" ]]; then

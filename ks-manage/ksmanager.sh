@@ -1061,7 +1061,7 @@ else
 fi
 
 if ! $golden_image_creation_not_requested; then
-    fn_check_and_create_host_record "${os_distribution}-golden-image-${version}"
+    fn_check_and_create_host_record "${os_distribution}-${version//\./-}-golden-image"
     ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
     
     # Query DNS for IPv6 address (if dual-stack configured)
