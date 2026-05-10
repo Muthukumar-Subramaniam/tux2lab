@@ -1764,6 +1764,7 @@ fn_handle_multiple_host_record_with_ip() {
     if ! fn_acquire_zone_lock; then return 1; fi
 
     local v_host_list_file="${1}"
+    local v_auto_confirm="${2:-}"
 
     clear
 
@@ -1808,24 +1809,31 @@ fn_handle_multiple_host_record_with_ip() {
         fi
     done < "${v_work_file}"
 
-    while :; do
-        print_info "Records to be Created : "
-        cat "${v_work_file}"
-        echo
-        print_notify "Provide your confirmation to create the above host records (y/n) : " "nskip"
-        read v_confirmation
-        if [[ ${v_confirmation} == "y" ]]; then
-            break
-        elif [[ ${v_confirmation} == "n" ]]; then
-            print_error "Cancelled without any changes !!"
-            rm -f "${v_work_file}"
-            fn_release_zone_lock
-            exit
-        else
-            print_error "Select either (y/n) only !"
-            continue
-        fi
-    done
+    local v_total_host_records
+    v_total_host_records=$(wc -l < "${v_work_file}")
+
+    if [[ "${v_auto_confirm}" == "-y" ]]; then
+        print_info "Auto-confirmed: Creating ${v_total_host_records} host records..."
+    else
+        while :; do
+            print_info "Records to be Created : "
+            cat "${v_work_file}"
+            echo
+            print_notify "Provide your confirmation to create the above host records (y/n) : " "nskip"
+            read v_confirmation
+            if [[ ${v_confirmation} == "y" ]]; then
+                break
+            elif [[ ${v_confirmation} == "n" ]]; then
+                print_error "Cancelled without any changes !!"
+                rm -f "${v_work_file}"
+                fn_release_zone_lock
+                exit
+            else
+                print_error "Select either (y/n) only !"
+                continue
+            fi
+        done
+    fi
 
     > "${v_tmp_file_dnsbinder}"
 
@@ -1838,9 +1846,6 @@ fn_handle_multiple_host_record_with_ip() {
 
     local v_pre_execution_serial_fw_zone
     v_pre_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
-
-    local v_total_host_records
-    v_total_host_records=$(wc -l < "${v_work_file}")
 
     local v_host_count=0
 
@@ -2522,6 +2527,7 @@ Use one of the following Options :
     -ry     caution ! To do the above without any confirmation
     -cf     To create multiple host records provided in a file (dual-stack)
     -cif    To create multiple host records with specific IPs from a file (hostname ipv4)
+    -cify   caution ! To do the above without any confirmation
     -df     To delete multiple host records provided in a file (dual-stack)
     -ci     To create a host record with specific IPv4 Address (auto-generates IPv6)
     -cc     To create a CNAME/Alias record for an existing host record
@@ -2591,14 +2597,18 @@ then
             fn_handle_multiple_host_record "${2}" "create"
             exit
             ;;
-        -cif)
+        -cif|-cify)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '-cif' option takes only 1 arguement as file containing list of 'hostname ipv4' pairs ! "
+                print_error "Invalid Option! '${1}' option takes only 1 arguement as file containing list of 'hostname ipv4' pairs ! "
                 fn_usage_message
                 exit 1
             fi
-            fn_handle_multiple_host_record_with_ip "${2}"
+            if [[ "${1}" == "-cif" ]]; then
+                fn_handle_multiple_host_record_with_ip "${2}"
+            elif [[ "${1}" == "-cify" ]]; then
+                fn_handle_multiple_host_record_with_ip "${2}" "-y"
+            fi
             exit
             ;;
         -df)

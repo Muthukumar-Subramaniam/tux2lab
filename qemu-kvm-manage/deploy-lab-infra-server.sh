@@ -926,7 +926,7 @@ deploy_lab_infra_server_host() {
             echo "dhcp-lease${IPOCTET} ${dnsbinder_last24_subnet}.${IPOCTET}" >> "$dhcp_lease_file"
         done
         # Batch create all DHCP lease DNS entries in a single dnsbinder invocation
-        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cif "$dhcp_lease_file"; then
+        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cify "$dhcp_lease_file"; then
             print_warning "Some DHCP lease DNS records may have failed to create."
         fi
         rm -f "$dhcp_lease_file"
