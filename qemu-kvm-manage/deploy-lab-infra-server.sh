@@ -1019,8 +1019,10 @@ while true; do
             print_warning "This will:
   • Install and configure DNS (BIND) service
   • Install and configure DHCP (Kea) service
+  • Install and configure NFS service
   • Install and configure Web (Nginx) service
   • Install and configure TFTP service
+  • Install and configure NTP (chrony) service
   • Modify system network configuration
   • Change system-level service configurations
   • Potentially conflict with any existing services"
