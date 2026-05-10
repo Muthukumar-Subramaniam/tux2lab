@@ -63,13 +63,13 @@ virtual network (`labbr0` bridge, `10.10.20.0/22` + IPv6 [ULA](https://en.wikipe
 
 ### Infra Server OS (RHEL-based only)
 
-AlmaLinux 10 (default), Rocky Linux 10, CentOS Stream 10, RHEL 10.
+AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 10.
 
 ### Guest VM Provisioning
 
 | Family | Distribution | Versions | Method |
 |---|---|---|---|
-| Red Hat-based | AlmaLinux, Rocky, RHEL, CentOS Stream | 10, 9 | Kickstart |
+| Red Hat-based | AlmaLinux, Rocky, Oracle Linux, RHEL, CentOS Stream | 10, 9 | Kickstart |
 | Debian-based | Ubuntu LTS | 24.04, 22.04 | Cloud-init autoinstall |
 | SUSE-based | openSUSE Leap | 15.6, 15.5 | AutoYaST |
 
