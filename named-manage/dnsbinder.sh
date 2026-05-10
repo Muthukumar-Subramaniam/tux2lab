@@ -1197,7 +1197,7 @@ fn_get_ipv4_address() {
 
 fn_create_host_record() {
 
-    if [[ "${2}" != "Automated-Execution" ]]
+    if [[ "${2}" != "Automated-Execution" && "${3:-}" != "Automated-Execution" ]]
     then
         v_if_autorun_false=true 
     else
