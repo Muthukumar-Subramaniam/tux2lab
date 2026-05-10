@@ -45,7 +45,7 @@ trap "rm -rf $tmp_dir" EXIT
 check_vm() {
     local vm_name=$1
     local tmp_file=$2
-    local current_vm_state="${vm_states[$vm_name]:-[ N/A ]}"
+    local current_vm_state="${3:-[ N/A ]}"
     local current_os_state="[ N/A ]"
     local os_distro="[ N/A ]"
 
@@ -81,11 +81,10 @@ check_vm() {
 
 export -f check_vm
 export lab_infra_admin_username ssh_options COLOR_GREEN COLOR_YELLOW COLOR_RED COLOR_RESET
-export -A vm_states
 
 # Launch parallel checks
 for vm_name in "${vm_list[@]}"; do
-    check_vm "$vm_name" "$tmp_dir/$vm_name" &
+    check_vm "$vm_name" "$tmp_dir/$vm_name" "${vm_states[$vm_name]:-[ N/A ]}" &
 done
 
 # Wait for all to complete

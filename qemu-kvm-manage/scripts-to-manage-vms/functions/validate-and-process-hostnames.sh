@@ -20,9 +20,26 @@ validate_and_process_hostnames() {
     for vm_name in "${input_array[@]}"; do
         vm_name=${vm_name// /}  # Trim all whitespace
         [[ -z "$vm_name" ]] && continue  # Skip empty entries
-        # Use input-hostname.sh to validate and normalize
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_name"
-        validated_hosts+=("$qemu_kvm_hostname")
+        # Validate and normalize inline (input-hostname.sh uses exit 1 which would kill the batch)
+        local normalized=""
+        if [[ "${vm_name}" == *.${lab_infra_domain_name} ]]; then
+            local stripped="${vm_name%.${lab_infra_domain_name}}"
+            if [[ "${stripped}" == *.* ]] || [[ ! "${stripped}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+                print_warning "Skipping invalid hostname: ${vm_name}"
+                continue
+            fi
+            normalized="${vm_name}"
+        elif [[ "${vm_name}" == *.* ]]; then
+            print_warning "Skipping invalid hostname (wrong domain): ${vm_name}"
+            continue
+        else
+            if [[ ! "${vm_name}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+                print_warning "Skipping invalid hostname: ${vm_name}"
+                continue
+            fi
+            normalized="${vm_name}.${lab_infra_domain_name}"
+        fi
+        validated_hosts+=("$normalized")
     done
     
     # Check if any valid hosts remain after validation

@@ -36,11 +36,13 @@ clone_golden_image_disk() {
         else
             print_task_fail
             print_error "Disk file was not created properly for \"$vm_hostname\"."
+            sudo rm -f "${vm_disk_path}"
             return 1
         fi
     else
         print_task_fail
         print_error "$error_msg"
+        sudo rm -f "${vm_disk_path}"
         return 1
     fi
 }
