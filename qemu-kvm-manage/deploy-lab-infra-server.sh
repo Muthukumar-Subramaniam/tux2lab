@@ -138,41 +138,6 @@ prepare_lab_infra_config() {
         exit 1
     fi
 
-    # ISO setup — look for the marker file written by download-infra-server-iso.sh
-    ISO_DIR="/tux2lab-data/iso-files"
-    INFRA_ISO_MARKER="${ISO_DIR}/infra-server-iso"
-    INFRA_DISTRO_MARKER="${ISO_DIR}/infra-server-distro"
-    ISO_NAME=""
-    INFRA_DISTRO=""
-
-    if [[ -f "$INFRA_ISO_MARKER" ]]; then
-        ISO_NAME=$(< "$INFRA_ISO_MARKER")
-        # Validate the marker points to an actual file
-        if [[ ! -f "${ISO_DIR}/${ISO_NAME}" ]]; then
-            print_error "Marker references ${ISO_NAME} but file not found in ${ISO_DIR}/"
-            print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
-            exit 1
-        fi
-    else
-        print_error "No infra server ISO has been downloaded yet."
-        print_info "Please run: \033[1mdownload-infra-server-iso.sh\033[0m"
-        print_info "Supported: AlmaLinux, Rocky Linux, Oracle Linux, CentOS Stream, RHEL"
-        exit 1
-    fi
-
-    # Read the distro name written by download-infra-server-iso.sh
-    if [[ -f "$INFRA_DISTRO_MARKER" ]]; then
-        INFRA_DISTRO=$(< "$INFRA_DISTRO_MARKER")
-    else
-        print_error "No infra server distro marker found."
-        print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
-        exit 1
-    fi
-
-    print_info "ISO file found: ${ISO_DIR}/${ISO_NAME} (${INFRA_DISTRO} ${INFRA_SERVER_VERSION})"
-
-    default_linux_distro_iso_path="${ISO_DIR}/${ISO_NAME}"
-
     print_info "Pre-flight checks passed: QEMU/KVM environment is ready."
 
     # Get Infra Server Name
@@ -523,8 +488,46 @@ EOF
 #-------------------------------------------------------------
 # Deployment mode functions
 #-------------------------------------------------------------
+validate_infra_server_iso() {
+    # ISO setup — look for the marker file written by download-infra-server-iso.sh
+    ISO_DIR="/tux2lab-data/iso-files"
+    INFRA_ISO_MARKER="${ISO_DIR}/infra-server-iso"
+    INFRA_DISTRO_MARKER="${ISO_DIR}/infra-server-distro"
+    ISO_NAME=""
+    INFRA_DISTRO=""
+
+    if [[ -f "$INFRA_ISO_MARKER" ]]; then
+        ISO_NAME=$(< "$INFRA_ISO_MARKER")
+        # Validate the marker points to an actual file
+        if [[ ! -f "${ISO_DIR}/${ISO_NAME}" ]]; then
+            print_error "Marker references ${ISO_NAME} but file not found in ${ISO_DIR}/"
+            print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
+            exit 1
+        fi
+    else
+        print_error "No infra server ISO has been downloaded yet."
+        print_info "Please run: \033[1mdownload-infra-server-iso.sh\033[0m"
+        print_info "Supported: AlmaLinux, Rocky Linux, Oracle Linux, CentOS Stream, RHEL"
+        exit 1
+    fi
+
+    # Read the distro name written by download-infra-server-iso.sh
+    if [[ -f "$INFRA_DISTRO_MARKER" ]]; then
+        INFRA_DISTRO=$(< "$INFRA_DISTRO_MARKER")
+    else
+        print_error "No infra server distro marker found."
+        print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
+        exit 1
+    fi
+
+    print_info "ISO file found: ${ISO_DIR}/${ISO_NAME} (${INFRA_DISTRO} ${INFRA_SERVER_VERSION})"
+
+    default_linux_distro_iso_path="${ISO_DIR}/${ISO_NAME}"
+}
+
 deploy_lab_infra_server_vm() {
     prepare_lab_infra_config
+    validate_infra_server_iso
     print_info "Starting deployment of lab infra server on a dedicated VM..."
 
     # VM directory and disk path
@@ -872,17 +875,19 @@ deploy_lab_infra_server_host() {
         echo "mgmt_interface_name=\"labbr0\"" | sudo tee -a /etc/environment &>/dev/null
     fi
 
-    # Set default_linux_distro_iso_path in environment
-    if ! grep -q default_linux_distro_iso_path /etc/environment; then
-        echo "default_linux_distro_iso_path=\"${default_linux_distro_iso_path}\"" | sudo tee -a /etc/environment &>/dev/null
-    fi
+    # Set default_linux_distro_iso_path in environment (VM mode only — host mode uses tux2lab distro setup)
+    if [[ "${lab_infra_server_mode_is_host}" == "false" ]]; then
+        if ! grep -q default_linux_distro_iso_path /etc/environment; then
+            echo "default_linux_distro_iso_path=\"${default_linux_distro_iso_path}\"" | sudo tee -a /etc/environment &>/dev/null
+        fi
 
-    # Set infra server distro and version in environment (for Ansible mount point)
-    if ! grep -q infra_server_distro /etc/environment; then
-        echo "infra_server_distro=\"${INFRA_DISTRO}\"" | sudo tee -a /etc/environment &>/dev/null
-    fi
-    if ! grep -q infra_server_version /etc/environment; then
-        echo "infra_server_version=\"${INFRA_SERVER_VERSION}\"" | sudo tee -a /etc/environment &>/dev/null
+        # Set infra server distro and version in environment (for Ansible ISO mount)
+        if ! grep -q infra_server_distro /etc/environment; then
+            echo "infra_server_distro=\"${INFRA_DISTRO}\"" | sudo tee -a /etc/environment &>/dev/null
+        fi
+        if ! grep -q infra_server_version /etc/environment; then
+            echo "infra_server_version=\"${INFRA_SERVER_VERSION}\"" | sudo tee -a /etc/environment &>/dev/null
+        fi
     fi
 
     # Backup environment file

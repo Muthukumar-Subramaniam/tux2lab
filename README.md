@@ -73,7 +73,9 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 | Debian-based | Ubuntu LTS | 24.04, 22.04 | Cloud-init autoinstall |
 | SUSE-based | openSUSE Leap | 15.6, 15.5 | AutoYaST |
 
-> The distro used to build the infra server is available for guest provisioning immediately.
+> **VM mode:** The distro used to build the infra server is available for guest provisioning immediately.
+> **Host mode:** No distros are pre-configured — set up your first distro after deployment.
+>
 > Additional distros can be set up anytime via `tux2lab distro setup`.
 
 ---
@@ -126,7 +128,9 @@ This script:
 - Installs the `tux2lab` CLI and bash completion
 - Validates your system is not a VM (bare-metal host required)
 
-### Step 3 — Download Infra Server ISO
+### Step 3 — Download Infra Server ISO (VM mode only)
+
+> Skip this step if you plan to deploy in **Host mode**.
 
 ```bash
 ./download-infra-server-iso.sh              # AlmaLinux (default)
@@ -135,6 +139,7 @@ This script:
 ```
 
 Downloads the ISO, fetches the checksum, and verifies integrity via SHA256.
+The ISO is used as the install medium for the infra server VM.
 
 ### Step 4 — Deploy the Lab Infrastructure Server
 
@@ -185,8 +190,8 @@ Status: STABLE
 
 ### Prepare a Distribution for Provisioning
 
-The distro used to build the infra server is available for guest provisioning immediately.
-To provision VMs with a different distro, set it up first:
+In VM mode, the distro used to build the infra server is available for guest provisioning immediately.
+In Host mode, or to provision VMs with a different distro, set it up first:
 
 ```bash
 tux2lab distro setup                             # Interactive
