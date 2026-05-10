@@ -78,6 +78,5 @@
     name: nginx
     state: restarted
     enabled: true
-    enabled: true
 
 ############################# EOF ##############################

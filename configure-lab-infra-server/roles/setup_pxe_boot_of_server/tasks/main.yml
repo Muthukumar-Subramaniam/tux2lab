@@ -82,12 +82,15 @@
     opts: "bind,ro"
     state: mounted
 
-- name: Create infra server ISO mount point under /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}
+- name: Create infra server ISO mount point
   become: true
   ansible.builtin.file:
     path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
     state: directory
-  when: ansible_facts.env.default_linux_distro_iso_path is defined
+  when:
+    - ansible_facts.env.default_linux_distro_iso_path is defined
+    - ansible_facts.env.infra_server_distro is defined
+    - ansible_facts.env.infra_server_version is defined
 
 - name: Mount infra server ISO from CD-ROM and update an entry in fstab as well 
   become: true
@@ -97,7 +100,10 @@
     fstype: iso9660
     opts: "ro,nofail"
     state: mounted
-  when: ansible_facts.env.default_linux_distro_iso_path is defined
+  when:
+    - ansible_facts.env.default_linux_distro_iso_path is defined
+    - ansible_facts.env.infra_server_distro is defined
+    - ansible_facts.env.infra_server_version is defined
 
 - name: Create /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/ipxe to manage iPXE
   become: true
