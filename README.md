@@ -185,7 +185,8 @@ Status: STABLE
 
 ### Prepare a Distribution for Provisioning
 
-Before deploying VMs, set up at least one distro for PXE boot:
+The distro used to build the infra server is available for guest provisioning immediately.
+To provision VMs with a different distro, set it up first:
 
 ```bash
 tux2lab distro setup                             # Interactive
