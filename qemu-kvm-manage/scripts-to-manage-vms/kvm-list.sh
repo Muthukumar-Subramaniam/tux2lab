@@ -139,7 +139,7 @@ for idx in "${sorted_indices[@]}"; do
     raw="${results[$idx]}"
     clean="${clean_results[$idx]}"
     IFS='|' read -r vm state os distro <<< "$clean"
-    color_line=$(echo "$raw" | grep -oP '^\x1b\[[0-9;]*m')
+    color_line=$(echo "$raw" | grep -oP '^\x1b\[[0-9;]*m' || true)
     reset_line=$COLOR_RESET
     printf "%s%-${max_vm}s %- ${max_vmstate}s %- ${max_osstate}s %- ${max_osdistro}s%s\n" \
         "$color_line" "$vm" "$state" "$os" "$distro" "$reset_line"

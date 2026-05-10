@@ -123,7 +123,7 @@ if [[ "$network_exists" == false ]]; then
     print_info "Available libvirt networks:"
     sudo virsh net-list --all | tail -n +3 | awk 'NF>0 {print "  - " $1}'
     print_info "Available bridge interfaces:"
-    ip link show type bridge | grep -oP '^\d+: \K[^:]+' | awk '{print "  - " $1}'
+    ip link show type bridge 2>/dev/null | grep -oP '^\d+: \K[^:]+' | awk '{print "  - " $1}' || true
     exit 1
 fi
 

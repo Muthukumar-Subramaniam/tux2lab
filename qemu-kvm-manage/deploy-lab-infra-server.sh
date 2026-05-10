@@ -13,6 +13,11 @@ IFS=$'\n\t'
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/ks-manage/distro-versions.conf
 
+if [[ -z "${INFRA_SERVER_VERSION:-}" ]]; then
+    echo "[ERROR] INFRA_SERVER_VERSION not defined in distro-versions.conf"
+    exit 1
+fi
+
 # Check if lab environment is already deployed
 check_existing_lab_deployment() {
     local LAB_ENV_FILE="/tux2lab-data/lab_environment_vars"
@@ -565,7 +570,11 @@ deploy_lab_infra_server_vm() {
         print_task_skip
         print_warning "ISO already mounted at /mnt/iso-for-${lab_infra_server_hostname}, skipping mount..."
     else
-        sudo mount -o loop "${ISO_DIR}/${ISO_NAME}" "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null
+        if ! sudo mount -o loop "${ISO_DIR}/${ISO_NAME}" "/mnt/iso-for-${lab_infra_server_hostname}" 2>/dev/null; then
+            print_task_fail
+            print_error "Failed to mount ISO: ${ISO_DIR}/${ISO_NAME}"
+            exit 1
+        fi
         print_task_done
     fi
 
@@ -576,7 +585,10 @@ deploy_lab_infra_server_vm() {
 
     KS_FILE="${VM_DIR}/${lab_infra_server_hostname}_ks.cfg"
 
-    cp -f /tux2lab/qemu-kvm-manage/infra-server-ks-template.cfg "${KS_FILE}" 
+    cp -f /tux2lab/qemu-kvm-manage/infra-server-ks-template.cfg "${KS_FILE}" || {
+        print_error "Failed to copy kickstart template"
+        exit 1
+    }
 
     sed -i \
         -e "s/get_ipv4_address/${lab_infra_server_ipv4_address}/g" \
@@ -648,7 +660,7 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     # -----------------------------
     # Check deployment status
     # -----------------------------
-    if sudo virsh list | grep -q "${lab_infra_server_hostname}"; then
+    if sudo virsh list --all | grep -q "${lab_infra_server_hostname}"; then
         print_success "Successfully deployed your Infra Server VM (${lab_infra_server_hostname})!"
     else
         print_error "Failed to deploy your Infra Server VM (${lab_infra_server_hostname})!"
@@ -803,7 +815,10 @@ deploy_lab_infra_server_host() {
     )
 
     # Install packages, skipping already installed ones
-    sudo dnf install -y "${REQUIRED_PACKAGES[@]}"
+    if ! sudo dnf install -y "${REQUIRED_PACKAGES[@]}"; then
+        print_error "Failed to install required packages."
+        exit 1
+    fi
 
     print_success "All required packages installed on host successfully."
 
@@ -815,12 +830,18 @@ deploy_lab_infra_server_host() {
     else
         print_info "Installing Ansible on the host..."
 
-        pip3 install --user ansible-core
+        pip3 install --user ansible-core || {
+            print_error "Failed to install Ansible"
+            exit 1
+        }
 
         print_success "Ansible installation completed successfully."
     fi
 
-    ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml
+    if ! ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml; then
+        print_error "Failed to install Ansible collections"
+        exit 1
+    fi
 
     # ---------------------------
     # Lab Infra DNS configuration
@@ -883,6 +904,11 @@ deploy_lab_infra_server_host() {
     fi
 
     print_info "Reserving DNS Records for DHCP lease (last 99 IPs: .156-.254)..."
+
+    if [[ -z "${dnsbinder_last24_subnet:-}" ]]; then
+        print_error "dnsbinder_last24_subnet not set. DNS setup may have failed."
+        exit 1
+    fi
 
     # Loop through IPs 156–254 to create DHCP lease DNS entries (dual-stack A+AAAA)
     for IPOCTET in $(seq 156 254); do

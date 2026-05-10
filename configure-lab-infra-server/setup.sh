@@ -72,6 +72,10 @@ fi
 
 source /etc/environment
 
+# Validate critical variables from dnsbinder setup
+: "${dnsbinder_server_short_name:?Error: dnsbinder did not set server name}"
+: "${dnsbinder_last24_subnet:?Error: dnsbinder did not set subnet}"
+
 # Only create CNAME if server name is not already lab-infra-server
 if [[ "${dnsbinder_server_short_name}" != "lab-infra-server" ]]; then
     echo -e "\nCreating CNAME record for lab-infra-server . . .\n"
@@ -125,7 +129,7 @@ if ! ip link | grep -q eth0; then
 
     sudo mkdir -p /root/system-connections/orig-during-install
 
-    sudo cp -a /etc/NetworkManager/system-connections/* /root/system-connections/orig-during-install/
+    sudo cp -a /etc/NetworkManager/system-connections/* /root/system-connections/orig-during-install/ 2>/dev/null || true
 
     v_count=0
     for v_interface_file in /etc/NetworkManager/system-connections/*; do
@@ -137,11 +141,11 @@ if ! ip link | grep -q eth0; then
             v_count=$((v_count+1))
     done
 
-    sudo mv /etc/NetworkManager/system-connections/eth* /root/system-connections
+    sudo mv /etc/NetworkManager/system-connections/eth* /root/system-connections 2>/dev/null || true
 
     sudo rm -rf /etc/NetworkManager/system-connections/*
 
-    sudo cp -a /root/system-connections/. /etc/NetworkManager/system-connections/.
+    sudo cp -a /root/system-connections/. /etc/NetworkManager/system-connections/. 2>/dev/null || true
 
     sudo rm -rf /etc/NetworkManager/system-connections/orig-during-install
 fi

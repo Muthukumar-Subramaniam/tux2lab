@@ -239,7 +239,7 @@ fn_split_network_into_cidr24subnets() {
 
     if [[ -z "${v_network_and_cidr}" ]];
     then
-        v_network_and_cidr=$(ip r | grep -v default | grep "${v_primary_interface}" | head -n 1 | awk '{ print $1 }')
+        v_network_and_cidr=$(ip r | awk -v iface="${v_primary_interface}" '!/default/ && $0 ~ iface {print $1; exit}')
     fi
 
     # Extract network and CIDR from input
@@ -260,7 +260,8 @@ fn_split_network_into_cidr24subnets() {
 
 if [[ -n "${dnsbinder_network}" ]]; then
     v_splited_subnets=$(ls "${var_zone_dir}"/*-reverse.db 2>/dev/null | awk -F'/' '!/ipv6-reverse\.db$/ {split($NF,a,"."); print a[1]"."a[2]"."a[3]}' | sort -n)
-    v_total_ptr_zones=$(ls "${var_zone_dir}"/*-reverse.db 2>/dev/null | grep -vc "ipv6-reverse.db")
+    v_total_ptr_zones=$(ls "${var_zone_dir}"/*-reverse.db 2>/dev/null | grep -vc "ipv6-reverse.db" || true)
+    v_total_ptr_zones=${v_total_ptr_zones:-0}
 
     v_zone_number=1
     for v_subnet_part in ${v_splited_subnets}
@@ -367,7 +368,7 @@ fn_configure_named_dns_server() {
         v_ipv6_address=$(ip -6 addr show "${v_primary_interface}" | awk '/inet6 fd[0-9a-f:]+/ && !/fe80/ && !/::1/ {for(i=1;i<=NF;i++) if($i ~ /^fd/) {sub(/\/.*/, "", $i); print $i; exit}}')
         if [[ -n "${v_ipv6_address}" ]]; then
             # Extract prefix length
-            v_ipv6_prefix=$(ip -6 addr show "${v_primary_interface}" | grep -oP 'fd[0-9a-f:]+/\K[0-9]+' | head -1)
+            v_ipv6_prefix=$(ip -6 addr show "${v_primary_interface}" | grep -oP 'fd[0-9a-f:]+/\K[0-9]+' | head -1 || true)
             # Build ULA subnet
             if [[ -n "${v_ipv6_address}" && ! -z "${v_ipv6_prefix}" ]]; then
                 # Calculate the network address properly by applying the prefix mask
@@ -694,7 +695,7 @@ print(ptr)
 
     if [[ "${KVM_HOST_MODE_SET}" != "true" ]]; then
         print_task "Updating Network Manager to point the local dns server and domain..."
-        v_active_connection_name=$(nmcli connection show --active | grep "${v_primary_interface}" | head -n 1 | awk '{ print $1 }')
+        v_active_connection_name=$(nmcli connection show --active | awk -v iface="${v_primary_interface}" '$0 ~ iface {print $1; exit}')
         nmcli connection modify "${v_active_connection_name}" ipv4.dns-search "${v_given_domain}" &>/dev/null
         nmcli connection modify "${v_active_connection_name}" ipv4.dns "127.0.0.1,8.8.8.8,1.1.1.1"  &>/dev/null
         
@@ -877,7 +878,7 @@ fn_update_serial_number_of_zones() {
     local new_serial=$(date +%s)
     
     # Forward zone
-    v_current_serial_fw_zone=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+    v_current_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     # Ensure new serial is greater than current (handles same-second updates)
     if [[ $new_serial -le $v_current_serial_fw_zone ]]; then
         new_serial=$(( v_current_serial_fw_zone + 1 ))
@@ -887,7 +888,7 @@ fn_update_serial_number_of_zones() {
     if [[ "${1}" != "forward-zone-only" ]]
     then
         # PTR zone
-        v_current_serial_ptr_zone=$(grep ';Serial' "${v_ptr_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+        v_current_serial_ptr_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_ptr_zone}")
         local new_serial_ptr=$(date +%s)
         if [[ $new_serial_ptr -le $v_current_serial_ptr_zone ]]; then
             new_serial_ptr=$(( v_current_serial_ptr_zone + 1 ))
@@ -898,7 +899,7 @@ fn_update_serial_number_of_zones() {
         if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
             v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
             if [[ -f "${v_ipv6_zone_file}" ]]; then
-                v_current_serial_ipv6_zone=$(grep ';Serial' "${v_ipv6_zone_file}" | cut -d ";" -f 1 | tr -d '[:space:]')
+                v_current_serial_ipv6_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_ipv6_zone_file}")
                 local new_serial_ipv6=$(date +%s)
                 if [[ $new_serial_ipv6 -le $v_current_serial_ipv6_zone ]]; then
                     new_serial_ipv6=$(( v_current_serial_ipv6_zone + 1 ))
@@ -970,7 +971,7 @@ fn_reload_named_dns_service() {
             print_task_fail
         fi
 
-        print_info "FYI : ${v_input_cname}.${v_domain_name} is an alias for $(dig @"${dnsbinder_server_ipv4_address}" +short CNAME ${v_input_cname}.${v_domain_name} | sed 's/\.$//')"
+        print_info "FYI : ${v_input_cname}.${v_domain_name} is an alias for $(dig @"${dnsbinder_server_ipv4_address}" +short CNAME ${v_input_cname}.${v_domain_name} 2>/dev/null | sed 's/\.$//' || true)"
 
         return
     fi
@@ -1075,15 +1076,15 @@ fn_reload_named_dns_service() {
         if  [[ "${v_action_requested}" == "rename" ]]
         then
             if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
-                print_info "FYI : ${v_rename_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_rename_record}.${v_domain_name} | head -1)"
+                print_info "FYI : ${v_rename_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_rename_record}.${v_domain_name} | head -1 || true)"
             else
-                print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1)"
+                print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1 || true)"
             fi
         else
             if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
-                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1)"
+                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1 || true)"
             else
-                print_info "FYI : ${v_host_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)"
+                print_info "FYI : ${v_host_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1 || true)"
             fi
         fi
     fi
@@ -1305,7 +1306,7 @@ fn_create_host_record() {
                 if grep "^${host_part_of_ipv4_provided} " "${v_current_ptr_zone_file}" &>/dev/null      
                 then
                     print_error "Record already exists for provided IPv4 address ${ipv4_provided} !"
-                    dig @"${dnsbinder_server_ipv4_address}" +short -x ${ipv4_provided} | sed 's/\.$//'
+                    dig @"${dnsbinder_server_ipv4_address}" +short -x ${ipv4_provided} 2>/dev/null | sed 's/\.$//' || true
                     print_warning "Please try again with another IPv4 address ! "
                     exit 1
                 else
@@ -1840,7 +1841,7 @@ fn_handle_multiple_host_record() {
     v_count_ip_exhausted=0
     v_count_other_failures=0
     
-    v_pre_execution_serial_fw_zone=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+    v_pre_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
     v_total_host_records=$(wc -l < "${v_work_file}")
     
@@ -1863,7 +1864,7 @@ fn_handle_multiple_host_record() {
         
         print_task "Attempting to ${v_action_required} the host record ${v_host_record}.${v_domain_name} . . . " "nskip"
     
-        v_serial_fw_zone_pre_execution=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+        v_serial_fw_zone_pre_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
         if [[ ${v_action_required} == "create" ]]
                 then
@@ -1876,7 +1877,7 @@ fn_handle_multiple_host_record() {
             var_exit_status=${?}
         fi
     
-        v_serial_fw_zone_post_execution=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+        v_serial_fw_zone_post_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
             v_fqdn="${v_host_record}.${v_domain_name}"
     
@@ -1941,7 +1942,7 @@ fn_handle_multiple_host_record() {
         ((v_count_failed++))
         ((v_count_ip_exhausted++))
     else
-        v_serial_fw_zone_post_execution=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+        v_serial_fw_zone_post_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
 
         if [[ "${v_serial_fw_zone_pre_execution}" -ne "${v_serial_fw_zone_post_execution}" ]]
         then
@@ -1966,7 +1967,7 @@ fn_handle_multiple_host_record() {
     # Clear the progress display before showing final summary
     clear
 
-    v_post_execution_serial_fw_zone=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
+    v_post_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
     if [[ "${v_pre_execution_serial_fw_zone}" -ne "${v_post_execution_serial_fw_zone}" ]]
     then
@@ -2152,7 +2153,8 @@ fn_delete_cname_record() {
 
     while :
     do
-        local cname_target=$(dig @"${dnsbinder_server_ipv4_address}" +short CNAME "${v_input_cname}.${v_domain_name}" | head -1 | sed 's/\.$//')
+        local cname_target
+        cname_target=$(dig @"${dnsbinder_server_ipv4_address}" +short CNAME "${v_input_cname}.${v_domain_name}" 2>/dev/null | head -1 | sed 's/\.$//' || true)
         print_warning "CNAME Record to be deleted : ${v_input_cname}.${v_domain_name} is an alias for ${cname_target}"
         if [[ ! ${v_input_delete_confirmation} == "-y" ]]
         then

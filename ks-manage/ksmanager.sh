@@ -592,7 +592,11 @@ if $remove_host_requested; then
         fi
         
         # Rebuild DHCPv4 reservations
-        kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file")
+        if ! kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file"); then
+            print_error "Failed to read KEA DHCPv4 config: ${kea_dhcp4_config_file}"
+            fn_release_host_lock
+            exit 1
+        fi
         
         kea_dhcp4_reservations_json=""
         while read -r kea_hostname kea_hw_address kea_ip_address kea_ipv6_address; do
@@ -618,7 +622,11 @@ if $remove_host_requested; then
 EOF
         
         # Rebuild DHCPv6 reservations
-        kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file")
+        if ! kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file"); then
+            print_error "Failed to read KEA DHCPv6 config: ${kea_dhcp6_config_file}"
+            fn_release_host_lock
+            exit 1
+        fi
         
         kea_dhcp6_reservations_json=""
         while read -r kea_hostname kea_hw_address kea_ip_address kea_ipv6_address; do
@@ -646,16 +654,26 @@ EOF
 EOF
         
         # Push DHCPv4 config
-        curl -s -X POST -H "Content-Type: application/json" \
+        if ! curl -s -X POST -H "Content-Type: application/json" \
             -u "$kea_api_auth" \
             -d @"$kea_dhcp4_tmp_config" \
-            "$kea_api_url" &>/dev/null
+            "$kea_api_url" &>/dev/null; then
+            print_error "Failed to push KEA DHCPv4 config update"
+            rm -f "${kea_cache_snapshot}"
+            fn_release_host_lock
+            exit 1
+        fi
         
         # Push DHCPv6 config
-        curl -s -X POST -H "Content-Type: application/json" \
+        if ! curl -s -X POST -H "Content-Type: application/json" \
             -u "$kea_api_auth" \
             -d @"$kea_dhcp6_tmp_config" \
-            "$kea_api_url" &>/dev/null
+            "$kea_api_url" &>/dev/null; then
+            print_error "Failed to push KEA DHCPv6 config update"
+            rm -f "${kea_cache_snapshot}"
+            fn_release_host_lock
+            exit 1
+        fi
 
         rm -f "${kea_cache_snapshot}"
         
@@ -696,11 +714,11 @@ fi
 
 if $golden_image_creation_not_requested; then
     fn_check_and_create_host_record "${1}"
-    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
+    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
     
     # Query DNS for IPv6 address (if dual-stack configured)
     if [[ -n "${ipv6_gateway}" ]]; then
-        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
+        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
     fi
 fi
 
@@ -1028,27 +1046,27 @@ if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/${lab_infra_server_hostname}/${os_distribution}/${version}/.treeinfo")
     # Extract just the version number (e.g., "15.6" from "openSUSE Leap 15.6")
-    opensuse_version_number=$(printf '%s\n' "$os_name_and_version" | grep -oP '[0-9]+\.[0-9]+' | head -n 1)
+    opensuse_version_number=$(printf '%s\n' "$os_name_and_version" | grep -oP '[0-9]+\.[0-9]+' | head -n 1 || true)
 else
     redhat_based_distro_name="${os_distribution}"
     if [[ "${os_distribution}" == "centos-stream" ]]; then
-        os_name_and_version=$(grep -i "centos" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo")
+        os_name_and_version=$(grep -i "centos" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
     elif [[ "${os_distribution}" == "oraclelinux" ]]; then
-        os_name_and_version=$(grep -i "oracle" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo")
+        os_name_and_version=$(grep -i "oracle" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
     elif [[ "${os_distribution}" == "rhel" ]]; then
-        os_name_and_version=$(grep -i "Red Hat" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo")
+        os_name_and_version=$(grep -i "Red Hat" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
     else
-        os_name_and_version=$(grep -i "${os_distribution}" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo")
+        os_name_and_version=$(grep -i "${os_distribution}" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
     fi
 fi
 
 if ! $golden_image_creation_not_requested; then
     fn_check_and_create_host_record "${os_distribution}-golden-image-${version}"
-    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
+    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
     
     # Query DNS for IPv6 address (if dual-stack configured)
     if [[ -n "${ipv6_gateway}" ]]; then
-        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
+        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
     fi
     
     fn_check_and_create_mac_if_required
@@ -1064,15 +1082,31 @@ fi
 
 if ! $invoked_with_golden_image; then
     if [[ "${os_distribution}" == "opensuse-leap" ]]; then
-        rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-autoinst.xml" "${host_kickstart_dir}/${os_distribution}-${version}-autoinst.xml" 
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-autoinst.xml" "${host_kickstart_dir}/${os_distribution}-${version}-autoinst.xml"; then
+            print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
-        rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/
+        if ! rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
     else
-        rsync -a -q "${ksmanager_main_dir}/ks-templates/redhat-based-${version}-ks.cfg" "${host_kickstart_dir}"/ 
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/redhat-based-${version}-ks.cfg" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy kickstart template for redhat-based-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
     fi
     if ! $golden_image_creation_not_requested; then
-        rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service" "${host_kickstart_dir}"/ 
-        rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.sh" "${host_kickstart_dir}"/ 
+        if ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service" "${host_kickstart_dir}"/ || \
+           ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.sh" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy golden-boot templates"
+            fn_release_host_lock
+            exit 1
+        fi
     fi
 fi
 
@@ -1212,9 +1246,17 @@ if ! $invoked_with_golden_image; then
     mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
 
     if [[ -z "${redhat_based_distro_name}" ]]; then
-            rsync -a -q "${ksmanager_main_dir}/ipxe-templates/ipxe-template-${os_distribution}.ipxe"  "${mac_based_ipxe_cfg_file}"
+        if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/ipxe-template-${os_distribution}.ipxe"  "${mac_based_ipxe_cfg_file}"; then
+            print_error "Failed to copy iPXE template for ${os_distribution}"
+            fn_release_host_lock
+            exit 1
+        fi
     else
-        rsync -a -q "${ksmanager_main_dir}/ipxe-templates/ipxe-template-redhat-based.ipxe"  "${mac_based_ipxe_cfg_file}"
+        if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/ipxe-template-redhat-based.ipxe"  "${mac_based_ipxe_cfg_file}"; then
+            print_error "Failed to copy iPXE template for redhat-based"
+            fn_release_host_lock
+            exit 1
+        fi
     fi
 
     fn_set_environment "${mac_based_ipxe_cfg_file}"
@@ -1286,7 +1328,11 @@ fn_update_kea_dhcp_reservations() {
   # ===== DHCPv4 Reservations =====
   # Read existing Kea DHCPv4 config
   local kea_dhcp4_existing_config
-  kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file")
+  if ! kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file"); then
+    print_task_fail
+    print_error "Failed to read KEA DHCPv4 config: ${kea_dhcp4_config_file}"
+    exit 1
+  fi
 
   # Build JSON array of DHCPv4 reservations from cache file
   local kea_dhcp4_reservations_json=""
@@ -1318,7 +1364,11 @@ EOF
   # ===== DHCPv6 Reservations =====
   # Read existing Kea DHCPv6 config
   local kea_dhcp6_existing_config
-  kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file")
+  if ! kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file"); then
+    print_task_fail
+    print_error "Failed to read KEA DHCPv6 config: ${kea_dhcp6_config_file}"
+    exit 1
+  fi
 
   # Build JSON array of DHCPv6 reservations from cache file
   local kea_dhcp6_reservations_json=""

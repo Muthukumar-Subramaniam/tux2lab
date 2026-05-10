@@ -82,7 +82,7 @@ fn_test_ipv6_connectivity() {
 }
 
 fn_get_running_vms() {
-    sudo virsh list --name | grep -v "^$"
+    sudo virsh list --name | grep -v "^$" || true
 }
 
 fn_vm_is_ssh_ready() {
