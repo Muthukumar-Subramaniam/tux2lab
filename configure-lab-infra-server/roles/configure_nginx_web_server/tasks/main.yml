@@ -8,13 +8,13 @@
     owner: "{{ ansible_facts.env.mgmt_super_user }}"
     group: "{{ ansible_facts.env.mgmt_super_user }}"
 
-- name: Comment out default server block in /etc/nginx/nginx.conf
+- name: Remove default server block from /etc/nginx/nginx.conf
   become: true
-  ansible.builtin.replace:
-    path: /etc/nginx/nginx.conf
-    regexp: '^\s{4,}(server\s*\{)'
-    replace: '    #\1'
-    backup: true
+  ansible.builtin.shell: |
+    sed -i '/include \/etc\/nginx\/conf\.d\/\*\.conf;/,/^}/{ /include \/etc\/nginx\/conf\.d\/\*\.conf;/b; /^}/b; d; }' /etc/nginx/nginx.conf
+  args:
+    executable: /bin/bash
+  changed_when: true
 
 - name: Build SSL certificate Subject Alternative Names
   ansible.builtin.set_fact:
