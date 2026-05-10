@@ -19,8 +19,8 @@ show_distro_help() {
 
 SUBCOMMANDS:
     list                            List all distros with readiness status
-    setup [distro --version ver]    Setup a distro for PXE provisioning
-    cleanup [distro --version ver]  Remove a distro's PXE provisioning setup
+    setup [distro --version|-v ver]    Setup a distro for PXE provisioning
+    cleanup [distro --version|-v ver]  Remove a distro's PXE provisioning setup
 
 OPTIONS:
     -h, --help                      Show this help message
@@ -29,6 +29,7 @@ EXAMPLES:
     tux2lab distro list
     tux2lab distro setup                                    # Interactive mode
     tux2lab distro setup almalinux --version 10             # Non-interactive mode
+    tux2lab distro setup almalinux -v 10                    # Short form
     tux2lab distro cleanup almalinux --version 10"
 }
 

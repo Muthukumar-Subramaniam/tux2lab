@@ -54,12 +54,12 @@ fi
 
 # ====== USAGE ======
 print_usage() {
-    print_info "Usage: tux2lab distro <subcommand> [distro] [--version <version>]
+    print_info "Usage: tux2lab distro <subcommand> [distro] [--version|-v <version>]
 
 Subcommands:
-    list                                List all distros with readiness status
-    setup [distro --version ver]        Download ISO and mount for PXE provisioning
-    cleanup [distro --version ver]      Unmount and remove ISO for a distro
+    list                                    List all distros with readiness status
+    setup [distro --version|-v ver]         Download ISO and mount for PXE provisioning
+    cleanup [distro --version|-v ver]       Unmount and remove ISO for a distro
 
 Supported distros:
     almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap
