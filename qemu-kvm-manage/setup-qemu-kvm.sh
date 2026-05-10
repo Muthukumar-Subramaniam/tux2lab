@@ -82,19 +82,6 @@ sudo chown -R "$USER":"$(id -g)" /tux2lab-data || {
 }
 print_task_done
 
-VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
-if [[ ! -d "${VENDORED_VIRT_MANAGER_DIR}/virtinst" || ! -f "${VENDORED_VIRT_MANAGER_DIR}/virt-install" ]]; then
-    print_error "Vendored virt-manager files not found at ${VENDORED_VIRT_MANAGER_DIR}."
-    print_info "Expected: ${VENDORED_VIRT_MANAGER_DIR}/virtinst and ${VENDORED_VIRT_MANAGER_DIR}/virt-install"
-    exit 1
-fi
-
-print_task "Ensuring vendored virt-manager entrypoints are executable"
-sudo chmod +x "${VENDORED_VIRT_MANAGER_DIR}/virt-install"
-print_task_done
-
-print_info "Using direct vendored invocation for virt-install (no /usr/local/bin wrappers)."
-
 virsh_network_name="tux2lab"
 virsh_network_definition="/tux2lab/qemu-kvm-manage/labbr0.xml"
 
@@ -118,13 +105,16 @@ if [[ -z "$ipv6_labbr0" ]]; then
     exit 1
 fi
 
-if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_labbr0" && ip addr show labbr0 | grep -q "$ipv6_labbr0" ); then
-    print_success "labbr0 already has dual-stack configured (IPv4: $ipv4_labbr0, IPv6: $ipv6_labbr0) — skipping task."
+run_virsh_cmd() {
+    sudo virsh "$@" &>/dev/null
+}
+
+# Check if the virsh network is already active with correct IPs
+if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_labbr0" && ip addr show labbr0 | grep -q "$ipv6_labbr0" ) && \
+   sudo virsh net-info "$virsh_network_name" &>/dev/null; then
+    print_success "labbr0 bridge and virsh network '$virsh_network_name' already configured — skipping task."
 else
     print_task "Setting up custom bridge network labbr0 for QEMU/KVM"
-    run_virsh_cmd() {
-        sudo virsh "$@" &>/dev/null
-    }
     run_virsh_cmd net-destroy "$virsh_network_name" || true
     run_virsh_cmd net-undefine "$virsh_network_name" || true
     run_virsh_cmd net-define "$virsh_network_definition" || {
