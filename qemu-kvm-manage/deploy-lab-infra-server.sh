@@ -833,10 +833,20 @@ deploy_lab_infra_server_host() {
     else
         print_info "Installing Ansible on the host..."
 
-        pip3 install --user ansible-core || {
-            print_error "Failed to install Ansible"
+        if command -v dnf &>/dev/null; then
+            sudo dnf install -y ansible-core || {
+                print_error "Failed to install Ansible"
+                exit 1
+            }
+        elif command -v apt-get &>/dev/null; then
+            sudo apt-get update && sudo apt-get install -y ansible-core || {
+                print_error "Failed to install Ansible"
+                exit 1
+            }
+        else
+            print_error "Unsupported package manager. Cannot install ansible-core."
             exit 1
-        }
+        fi
 
         print_success "Ansible installation completed successfully."
     fi

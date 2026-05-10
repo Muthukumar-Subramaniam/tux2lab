@@ -14,7 +14,14 @@ if command -v ansible &>/dev/null; then
     echo -e "\nAnsible is already installed, Proceeding further . . .\n"
 else
     echo -e "\nInstalling Ansible . . . \n"
-    pip3 install --user ansible-core || exit 1
+    if command -v dnf &>/dev/null; then
+        sudo dnf install -y ansible-core || exit 1
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get update && sudo apt-get install -y ansible-core || exit 1
+    else
+        echo -e "\nUnsupported package manager. Cannot install ansible-core.\n"
+        exit 1
+    fi
     echo "## Completed Ansible Installation ##"
 fi
 
