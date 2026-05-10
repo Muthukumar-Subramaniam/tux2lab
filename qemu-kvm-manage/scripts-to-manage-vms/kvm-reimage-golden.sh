@@ -74,6 +74,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Reset OS_DISTRO and VERSION_TYPE to command-line values for each VM
     OS_DISTRO="$CMDLINE_OS_DISTRO"
     VERSION_TYPE="$CMDLINE_VERSION_TYPE"
+    NORMALIZED_DISTRO=""
     
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-multi-vm-progress.sh
     show_multi_vm_progress "$qemu_kvm_hostname"

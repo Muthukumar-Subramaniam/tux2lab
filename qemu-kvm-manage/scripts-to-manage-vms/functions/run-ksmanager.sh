@@ -79,11 +79,13 @@ run_ksmanager() {
         IPV4_ADDRESS=$(printf '%s' "$provision_json" | jq -r '.ipv4_address // empty')
         IPV6_ADDRESS=$(printf '%s' "$provision_json" | jq -r '.ipv6_address // empty')
         OS_DISTRO=$(printf '%s' "$provision_json" | jq -r '.os_distribution // empty')
+        VERSION_TYPE=$(printf '%s' "$provision_json" | jq -r '.version // empty')
         EXTRACTED_HOSTNAME=$(printf '%s' "$provision_json" | jq -r '.hostname // empty')
     else
         IPV4_ADDRESS=""
         IPV6_ADDRESS=""
         OS_DISTRO=""
+        VERSION_TYPE=""
         EXTRACTED_HOSTNAME="${EXTRACTED_HOSTNAME:-}"
     fi
 
