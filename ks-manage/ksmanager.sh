@@ -908,7 +908,7 @@ fn_check_distro_availability() {
     if mountpoint -q "${mount_dir}"; then
         print_green '[Ready]'
     else
-        print_yellow '[Not-Ready]'
+        print_yellow '[not-yet-setup]'
     fi
 }
 

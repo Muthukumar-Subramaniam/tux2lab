@@ -213,7 +213,7 @@ fn_select_version() {
         if fn_is_distro_ready "$distro" "$ver"; then
             status=$(print_green "[Ready]" nskip)
         else
-            status=$(print_yellow "[Not-Ready]" nskip)
+            status=$(print_yellow "[not-yet-setup]" nskip)
         fi
         printf -v line "  %d)  %-12s %s\n" $((i+1)) "${ver}" "${status}"
         menu+="${line}"
@@ -242,23 +242,26 @@ fn_select_version() {
 # ====== LIST ======
 
 fn_list_distros() {
-    printf "\n  %-20s %-12s %-14s %-18s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
-    printf "  %-20s %-12s %-14s %-18s\n" "------" "-------" "---------" "------------"
+    local col_distro=28 col_ver=12 col_pxe=15
+    printf "\n  %-${col_distro}s %-${col_ver}s %-${col_pxe}s %s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
+    printf "  %-${col_distro}s %-${col_ver}s %-${col_pxe}s %s\n" "------" "-------" "---------" "------------"
 
     for distro in "${DISTRO_KEYS[@]}"; do
         for ver in ${DISTRO_AVAILABLE_VERSIONS[$distro]}; do
-            local pxe_status golden_status
+            local pxe_padded pxe_status golden_status
             if fn_is_distro_ready "$distro" "$ver"; then
-                pxe_status=$(print_green "Ready" nskip)
+                pxe_padded=$(printf "%-${col_pxe}s" "Ready")
+                pxe_status=$(print_green "$pxe_padded" nskip)
             else
-                pxe_status=$(print_yellow "Not-Ready" nskip)
+                pxe_padded=$(printf "%-${col_pxe}s" "not-yet-setup")
+                pxe_status=$(print_yellow "$pxe_padded" nskip)
             fi
             if fn_has_golden_image "$distro" "$ver"; then
                 golden_status=$(print_green "Available" nskip)
             else
-                golden_status=$(print_yellow "Not-Built" nskip)
+                golden_status=$(print_yellow "not-yet-built" nskip)
             fi
-            printf "  %-20s %-12s %-14s %-18s\n" "${DISTRO_DISPLAY_NAMES[$distro]}" "$ver" "$pxe_status" "$golden_status"
+            printf "  %-${col_distro}s %-${col_ver}s %s %s\n" "${DISTRO_DISPLAY_NAMES[$distro]}" "$ver" "$pxe_status" "$golden_status"
         done
     done
     echo
