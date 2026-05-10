@@ -5,6 +5,13 @@
 #----------------------------------------------------------------------------------------#
 
 source /etc/environment
+if [[ -f /tux2lab-data/lab_environment_vars ]]; then
+    source /tux2lab-data/lab_environment_vars
+fi
+# In host mode, mgmt_super_user may come from lab_environment_vars as lab_infra_admin_username
+if [[ -z "${mgmt_super_user:-}" && -n "${lab_infra_admin_username:-}" ]]; then
+    mgmt_super_user="${lab_infra_admin_username}"
+fi
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/ks-manage/distro-versions.conf
 

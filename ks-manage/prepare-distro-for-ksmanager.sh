@@ -10,6 +10,18 @@
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/ks-manage/distro-versions.conf
 
+# Source environment variables
+if [[ -f /etc/environment ]]; then
+    source /etc/environment
+fi
+if [[ -f /tux2lab-data/lab_environment_vars ]]; then
+    source /tux2lab-data/lab_environment_vars
+fi
+# In host mode, mgmt_super_user may come from lab_environment_vars as lab_infra_admin_username
+if [[ -z "${mgmt_super_user:-}" && -n "${lab_infra_admin_username:-}" ]]; then
+    mgmt_super_user="${lab_infra_admin_username}"
+fi
+
 # ====== ACCESS CONTROL ======
 if [[ "$USER" != "$mgmt_super_user" ]]; then
     print_error "Access denied. Only infra management super user '${mgmt_super_user}' is authorized to run this tool."
