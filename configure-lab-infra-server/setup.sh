@@ -158,7 +158,7 @@ echo -e "\nRemove crashkernel memory reserve if present . . .\n"
 
 sudo grubby --update-kernel ALL --remove-args=crashkernel
 
-if [[ "$1" != "--invoked-by-automation" ]]; then
+if [[ "${1:-}" != "--invoked-by-automation" ]]; then
     echo -e "\nPlease reboot the server if you did not face any issue with setup script ! \n"
     echo -e "\nAfter Reboot you can ansible playbook configure-lab-infra-server.yaml to setup the system ! \n" 
 fi

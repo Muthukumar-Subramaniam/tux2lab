@@ -64,7 +64,8 @@ fn_is_distro_ready() {
 
 fn_has_golden_image() {
     local distro="$1" ver="$2"
-    [[ -f "${GOLDEN_IMAGE_DIR}/${distro}-golden-image-${ver}.${dnsbinder_domain}.qcow2" ]]
+    local ver_sanitized="${ver//\./-}"
+    [[ -f "${GOLDEN_IMAGE_DIR}/${distro}-${ver_sanitized}-golden-image.${dnsbinder_domain}.qcow2" ]]
 }
 
 fn_validate_distro() {
