@@ -129,6 +129,15 @@ else
     print_task_done
 fi
 
+# Remove libvirt's default network (virbr0 + dnsmasq) — its dnsmasq binds 0.0.0.0:67
+# which blocks Kea DHCP from opening raw sockets on labbr0
+if sudo virsh net-info default &>/dev/null; then
+    print_task "Removing libvirt default network (virbr0) to avoid DHCP port conflict"
+    run_virsh_cmd net-destroy default || true
+    run_virsh_cmd net-undefine default || true
+    print_task_done
+fi
+
 print_task "Creating custom tools to manage QEMU/KVM"
 scripts_directory="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
 if [[ ! -f "$scripts_directory/tux2lab.sh" ]]; then
