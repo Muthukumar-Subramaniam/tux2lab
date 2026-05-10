@@ -1759,6 +1759,227 @@ fn_rename_host_record() {
     done
 }
 
+fn_handle_multiple_host_record_with_ip() {
+
+    if ! fn_acquire_zone_lock; then return 1; fi
+
+    local v_host_list_file="${1}"
+
+    clear
+
+    print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+
+    if [[ -z "${v_host_list_file}" ]]; then
+        echo
+        print_notify "Name of the file containing the list of 'hostname ipv4' records to create : "
+        read -e v_host_list_file
+    fi
+
+    if [[ ! -f "${v_host_list_file}" ]]; then print_error "File \"${v_host_list_file}\" doesn't exist!\n"; fn_release_zone_lock; exit; fi
+
+    if [[ ! -s "${v_host_list_file}" ]]; then print_error "File \"${v_host_list_file}\" is empty!\n"; fn_release_zone_lock; exit; fi
+
+    # Work on a copy to avoid modifying the user's original file
+    local v_work_file
+    v_work_file="$(mktemp /tmp/dnsbinder-bulk-ip.XXXXXXXXXX)"
+    cp "${v_host_list_file}" "${v_work_file}"
+
+    sed -i '/^[[:space:]]*$/d' "${v_work_file}"
+    sed -i 's/,/ /g' "${v_work_file}"
+    sed -i "s/\.${v_domain_name}\.//g" "${v_work_file}"
+    sed -i "s/\.${v_domain_name}//g" "${v_work_file}"
+
+    # Validate file format: each line must have exactly 2 fields (hostname ipv4)
+    local v_line_num=0
+    while read -r v_line_hostname v_line_ipv4 v_line_extra; do
+        ((v_line_num++))
+        if [[ -z "${v_line_hostname}" || -z "${v_line_ipv4}" ]]; then
+            print_error "Line ${v_line_num}: Missing hostname or IPv4 address."
+            print_info "Expected format: hostname ipv4_address"
+            rm -f "${v_work_file}"
+            fn_release_zone_lock
+            exit 1
+        fi
+        if [[ -n "${v_line_extra}" ]]; then
+            print_error "Line ${v_line_num}: Too many fields. Expected: hostname ipv4_address"
+            rm -f "${v_work_file}"
+            fn_release_zone_lock
+            exit 1
+        fi
+    done < "${v_work_file}"
+
+    while :; do
+        print_info "Records to be Created : "
+        cat "${v_work_file}"
+        echo
+        print_notify "Provide your confirmation to create the above host records (y/n) : " "nskip"
+        read v_confirmation
+        if [[ ${v_confirmation} == "y" ]]; then
+            break
+        elif [[ ${v_confirmation} == "n" ]]; then
+            print_error "Cancelled without any changes !!"
+            rm -f "${v_work_file}"
+            fn_release_zone_lock
+            exit
+        else
+            print_error "Select either (y/n) only !"
+            continue
+        fi
+    done
+
+    > "${v_tmp_file_dnsbinder}"
+
+    local v_count_successfull=0
+    local v_count_failed=0
+    local v_count_invalid_host=0
+    local v_count_already_exists=0
+    local v_count_ip_exhausted=0
+    local v_count_other_failures=0
+
+    local v_pre_execution_serial_fw_zone
+    v_pre_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
+
+    local v_total_host_records
+    v_total_host_records=$(wc -l < "${v_work_file}")
+
+    local v_host_count=0
+
+    # Show initial header once
+    clear
+    print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+
+    while read -r v_host_record v_host_ipv4; do
+        # Update progress header in place (move cursor to top)
+        tput cup 1 0
+        print_cyan "####################################( Running )####################################"
+        print_white "Status     : [ ${v_host_count}/${v_total_host_records} ] host records have been processed"
+        print_green "Successful : ${v_count_successfull}"
+        print_red "Failed     : ${v_count_failed}"
+
+        ((v_host_count++))
+
+        print_task "Attempting to create the host record ${v_host_record}.${v_domain_name} (${v_host_ipv4}) . . . " "nskip"
+
+        local v_serial_fw_zone_pre_execution
+        v_serial_fw_zone_pre_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
+
+        specific_ipv4_requested="yes"
+        fn_create_host_record "${v_host_record}" "${v_host_ipv4}" "Automated-Execution"
+        local var_exit_status=${?}
+
+        local v_serial_fw_zone_post_execution
+        v_serial_fw_zone_post_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
+
+        local v_fqdn="${v_host_record}.${v_domain_name}"
+
+        local v_ip_address
+        v_ip_address=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+        local v_ipv6_address
+        v_ipv6_address=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN AAAA / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+
+        if [[ -z "${v_ip_address}" ]]; then
+            v_ip_address="N/A"
+        fi
+
+        local v_address_display
+        if [[ -n "${v_ipv6_address}" ]]; then
+            v_address_display="IPv4: ${v_ip_address}, IPv6: ${v_ipv6_address}"
+        else
+            v_address_display="${v_ip_address}"
+        fi
+
+        local v_details_of_host_record="${v_fqdn} ( ${v_address_display} )"
+
+        if [[ ${var_exit_status} -eq 9 ]]; then
+            print_red "Invalid-Host     ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
+            print_task_fail
+            ((v_count_failed++))
+            ((v_count_invalid_host++))
+        elif [[ ${var_exit_status} -eq 8 ]]; then
+            print_yellow "Already-Exists   ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
+            print_task_fail
+            ((v_count_failed++))
+            ((v_count_already_exists++))
+        elif [[ ${var_exit_status} -eq 255 ]]; then
+            print_red "IP-Exhausted     ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
+            print_task_fail
+            ((v_count_failed++))
+            ((v_count_ip_exhausted++))
+        else
+            if [[ "${v_serial_fw_zone_pre_execution}" -ne "${v_serial_fw_zone_post_execution}" ]]; then
+                print_green "Created          ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
+                print_task_done
+                ((v_count_successfull++))
+            else
+                print_red "Failed-to-Create ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
+                print_task_fail
+                ((v_count_failed++))
+                ((v_count_other_failures++))
+            fi
+        fi
+
+        # Clear from cursor to end of screen for next iteration
+        tput ed
+
+    done < "${v_work_file}"
+
+    rm -f "${v_work_file}"
+
+    # Clear the progress display before showing final summary
+    clear
+
+    local v_post_execution_serial_fw_zone
+    v_post_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
+
+    if [[ "${v_pre_execution_serial_fw_zone}" -ne "${v_post_execution_serial_fw_zone}" ]]; then
+        print_task "Reloading the DNS service (named) for the changes to take effect..."
+        systemctl reload named &>/dev/null
+        if systemctl is-active named &>/dev/null; then
+            print_task_done
+        else
+            print_task_fail
+        fi
+    else
+        print_yellow "No changes done! Nothing to do!"
+    fi
+
+    print_white "Please find the below details of the records:"
+    if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
+        print_white "Action-Taken     FQDN ( IPv4-Address, IPv6-Address )"
+    else
+        print_white "Action-Taken     FQDN ( IPv4-Address )"
+    fi
+
+    cat "${v_tmp_file_dnsbinder}"
+
+    # Final completion summary
+    print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+    print_cyan "###################################( Completed )###################################"
+    print_white "Total      : ${v_total_host_records} host records processed"
+    print_green "Successful : ${v_count_successfull}"
+    print_red "Failed     : ${v_count_failed}"
+
+    if [[ ${v_count_failed} -gt 0 ]]; then
+        print_white "Failure Breakdown:"
+        if [[ ${v_count_invalid_host} -gt 0 ]]; then
+            print_red "  Invalid Host    : ${v_count_invalid_host}"
+        fi
+        if [[ ${v_count_already_exists} -gt 0 ]]; then
+            print_yellow "  Already Exists  : ${v_count_already_exists}"
+        fi
+        if [[ ${v_count_ip_exhausted} -gt 0 ]]; then
+            print_red "  IP Exhausted    : ${v_count_ip_exhausted}"
+        fi
+        if [[ ${v_count_other_failures} -gt 0 ]]; then
+            print_red "  Other Failures  : ${v_count_other_failures}"
+        fi
+    fi
+
+    rm -f "${v_tmp_file_dnsbinder}"
+
+    fn_release_zone_lock
+}
+
 fn_handle_multiple_host_record() {      
 
     if ! fn_acquire_zone_lock; then return 1; fi
@@ -2300,6 +2521,7 @@ Use one of the following Options :
     -r      To rename an existing host record (updates A and AAAA records)
     -ry     caution ! To do the above without any confirmation
     -cf     To create multiple host records provided in a file (dual-stack)
+    -cif    To create multiple host records with specific IPs from a file (hostname ipv4)
     -df     To delete multiple host records provided in a file (dual-stack)
     -ci     To create a host record with specific IPv4 Address (auto-generates IPv6)
     -cc     To create a CNAME/Alias record for an existing host record
@@ -2367,6 +2589,16 @@ then
                 exit 1
             fi
             fn_handle_multiple_host_record "${2}" "create"
+            exit
+            ;;
+        -cif)
+            fn_check_existence_of_domain
+            if [[ -n "${3}" ]];then
+                print_error "Invalid Option! '-cif' option takes only 1 arguement as file containing list of 'hostname ipv4' pairs ! "
+                fn_usage_message
+                exit 1
+            fi
+            fn_handle_multiple_host_record_with_ip "${2}"
             exit
             ;;
         -df)
