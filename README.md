@@ -1,6 +1,6 @@
 # tux2lab — Build Your Own QEMU/KVM Virtual Home Lab
 
-[![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=green)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Transform your Linux workstation into a powerful, automated virtual datacenter.
@@ -96,7 +96,7 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 
 ### Step 1 — Get tux2lab
 
-**Download the latest [![stable release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=stable%20release)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest):**
+**Download the latest [![stable release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=stable%20release&color=green)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest):**
 
 ```bash
 sudo mkdir -p /tux2lab
