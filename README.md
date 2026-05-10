@@ -63,7 +63,7 @@ virtual network (`labbr0` bridge, `10.10.20.0/22` + IPv6 [ULA](https://en.wikipe
 
 ### Infra Server OS (RHEL-based only)
 
-AlmaLinux 10 (default), Rocky Linux, Oracle Linux, CentOS Stream, RHEL — versions 10 and 9.
+AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 10.
 
 ### Guest VM Provisioning
 
