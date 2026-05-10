@@ -100,6 +100,16 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
+    # If --distro not specified, look up previous provisioning data
+    if [[ -z "$OS_DISTRO" ]]; then
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lookup-previous-provision.sh
+        if lookup_previous_provision "$qemu_kvm_hostname"; then
+            OS_DISTRO="$PREVIOUS_OS_DISTRO"
+            VERSION_TYPE="$PREVIOUS_VERSION"
+            print_info "Auto-detected previous OS: ${OS_DISTRO} ${VERSION_TYPE}"
+        fi
+    fi
+
     # Check if golden image exists for specified distro and version
     if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
         # Normalize OS distro name first for golden image check

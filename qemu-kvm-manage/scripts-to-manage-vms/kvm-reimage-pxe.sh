@@ -87,6 +87,22 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
+    # If --distro not specified, look up previous provisioning data
+    if [[ -z "$CMDLINE_OS_DISTRO" ]]; then
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lookup-previous-provision.sh
+        if lookup_previous_provision "$qemu_kvm_hostname"; then
+            REIMAGE_OS_DISTRO="$PREVIOUS_OS_DISTRO"
+            REIMAGE_VERSION_TYPE="$PREVIOUS_VERSION"
+            print_info "Auto-detected previous OS: ${REIMAGE_OS_DISTRO} ${REIMAGE_VERSION_TYPE}"
+        else
+            REIMAGE_OS_DISTRO=""
+            REIMAGE_VERSION_TYPE=""
+        fi
+    else
+        REIMAGE_OS_DISTRO="$CMDLINE_OS_DISTRO"
+        REIMAGE_VERSION_TYPE="$CMDLINE_VERSION_TYPE"
+    fi
+
     # Handle MAC address based on operation type
     if [[ "$CLEAN_INSTALL" == "yes" ]]; then
         # For clean install, generate new MAC (VM will be destroyed and recreated)
@@ -116,8 +132,8 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
     ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC}"
-    [[ -n "$CMDLINE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $CMDLINE_OS_DISTRO"
-    [[ -n "$CMDLINE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $CMDLINE_VERSION_TYPE"
+    [[ -n "$REIMAGE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $REIMAGE_OS_DISTRO"
+    [[ -n "$REIMAGE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $REIMAGE_VERSION_TYPE"
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts"; then
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
