@@ -1,14 +1,13 @@
-# 🚀 tux2lab: Build Your Own QEMU/KVM Virtual Home Lab
+# tux2lab — Build Your Own QEMU/KVM Virtual Home Lab
 
-Transform your Linux workstation into a powerful, automated virtual datacenter!
-This project allows you to build and manage a virtual home lab, making it easy
-to deploy, break, and rebuild Linux VMs effortlessly. It automates VM
-provisioning, manages the complete lifecycle of your VMs, and provides a flexible
-environment for learning, testing, and experimenting with Linux-based technologies.
+Transform your Linux workstation into a powerful, automated virtual datacenter.
+Build and manage a virtual home lab, making it easy to deploy, break, and rebuild
+Linux VMs effortlessly. tux2lab automates VM provisioning, manages the complete
+lifecycle of your VMs, and provides a flexible environment for learning, testing,
+and experimenting with Linux-based technologies.
 
 Although many open-source alternatives exist, I built this project for the fun
-of creating something of my own and sharing it with anyone with similar
-interests.
+of creating something of my own and sharing it with anyone with similar interests.
 
 > [!WARNING]
 > This project is intended for testing, development, and experimentation purposes only.
@@ -18,232 +17,296 @@ interests.
 
 ---
 
-## 🎯 What You'll Get
+## What You'll Get
 
-- 🚀 Automated VM provisioning via PXE boot & golden images
-- 🌐 Dynamic DNS management for your local domain
-- 🔧 Full infrastructure-as-code automation
-- 💻 Professional datacenter experience on your workstation
-- 🎮 Complete VM lifecycle management with enterprise-grade tools
-- 🧪 Experiment freely — Spin up and destroy VMs in seconds
+- Automated VM provisioning via PXE boot & golden images
+- Dynamic DNS management for your local domain
+- Full infrastructure-as-code automation (Ansible)
+- Complete VM lifecycle management — deploy, resize, snapshot, destroy
+- Multi-distribution support across Red Hat, Debian, and SUSE families
+- Dual-stack networking (IPv4 + IPv6) out of the box
 
 ---
 
-## 🖥️ Automated Lab Environment for Provisioning and Managing Linux VMs
+## Architecture Overview
 
-### 🧠 Central Infra Server VM's OS
+tux2lab runs on your Linux workstation (the **KVM host**) and creates a private
+virtual network (`labbr0` bridge, `10.10.20.0/22` + IPv6 ULA) with a central
+**infrastructure server** that provides all lab services:
 
-The central lab infrastructure server is designed to run on **AlmaLinux 10** by default,
-providing all the essential services for managing the lab environment.
+| Service | Software | Purpose |
+|---|---|---|
+| DNS | BIND (named) | Local domain resolution |
+| DHCP | Kea (v4 + v6) | Automatic IP assignment |
+| PXE/TFTP | tftp-server + iPXE | Network boot for OS installs |
+| NTP | chrony | Time synchronization |
+| NFS | nfs-server | Shared storage |
+| HTTP | nginx | ISO & kickstart file serving |
+| IPv6 RA | radvd | Router advertisements |
 
-### 📦 VM Guest OS Provisioning
+### Deployment Modes
 
-The lab infrastructure server centrally manages all guest VM provisioning using
-automation scripts and configuration templates.
+| | **VM Mode** (Recommended) | **Host Mode** (Advanced) |
+|---|---|---|
+| **Where** | Dedicated KVM VM | Directly on KVM host |
+| **Isolation** | Complete — easy to delete/recreate | None — modifies host system |
+| **Resources** | 2 GB RAM, 2 vCPUs, 30 GB disk | Minimal overhead |
+| **Best for** | Most users, shared systems | Owned systems with limited RAM |
+| **Cleanup** | Delete the VM | Manual service/package removal |
 
-The toolkit provides automated VM provisioning for all three major Linux
-families, including ready-to-use configurations for:
+---
 
-| Family | Distribution | Method | Availability |
+## Supported Distributions
+
+### Infra Server OS (RHEL-based only)
+
+AlmaLinux 10 (default), Rocky Linux, Oracle Linux, CentOS Stream, RHEL — versions 10 and 9.
+
+### Guest VM Provisioning
+
+| Family | Distribution | Method | Status |
 |---|---|---|---|
 | Red Hat-based | AlmaLinux | Kickstart | ✅ Included by default |
-|  | Rocky, Oracle Linux, RHEL, CentOS Stream | Kickstart | 🔧 Customizable |
-| Debian-based | Ubuntu LTS | Cloud-init (cloud-config) | 🔧 Customizable |
-| SUSE-based | openSUSE Leap | AutoYaST | 🔧 Customizable |
+| | Rocky, Oracle Linux, RHEL, CentOS Stream | Kickstart | 🔧 Customizable |
+| Debian-based | Ubuntu LTS (24.04, 22.04) | Cloud-init autoinstall | 🔧 Customizable |
+| SUSE-based | openSUSE Leap (15.6, 15.5) | AutoYaST | 🔧 Customizable |
 
 ---
 
-## 🧾 Minimum System Requirements
+## Minimum System Requirements
 
-> These are the minimum recommended values. You can adjust them later based on
-> your specific use case and workload.
+> These are the minimum recommended values. Adjust based on your workload.
 
-### 🔹 Central Infra Server VM
+**Central Infra Server VM:** 2 GB RAM · 2 vCPUs · 30 GB disk
 
-- 🧠 Memory: 2 GB RAM
-- ⚙️ CPU: 2 vCPUs
-- 💾 Storage: 30 GB
+**Guest VMs (each):** 2 GB RAM · 2 vCPUs · 20 GB disk
 
-### 🔸 Provisioned VMs
-
-- 🧠 Memory: 2 GB RAM
-- ⚙️ CPU: 2 vCPUs
-- 💾 Storage: 20 GB
+**KVM Host:** Ubuntu or AlmaLinux/RHEL-based with hardware virtualization support.
 
 ---
 
-## 📥 Quick Start: Get Up and Running in 5 Steps
+## Quick Start
 
-### Step 1 — Download the Latest Release
+### Step 1 — Get tux2lab
 
-📦 **Using Latest Release** (recommended):
-
-```bash
-sudo mkdir -p /tux2lab
-sudo chown ${USER}:$(id -g) /tux2lab
-curl -sSL https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest/download/tux2lab.tar.gz \
-  | tar -xzv -C /tux2lab
-cd /tux2lab/qemu-kvm-manage/
-```
-
-**Alternative — Clone from the Repository:**
+**Clone from repository:**
 
 ```bash
 sudo mkdir -p /tux2lab
-sudo chown ${USER}:$(id -g) /tux2lab
+sudo chown "${USER}:$(id -g)" /tux2lab
 git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
 cd /tux2lab/qemu-kvm-manage/
 ```
 
 ### Step 2 — Install QEMU/KVM
 
-Run the automated setup script to configure your virtualization environment:
-
 ```bash
 ./setup-qemu-kvm.sh
 ```
 
-This will install and configure all necessary packages and dependencies.
+This script:
+- Installs QEMU/KVM, libvirt, and all dependencies (supports both `apt` and `dnf`)
+- Creates the `tux2lab` virtual network (`labbr0` bridge) with NAT
+- Sets up the `/tux2lab-data/` data directory
+- Installs the `tux2lab` CLI and bash completion
+- Validates your system is not a VM (bare-metal host required)
 
-### Step 3 — Download AlmaLinux ISO
-
-Grab the latest AlmaLinux ISO for your lab infrastructure:
+### Step 3 — Download Infra Server ISO
 
 ```bash
-./download-almalinux-latest.sh
+./download-infra-server-iso.sh              # AlmaLinux (default)
+./download-infra-server-iso.sh rocky        # Rocky Linux
+./download-infra-server-iso.sh oraclelinux  # Oracle Linux
 ```
 
-> ☕ Pro tip: This might take a few minutes depending on your network speed. Perfect time for a coffee break!
+Downloads the ISO, fetches the checksum, and verifies integrity via SHA256.
 
-### Step 4 — Deploy Your Lab Infrastructure Server
-
-Now comes the magic! This fully automated script will:
-
-- ✨ Guide you through the setup with interactive prompts
-- 🔄 Install and configure the centralized lab infrastructure server
-- 🎛️ Set up DNS, DHCP, PXE boot, and web services
-- 🤖 Run Ansible automation for consistent configuration
+### Step 4 — Deploy the Lab Infrastructure Server
 
 ```bash
 ./deploy-lab-infra-server.sh
 ```
 
-**What to expect:**
+The interactive wizard will guide you through:
+- Choosing a hostname and domain (default: `lab.local`)
+- Setting an admin user and password
+- Selecting VM mode (recommended) or Host mode
+- Configuring SSH keys for passwordless access
 
-- **First Reboot:** After OS installation and initial configuration
-- **Second Reboot:** After services are configured via Ansible playbook
-- **Final Step:** Once you see the login prompt, press `Ctrl + ]` to exit the console
+**What happens next (VM mode):**
 
-> 🎬 Sit back and watch the automation work its magic!
+1. A kickstart file is generated from your inputs
+2. `virt-install` creates and boots the infra server VM
+3. AlmaLinux installs unattended via kickstart
+4. First reboot — SSH keys, network normalization
+5. Ansible playbook configures all lab services (DNS, DHCP, PXE, NFS, nginx, etc.)
+6. Second reboot — lab is ready
+7. Press `Ctrl + ]` to exit the console when you see the login prompt
 
-### Step 5 — Access Your Infrastructure Server
-
-Time to explore! SSH into your newly deployed infrastructure server:
+### Step 5 — Verify Your Lab
 
 ```bash
-ssh lab-infra-server.lab.local
+tux2lab health
 ```
 
-> 💡 Replace `lab-infra-server.lab.local` with your actual server name and domain if different.
+```
+KVM Lab Infra Health Check
+Lab Infra Server Mode: VM
+Lab Infra Server     : lab-infra-server.lab.local
+
+[ ✓ ] DNS Server           [ 53/tcp  ]
+[ ✓ ] DHCP Server          [ 67/udp  ]
+[ ✓ ] NTP Server           [ 123/udp ]
+[ ✓ ] TFTP Server          [ 69/udp  ]
+[ ✓ ] NFS Server           [ 2049/tcp ]
+[ ✓ ] Web Server           [ 80/tcp  ]
+
+Status: STABLE
+```
 
 ---
 
-# ✅ Your Lab is Ready! Time to Build Something Amazing! 🎉
+## Using tux2lab
 
-## 🛠️ Your New Superpowers: VM Management Tools
+### Prepare a Distribution for Provisioning
 
-Your workstation is now equipped with powerful lab management tools:
+Before deploying VMs, set up at least one distro for PXE boot:
 
-### 📦 VM Deployment & Management
-
-```
-tux2lab vm install-golden            # 🚀 Deploy VMs instantly from golden images
-tux2lab vm install-pxe               # 🌐 Deploy VMs via network PXE boot
-tux2lab vm reimage-golden            # 🔄 Reinstall VMs from golden images
-tux2lab vm reimage-pxe               # 🔄 Reinstall VMs via PXE boot
-tux2lab golden-image create          # 🎨 Create reusable golden base images
-tux2lab golden-image list            # 📋 List available golden images
-tux2lab golden-image cleanup         # 🧹 Remove unused golden images
+```bash
+tux2lab distro setup                             # Interactive
+tux2lab distro setup almalinux --version 10      # Non-interactive
+tux2lab distro list                              # Show setup status
 ```
 
-### 🎮 VM Operations
+### Create a Golden Image (Optional, Recommended)
 
-```
-tux2lab vm list                      # 📊 View all VMs and their status
-tux2lab vm info                      # ℹ️  Display detailed VM information
-tux2lab vm console                   # 🖥️  Connect to VM serial console
-tux2lab vm start                     # ▶️  Power on VMs
-tux2lab vm stop                      # ⏹️  Force power-off VMs
-tux2lab vm shutdown                  # 🔽 Graceful VM shutdown
-tux2lab vm restart                   # 🔄 Hard restart VMs
-tux2lab vm reboot                    # 🔃 Graceful VM reboot
-tux2lab vm remove                    # 🗑️  Delete VMs completely
+Golden images let you deploy VMs in seconds instead of running a full PXE install:
+
+```bash
+tux2lab golden-image create                      # Interactive
+tux2lab golden-image create -d almalinux -v 10   # Non-interactive
+tux2lab golden-image list                        # Show available images
 ```
 
-### 🔧 VM Configuration
+### Deploy VMs
 
-```
-tux2lab vm resize                    # 📏 Resize memory, CPU, or disk
-tux2lab vm disk-add                  # 💾 Add new storage disks to VM
-tux2lab vm disk-resize               # 📐 Resize additional disks
-tux2lab vm disk-attach               # 🔗 Attach disks from detached storage
-tux2lab vm disk-detach               # 📤 Detach and save disks for later use
-tux2lab vm disk-delete               # 🗑️  Permanently delete detached disks
-tux2lab vm nic-add                   # 🌐 Add network interfaces to VM
-tux2lab vm nic-remove                # ❌ Remove network interfaces from VM
-```
+```bash
+# From golden image (fast — disk clone)
+tux2lab vm install-golden vm1
+tux2lab vm install-golden vm1 -d almalinux -v 10
 
-### 🌐 Network & Infrastructure Management
+# Via PXE boot (full network install)
+tux2lab vm install-pxe vm1
+tux2lab vm install-pxe vm1 -d ubuntu-lts -v 24.04
 
-```
-tux2lab ipv6-route                   # 🛣️  Manage IPv6 default routes (enable/disable/auto/status)
-tux2lab start                        # 🏁 Start the entire lab infrastructure
-tux2lab health                       # 🏥 Check lab infrastructure health
-tux2lab dns                          # 🌍 Manage local DNS records
-tux2lab distro                       # 📦 Manage OS distributions for provisioning
-```
+# Multiple VMs at once
+tux2lab vm install-golden -H vm1,vm2,vm3
 
-> 💡 **Pro tips:**
-> - Use `tux2lab --help` or `tux2lab <command> --help` for detailed usage information
-> - Tab completion is available — source `tux2lab-completion.bash` in your shell
+# Attach to console during install
+tux2lab vm install-pxe vm1 --console
+```
 
 ---
 
-## 🎭 The Secret Sauce: Backend Automation Tools
+## CLI Reference
 
-These powerful tools run on your infrastructure server, making everything work
-seamlessly:
+### VM Operations
 
-- 🌐 **dnsbinder** — Automatically manages DNS records for your local domain as you create/destroy VMs
-- ⚡ **ksmanager** — Handles iPXE & golden-image based OS provisioning using kickstart automation
-- 📦 **prepare-distro-for-ksmanager** — Downloads and prepares multiple Linux distributions (AlmaLinux, Rocky, Ubuntu, openSUSE, and more!)
+```
+tux2lab vm list                   List all VMs and their status
+tux2lab vm info <hostname>        Detailed VM information
+tux2lab vm console <hostname>     Attach to serial console (Ctrl+] to exit)
+tux2lab vm start <hostname>       Power on
+tux2lab vm stop <hostname>        Force power off
+tux2lab vm shutdown <hostname>    Graceful shutdown via ACPI
+tux2lab vm reboot <hostname>      Graceful reboot
+tux2lab vm restart <hostname>     Hard reset (power cycle)
+tux2lab vm remove <hostname>      Delete VM and all its data
+```
+
+### VM Provisioning
+
+```
+tux2lab vm install-golden         Deploy from golden image
+tux2lab vm install-pxe            Deploy via PXE network boot
+tux2lab vm reimage-golden         Wipe and reinstall from golden image
+tux2lab vm reimage-pxe            Wipe and reinstall via PXE
+```
+
+### VM Configuration
+
+```
+tux2lab vm resize <hostname>      Resize memory, CPU, or root disk
+tux2lab vm disk-add <hostname>    Add a new storage disk
+tux2lab vm disk-resize <hostname> Resize an additional disk
+tux2lab vm disk-attach <hostname> Re-attach a previously detached disk
+tux2lab vm disk-detach <hostname> Detach a disk (preserved in storage)
+tux2lab vm disk-delete <hostname> Permanently delete a detached disk
+tux2lab vm nic-add <hostname>     Add a network interface
+tux2lab vm nic-remove <hostname>  Remove a network interface
+```
+
+### Golden Image Management
+
+```
+tux2lab golden-image create       Build a reusable base image via PXE
+tux2lab golden-image list         List available golden images
+tux2lab golden-image cleanup      Remove unused golden images
+```
+
+### Infrastructure & Network
+
+```
+tux2lab start                     Start lab infrastructure (host mode)
+tux2lab health                    Check all lab service health
+tux2lab dns [options]             Manage DNS records via dnsbinder
+tux2lab distro list               List distributions and setup status
+tux2lab distro setup              Prepare a distro for PXE provisioning
+tux2lab distro cleanup            Remove a distro's PXE setup
+tux2lab ipv6-route [action]       Manage IPv6 routes (enable/disable/auto/status)
+```
+
+Use `tux2lab --help` or `tux2lab <command> --help` for detailed usage.
+Tab completion is available after installation.
 
 ---
 
-## 🎊 Congratulations! Welcome to Your Virtual Datacenter!
+## Backend Automation
 
-You've just built a professional-grade, fully automated home lab that rivals enterprise infrastructure!
+These tools run on the infrastructure server and power the provisioning pipeline:
 
-### 🌟 What Can You Do Now?
-
-- 🧪 **Experiment freely** — Spin up and destroy VMs in seconds
-- 📚 **Learn by doing** — Practice DevOps, automation, and infrastructure management
-- 🏢 **Simulate production** — Test multi-tier applications in realistic environments
-- 🚀 **Develop skills** — Master tools used in real enterprise datacenters
-- 🔬 **Test and break things** — Build, destroy, rebuild without fear
-
-Your journey to infrastructure mastery starts here! 🧑‍💻🖥️🧠
+| Tool | Purpose |
+|---|---|
+| **dnsbinder** | Manages BIND DNS zone records — automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
+| **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
+| **prepare-distro-for-ksmanager** | Downloads ISOs, mounts them, and registers distributions with ksmanager for PXE provisioning |
 
 ---
 
-## 💬 Support & Contributing
+## Project Structure
 
-- Need help? Found a bug? Have ideas? [Open an issue](https://github.com/Muthukumar-Subramaniam/tux2lab/issues) on GitHub!
-- Want to contribute? Pull requests are welcome! Feel free to improve the automation, add new distros, or enhance documentation.
+```
+tux2lab/
+├── qemu-kvm-manage/           KVM host scripts (deploy, setup, VM management)
+│   ├── deploy-lab-infra-server.sh
+│   ├── setup-qemu-kvm.sh
+│   ├── download-infra-server-iso.sh
+│   └── scripts-to-manage-vms/  CLI dispatcher and all tux2lab vm subcommands
+├── configure-lab-infra-server/ Ansible playbook and roles for infra server setup
+├── ks-manage/                  Kickstart/cloud-init templates and ksmanager
+├── named-manage/               DNS zone management (dnsbinder)
+├── common-utils/               Shared utilities (color output, disk tools)
+└── vendor/                     Vendored virt-manager (no system package needed)
+```
 
 ---
 
-## 📜 License
+## Support & Contributing
+
+- Found a bug? Have ideas? [Open an issue](https://github.com/Muthukumar-Subramaniam/tux2lab/issues) on GitHub.
+- Pull requests are welcome — improve automation, add distros, or enhance docs.
+
+## License
 
 This project is open source and licensed under the [GNU General Public License v3.0](LICENSE).
 
