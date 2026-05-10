@@ -64,7 +64,7 @@ inactive_services=0
 for entry in "${services_to_check[@]}"; do
     IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
 
-    local check_result=1
+    check_result=1
     if [[ "$service_proto" == "udp" ]]; then
         nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
     else

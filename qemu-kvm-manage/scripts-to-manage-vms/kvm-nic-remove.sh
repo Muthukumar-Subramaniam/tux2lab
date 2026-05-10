@@ -312,8 +312,17 @@ fi
 # Remove NICs
 removed_count=0
 for mac in "${MACS_TO_REMOVE[@]}"; do
+    # Look up the actual interface type (network or bridge) for this MAC
+    nic_type="network"
+    for nic in "${AVAILABLE_NICS[@]}"; do
+        IFS='|' read -r nic_mac nic_t _ <<< "$nic"
+        if [[ "$nic_mac" == "$mac" ]]; then
+            nic_type="$nic_t"
+            break
+        fi
+    done
     print_task "Removing NIC with MAC $mac from VM \"$qemu_kvm_hostname\"..." nskip
-    if error_msg=$(sudo virsh detach-interface "$qemu_kvm_hostname" network --mac "$mac" --config 2>&1); then
+    if error_msg=$(sudo virsh detach-interface "$qemu_kvm_hostname" "$nic_type" --mac "$mac" --config 2>&1); then
         print_task_done
         ((removed_count++))
     else
