@@ -51,10 +51,10 @@ autoinstall:
       - mkdir -p /home/get_mgmt_super_user/.ssh /root/.ssh
       - chmod 0700 /home/get_mgmt_super_user/.ssh /root/.ssh
       - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/authorized_keys -o /home/get_mgmt_super_user/.ssh/authorized_keys && cp -p /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys
-      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/kvm_lab_global_id_rsa.pub -o /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa.pub && cp -p /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa.pub /root/.ssh/kvm_lab_global_id_rsa.pub
-      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/kvm_lab_global_id_rsa -o /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa && cp -p /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa /root/.ssh/kvm_lab_global_id_rsa
-      - chmod 0600 /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa /root/.ssh/kvm_lab_global_id_rsa
-      - chmod 0644 /home/get_mgmt_super_user/.ssh/kvm_lab_global_id_rsa.pub /root/.ssh/kvm_lab_global_id_rsa.pub
+      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa.pub -o /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub && cp -p /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
+      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa -o /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa && cp -p /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
+      - chmod 0600 /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
+      - chmod 0644 /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
       - chown -R get_mgmt_super_user:get_mgmt_super_user /home/get_mgmt_super_user/.ssh
       - touch /etc/cloud/cloud-init.disabled
       - if ls /etc/netplan/*cloud* &>/dev/null;then mv /etc/netplan/*cloud* /etc/netplan/old/;fi
@@ -68,7 +68,7 @@ autoinstall:
       - get_golden_image_creation_not_requested || wget -O /etc/systemd/system/golden-boot.service http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.service
       - get_golden_image_creation_not_requested || wget -O /root/golden-boot.sh http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.sh
       - get_golden_image_creation_not_requested || ln -s /etc/systemd/system/golden-boot.service /etc/systemd/system/multi-user.target.wants/golden-boot.service
-      - mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/kvm_lab_global_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-kvm-lab-global.conf
+      - mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/tux2lab_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-tux2lab.conf
       - local_lab_info=$(echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
       - ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
       - mkdir /tux2lab /lab-share /lab-web-share

@@ -67,14 +67,14 @@ check_existing_lab_deployment() {
     fi
   
     # Check for SSH keys
-    if [[ -f "$HOME/.ssh/kvm_lab_global_id_rsa" ]]; then
-        print_warning "Lab SSH keys already exist at: $HOME/.ssh/kvm_lab_global_id_rsa"
+    if [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]]; then
+        print_warning "Lab SSH keys already exist at: $HOME/.ssh/tux2lab_id_rsa"
         found_issues=1
     fi
   
     # Check for SSH config
-    if [[ -f "/etc/ssh/ssh_config.d/999-kvm-lab-global.conf" ]]; then
-        print_warning "Lab SSH config already exists: /etc/ssh/ssh_config.d/999-kvm-lab-global.conf"
+    if [[ -f "/etc/ssh/ssh_config.d/999-tux2lab.conf" ]]; then
+        print_warning "Lab SSH config already exists: /etc/ssh/ssh_config.d/999-tux2lab.conf"
         found_issues=1
     fi
   
@@ -90,7 +90,7 @@ Re-running this script will OVERWRITE your existing setup.
         • Delete VM: sudo virsh undefine ${lab_infra_server_hostname:-lab-infra-server} --remove-all-storage
         • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
     3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
-    4. Remove SSH keys: rm -f ~/.ssh/kvm_lab_global_id_rsa*"
+    4. Remove SSH keys: rm -f ~/.ssh/tux2lab_id_rsa*"
     
         read -rp "Do you understand the risks and want to FORCE re-deployment? (yes/NO): " force_confirm
     
@@ -258,8 +258,8 @@ prepare_lab_infra_config() {
     print_info "Checking for SSH public key on local workstation..."
 
     SSH_DIR="$HOME/.ssh"
-    SSH_PRIVATE_KEY_FILE="$SSH_DIR/kvm_lab_global_id_rsa"
-    SSH_PUB_KEY_FILE="$SSH_DIR/kvm_lab_global_id_rsa.pub"
+    SSH_PRIVATE_KEY_FILE="$SSH_DIR/tux2lab_id_rsa"
+    SSH_PUB_KEY_FILE="$SSH_DIR/tux2lab_id_rsa.pub"
 
     # Ensure ~/.ssh directory exists
     if [[ ! -d "$SSH_DIR" ]]; then
@@ -394,10 +394,10 @@ prepare_lab_infra_config() {
     sudo mkdir -p /etc/ssh/ssh_config.d
 
     # Write SSH custom config (system-wide)
-    SSH_CUSTOM_CONFIG_FILE="/etc/ssh/ssh_config.d/999-kvm-lab-global.conf"
+    SSH_CUSTOM_CONFIG_FILE="/etc/ssh/ssh_config.d/999-tux2lab.conf"
     sudo tee "$SSH_CUSTOM_CONFIG_FILE" &>/dev/null <<EOF
 Host *.${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${subnets_to_allow_ssh_pub_access}
-        IdentityFile ~/.ssh/kvm_lab_global_id_rsa
+        IdentityFile ~/.ssh/tux2lab_id_rsa
         StrictHostKeyChecking no
         UserKnownHostsFile /dev/null
         LogLevel QUIET
@@ -416,7 +416,7 @@ EOF
     cat >> "$USER_SSH_CONFIG_CUSTOM" <<EOF
 # KVM Lab SSH Config - Start
 Host *.${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${subnets_to_allow_ssh_pub_access}
-        IdentityFile ~/.ssh/kvm_lab_global_id_rsa
+        IdentityFile ~/.ssh/tux2lab_id_rsa
         StrictHostKeyChecking no
         UserKnownHostsFile /dev/null
         LogLevel QUIET
