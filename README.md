@@ -102,7 +102,20 @@ curl -sSL https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest/down
 cd /tux2lab/qemu-kvm-manage/
 ```
 
-**Alternative — clone from the repository:**
+**Alternative — clone a specific release from the repository:**
+
+```bash
+sudo mkdir -p /tux2lab
+sudo chown "${USER}:$(id -g)" /tux2lab
+git clone --branch <release-tag> --depth 1 \
+  https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
+cd /tux2lab/qemu-kvm-manage/
+```
+
+> Replace `<release-tag>` with the desired version (e.g., `v0.1.0`).
+> Available tags: [Releases](https://github.com/Muthukumar-Subramaniam/tux2lab/releases)
+
+**Alternative — clone the latest development code:**
 
 ```bash
 sudo mkdir -p /tux2lab
