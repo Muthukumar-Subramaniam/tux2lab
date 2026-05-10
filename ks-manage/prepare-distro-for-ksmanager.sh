@@ -551,8 +551,8 @@ else
     fn_validate_distro "$DISTRO"
     shift
 
-    # Parse --version
-    if [[ $# -ge 2 && "$1" == "--version" ]]; then
+    # Parse --version / -v
+    if [[ $# -ge 2 && ( "$1" == "--version" || "$1" == "-v" ) ]]; then
         VERSION="$2"
         fn_validate_version "$DISTRO" "$VERSION"
     elif [[ $# -ge 1 ]]; then
