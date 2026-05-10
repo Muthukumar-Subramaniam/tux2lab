@@ -10,28 +10,52 @@
   ansible.builtin.template:
     src: kea_dhcp4_conf.j2
     dest: /etc/kea/kea-dhcp4.conf
-  notify: Restart kea-dhcp4
+
+- name: Restart kea-dhcp4
+  become: true
+  ansible.builtin.systemd_service:
+    name: kea-dhcp4
+    state: restarted
+    enabled: true
 
 - name: Configure /etc/kea/kea-dhcp6.conf
   become: true
   ansible.builtin.template:
     src: kea_dhcp6_conf.j2
     dest: /etc/kea/kea-dhcp6.conf
-  notify: Restart kea-dhcp6
+
+- name: Restart kea-dhcp6
+  become: true
+  ansible.builtin.systemd_service:
+    name: kea-dhcp6
+    state: restarted
+    enabled: true
 
 - name: Configure /etc/kea/kea-ctrl-agent.conf
   become: true
   ansible.builtin.template:
     src: kea_ctrl_agent_conf.j2
     dest: /etc/kea/kea-ctrl-agent.conf
-  notify: Restart kea-ctrl-agent
+
+- name: Restart kea-ctrl-agent
+  become: true
+  ansible.builtin.systemd_service:
+    name: kea-ctrl-agent
+    state: restarted
+    enabled: true
 
 - name: Configure /etc/radvd.conf for IPv6 Router Advertisements
   become: true
   ansible.builtin.template:
     src: radvd_conf.j2
     dest: /etc/radvd.conf
-  notify: Restart radvd
+
+- name: Restart radvd
+  become: true
+  ansible.builtin.systemd_service:
+    name: radvd
+    state: restarted
+    enabled: true
 
 - name: Enable IPv6 forwarding for radvd
   become: true

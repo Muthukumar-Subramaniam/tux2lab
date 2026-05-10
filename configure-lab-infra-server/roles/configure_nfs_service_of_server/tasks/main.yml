@@ -14,7 +14,6 @@
   ansible.builtin.template:
     src: nfs-exports.j2  
     dest: /etc/exports
-  notify: Restart nfs-server
 
 - name: Configure NFS to listen on both IPv4 and IPv6 addresses in /etc/nfs.conf
   become: true
@@ -24,13 +23,12 @@
     regexp: '^host='
     insertafter: '^\[nfsd\]$'
     backup: true
-  notify: Restart nfs-server
 
-- name: Enable and Start nfs-server service
+- name: Restart nfs-server
   become: true
   ansible.builtin.systemd_service:
     name: nfs-server
-    state: started
+    state: restarted
     enabled: true
 
 ############################# EOF ##############################
