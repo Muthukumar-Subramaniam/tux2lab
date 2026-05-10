@@ -915,12 +915,17 @@ deploy_lab_infra_server_host() {
         exit 1
     fi
 
-    # Loop through IPs 156–254 to create DHCP lease DNS entries (dual-stack A+AAAA)
-    for IPOCTET in $(seq 156 254); do
-        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -ci "dhcp-lease${IPOCTET}" "${dnsbinder_last24_subnet}.${IPOCTET}"; then
-            print_warning "Failed to create DNS record for dhcp-lease${IPOCTET}"
-        fi
-    done
+    # Check if first DHCP lease record already exists — skip entire block if so
+    if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "dhcp-lease156.${dnsbinder_domain}" 2>/dev/null | grep -q '^[0-9]'; then
+        print_info "DHCP lease DNS records already exist — skipping."
+    else
+        # Loop through IPs 156–254 to create DHCP lease DNS entries (dual-stack A+AAAA)
+        for IPOCTET in $(seq 156 254); do
+            if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -ci "dhcp-lease${IPOCTET}" "${dnsbinder_last24_subnet}.${IPOCTET}"; then
+                print_warning "Failed to create DNS record for dhcp-lease${IPOCTET}"
+            fi
+        done
+    fi
 
     print_info "Checking SELinux status..."
 
