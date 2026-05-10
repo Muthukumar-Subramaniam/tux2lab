@@ -333,9 +333,17 @@ fn_setup_distro() {
     # Download and parse checksum if available
     local has_checksum=false
     local expected_hash=""
+    # Use the real filename from the download URL for checksum lookup
+    # (e.g., ubuntu-24.04.4-live-server-amd64.iso vs the generic ISO_FILENAMES entry)
+    local checksum_lookup_name
+    if [[ -n "${iso_url:-}" ]]; then
+        checksum_lookup_name=$(basename "$iso_url")
+    else
+        checksum_lookup_name="$iso_file"
+    fi
     if [[ -n "$checksum_url" ]]; then
         if fn_download_checksum "$checksum_url" "$checksum_file"; then
-            expected_hash=$(fn_extract_expected_hash "$iso_file" "$checksum_file") || true
+            expected_hash=$(fn_extract_expected_hash "$checksum_lookup_name" "$checksum_file") || true
             if [[ -n "$expected_hash" ]]; then
                 has_checksum=true
             else
