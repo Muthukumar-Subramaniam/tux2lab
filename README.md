@@ -1,5 +1,8 @@
 # tux2lab — Build Your Own QEMU/KVM Virtual Home Lab
 
+[![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 Transform your Linux workstation into a powerful, automated virtual datacenter.
 Build and manage a virtual home lab, making it easy to deploy, break, and rebuild
 Linux VMs effortlessly. tux2lab automates VM provisioning, manages the complete
