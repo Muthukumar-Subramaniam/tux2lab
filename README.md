@@ -89,7 +89,20 @@ AlmaLinux 10 (default), Rocky Linux, Oracle Linux, CentOS Stream, RHEL — versi
 
 ### Step 1 — Get tux2lab
 
-**Clone from repository:**
+**Using the latest stable release** (recommended):
+
+```bash
+sudo mkdir -p /tux2lab
+sudo chown "${USER}:$(id -g)" /tux2lab
+git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
+cd /tux2lab
+git checkout $(git describe --tags --abbrev=0)
+cd qemu-kvm-manage/
+```
+
+This clones the repository and checks out the latest release tag.
+
+**Alternative — use the latest development code:**
 
 ```bash
 sudo mkdir -p /tux2lab
