@@ -27,10 +27,11 @@ set -euo pipefail
 readonly ISO_DIR="/${dnsbinder_server_fqdn}/iso-files"
 readonly FSTAB="/etc/fstab"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
+readonly MIN_DISK_SPACE_GB=12
 
 # ====== DEPENDENCY CHECK ======
 MISSING_COMMANDS=()
-for cmd in wget curl mountpoint sed awk grep; do
+for cmd in wget curl mountpoint sed awk grep sha256sum; do
     command -v "$cmd" &>/dev/null || MISSING_COMMANDS+=("$cmd")
 done
 if [[ ${#MISSING_COMMANDS[@]} -gt 0 ]]; then
@@ -83,6 +84,75 @@ fn_validate_version() {
         print_error "Invalid version '${version}' for ${distro}."
         print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$distro]}"
         exit 1
+    fi
+}
+
+fn_check_disk_space() {
+    local target_dir="$1"
+    local required_gb="$2"
+    local available_kb
+    available_kb=$(df --output=avail "$target_dir" 2>/dev/null | tail -1 | tr -d '[:space:]')
+    local available_gb=$(( available_kb / 1024 / 1024 ))
+    if [[ "$available_gb" -lt "$required_gb" ]]; then
+        print_error "Insufficient disk space on $target_dir"
+        print_info "Available: ${available_gb} GiB, Required: ${required_gb} GiB"
+        exit 1
+    fi
+    print_info "Disk space check passed: ${available_gb} GiB available (${required_gb} GiB required)"
+}
+
+fn_download_checksum() {
+    local checksum_url="$1"
+    local checksum_file="$2"
+
+    print_task "Downloading CHECKSUM file..."
+    rm -f "$checksum_file"
+    if ! wget --quiet --output-document="$checksum_file" "$checksum_url"; then
+        print_task_fail
+        print_error "Failed to download CHECKSUM from ${checksum_url}"
+        rm -f "$checksum_file"
+        return 1
+    fi
+    print_task_done
+    return 0
+}
+
+fn_extract_expected_hash() {
+    local iso_name="$1"
+    local checksum_file="$2"
+    local expected_hash
+    # Try common checksum formats: "SHA256 (filename) = hash" or "hash  filename"
+    expected_hash=$(grep -i "SHA256" "$checksum_file" | grep "$iso_name" | awk -F'= ' '{print $2}' | tr -d '[:space:]') || true
+    if [[ -z "$expected_hash" ]]; then
+        # Fallback: "hash  filename" format
+        expected_hash=$(grep "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
+    fi
+    if [[ -z "$expected_hash" ]]; then
+        print_error "Could not find SHA256 checksum for ${iso_name} in CHECKSUM file."
+        print_info "The CHECKSUM file format may have changed. Please verify manually."
+        return 1
+    fi
+    echo "$expected_hash"
+}
+
+fn_verify_iso() {
+    local iso_path="$1"
+    local expected_hash="$2"
+    print_info "Calculating SHA256 checksum (this may take a few minutes)..."
+    local actual_hash
+    actual_hash=$(sha256sum "$iso_path" | awk '{print $1}')
+
+    print_task "Comparing checksums"
+    if [[ "$expected_hash" == "$actual_hash" ]]; then
+        print_task_done
+        print_success "Checksum matched. ISO file is valid."
+        return 0
+    else
+        print_task_fail
+        print_error "Checksum mismatch. ISO file is corrupt or incomplete!"
+        print_info "Expected: ${expected_hash}"
+        print_info "Actual:   ${actual_hash}"
+        return 1
     fi
 }
 
@@ -187,15 +257,26 @@ fn_list_distros() {
 fn_get_iso_url() {
     local distro="$1" version="$2"
 
-    # RHEL requires manual download — prompt for URL
+    # RHEL requires manual download — prompt for URL or manual placement
     if [[ "$distro" == "rhel" ]]; then
-        print_info "Login from a browser with your Red Hat Developer Subscription!"
-        read -rp "Enter the link to download RHEL ${version} ISO: " iso_url
-        if [[ -z "$iso_url" ]]; then
-            print_error "No URL provided. Aborting."
+        local iso_file="${ISO_FILENAMES[${distro}:${version}]:-}"
+        local iso_path="${ISO_DIR}/${iso_file}"
+        print_warning "Red Hat Enterprise Linux requires an active subscription to download."
+        print_info "RHEL ISOs are not publicly downloadable. You have two options:"
+        print_info "  1. Manually download the ISO from https://developers.redhat.com/products/rhel/download"
+        print_info "     and place it at: ${iso_path}"
+        print_info "  2. Paste a direct download URL below (from your Red Hat account)"
+        echo
+        read -rp "Paste direct ISO download URL, or press Enter if you placed the ISO manually: " iso_url
+        if [[ -n "$iso_url" ]]; then
+            echo "$iso_url"
+        elif [[ -f "$iso_path" ]]; then
+            print_success "Found manually placed ISO: ${iso_path}"
+            echo ""
+        else
+            print_error "No ISO found at ${iso_path} and no download URL provided."
             exit 1
         fi
-        echo "$iso_url"
         return
     fi
 
@@ -227,6 +308,9 @@ fn_setup_distro() {
 
     local iso_path="${ISO_DIR}/${iso_file}"
     local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${version}"
+    local distro_key="${distro}:${version}"
+    local checksum_url="${CHECKSUM_URLS[$distro_key]:-}"
+    local checksum_file="${ISO_DIR}/${distro}-${version}-CHECKSUM"
 
     # Ensure ISO directory exists
     print_task "Ensuring ISO directory exists..."
@@ -234,11 +318,52 @@ fn_setup_distro() {
     sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$ISO_DIR"
     print_task_done
 
-    # Download ISO if not present
-    if [[ -f "$iso_path" ]]; then
-        print_info "ISO already exists: ${iso_path}"
+    # Download and parse checksum if available
+    local has_checksum=false
+    local expected_hash=""
+    if [[ -n "$checksum_url" ]]; then
+        if fn_download_checksum "$checksum_url" "$checksum_file"; then
+            expected_hash=$(fn_extract_expected_hash "$iso_file" "$checksum_file") || true
+            if [[ -n "$expected_hash" ]]; then
+                has_checksum=true
+            else
+                print_warning "Could not extract checksum. Will skip verification."
+            fi
+        else
+            print_warning "Could not download checksum file. Will skip verification."
+        fi
     else
-        print_info "Downloading ISO from ${iso_url}"
+        print_warning "No checksum URL configured for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}. Skipping verification."
+    fi
+
+    # Check existing ISO — verify integrity if checksum available
+    if [[ -f "$iso_path" ]]; then
+        print_info "ISO file already exists at ${iso_path}"
+        if [[ "$has_checksum" == true ]]; then
+            print_info "Verifying existing ISO integrity..."
+            if fn_verify_iso "$iso_path" "$expected_hash"; then
+                print_info "Existing ISO is valid. Skipping download."
+            else
+                print_warning "Removing corrupt ISO and re-downloading..."
+                sudo rm -f "$iso_path"
+            fi
+        else
+            print_info "No checksum available to verify. Using existing ISO."
+        fi
+    fi
+
+    # Download ISO if not present (or was removed due to corruption)
+    if [[ ! -f "$iso_path" ]]; then
+        # If ISO_URL is empty (RHEL manual placement), nothing to download
+        if [[ -z "${iso_url:-}" ]]; then
+            print_error "No ISO found and no download URL available."
+            print_info "Please place the ISO at: ${iso_path}"
+            exit 1
+        fi
+
+        fn_check_disk_space "$ISO_DIR" "$MIN_DISK_SPACE_GB"
+
+        print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
         if ! wget --continue --output-document="$iso_path" "$iso_url"; then
             print_error "Failed to download ISO from ${iso_url}"
             print_info "Cleaning up partial download..."
@@ -247,6 +372,18 @@ fn_setup_distro() {
         fi
         sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$iso_path"
         print_success "Download complete."
+
+        # Verify freshly downloaded ISO
+        if [[ "$has_checksum" == true ]]; then
+            if ! fn_verify_iso "$iso_path" "$expected_hash"; then
+                print_error "Freshly downloaded ISO failed checksum verification!"
+                print_info "Removing corrupt file. Please retry or download manually."
+                sudo rm -f "$iso_path"
+                exit 1
+            fi
+        else
+            print_warning "Checksum verification skipped — no checksum available."
+        fi
     fi
 
     # Create mount point
