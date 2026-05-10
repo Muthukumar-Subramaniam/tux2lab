@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
@@ -13,7 +14,7 @@ fn_show_help() {
 Options:
   -f, --force          Force power-off without prompt if VM is running
   -c, --count <num>    Number of NICs to add (1-10, default: 1)
-  -n, --network <name> Network/bridge to attach to (default: default)
+  -n, --network <name> Network/bridge to attach to (default: tux2lab)
   -h, --help           Show this help message
 
 Arguments:
@@ -24,7 +25,7 @@ Examples:
   tux2lab vm nic-add -f vm1                      # Force power-off if running
   tux2lab vm nic-add -c 2 vm1                    # Add 2 NICs
   tux2lab vm nic-add -n br0 vm1                  # Add NIC to specific bridge
-  tux2lab vm nic-add -f -c 3 -n default vm2       # Fully automated
+  tux2lab vm nic-add -f -c 3 -n tux2lab vm2       # Fully automated
 "
 }
 
@@ -33,7 +34,7 @@ force_poweroff=false
 vm_hostname_arg=""
 nic_count=1
 nic_count_provided=false
-network_name="default"
+network_name="tux2lab"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

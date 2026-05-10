@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
@@ -48,8 +48,8 @@ ksmanager_main_dir='/tux2lab/ks-manage'
 ksmanager_hub_dir="/${lab_infra_server_hostname}/ksmanager-hub"
 ipxe_web_dir="/${lab_infra_server_hostname}/ipxe"
 shadow_password_super_mgmt_user=$(sudo awk -F: -v user="${mgmt_super_user}" '$1 == user {print $2}' /etc/shadow)
-if [ -d "/tux2lab-data" ]; then
-    if [ -f "/tux2lab-data/lab_environment_vars" ]; then
+if [[ -d "/tux2lab-data" ]]; then
+    if [[ -f "/tux2lab-data/lab_environment_vars" ]]; then
         source /tux2lab-data/lab_environment_vars
         shadow_password_super_mgmt_user=$lab_admin_shadow_password
     fi
@@ -81,9 +81,9 @@ fn_acquire_mac_cache_lock() {
     local existing_pid=""
 
     while ! mkdir "${mac_cache_lock_dir}" 2>/dev/null; do
-        if [ -f "${mac_cache_lock_dir}/pid" ]; then
+        if [[ -f "${mac_cache_lock_dir}/pid" ]]; then
             existing_pid=$(cat "${mac_cache_lock_dir}/pid" 2>/dev/null)
-            if [ -n "${existing_pid}" ] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
                 rm -f "${mac_cache_lock_dir}/pid"
                 rmdir "${mac_cache_lock_dir}" 2>/dev/null || true
                 continue
@@ -92,7 +92,7 @@ fn_acquire_mac_cache_lock() {
 
         sleep 0.05
         retries=$((retries - 1))
-        if [ "${retries}" -le 0 ]; then
+        if [[ "${retries}" -le 0 ]]; then
             print_error "Unable to acquire mac-address-cache lock. Please retry."
             return 1
         fi
@@ -109,11 +109,11 @@ fn_release_mac_cache_lock() {
         return
     fi
 
-    if [ -f "${mac_cache_lock_dir}/pid" ]; then
+    if [[ -f "${mac_cache_lock_dir}/pid" ]]; then
         lock_pid=$(cat "${mac_cache_lock_dir}/pid" 2>/dev/null)
     fi
 
-    if [ "${lock_pid}" = "$$" ]; then
+    if [[ "${lock_pid}" = "$$" ]]; then
         rm -f "${mac_cache_lock_dir}/pid"
         rmdir "${mac_cache_lock_dir}" 2>/dev/null || true
     fi
@@ -129,7 +129,7 @@ fn_copy_mac_cache_snapshot_locked() {
         return 1
     fi
 
-    if [ -f "${mac_cache_file}" ]; then
+    if [[ -f "${mac_cache_file}" ]]; then
         if cp "${mac_cache_file}" "${snapshot_file}"; then
             snapshot_ok=true
         fi
@@ -157,9 +157,9 @@ fn_acquire_host_lock() {
     current_host_name="${host_name}"
 
     while ! mkdir "${current_host_lock_dir}" 2>/dev/null; do
-        if [ -f "${current_host_lock_dir}/pid" ]; then
+        if [[ -f "${current_host_lock_dir}/pid" ]]; then
             existing_pid=$(cat "${current_host_lock_dir}/pid" 2>/dev/null)
-            if [ -n "${existing_pid}" ] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
                 rm -f "${current_host_lock_dir}/pid"
                 rmdir "${current_host_lock_dir}" 2>/dev/null || true
                 continue
@@ -168,7 +168,7 @@ fn_acquire_host_lock() {
 
         sleep 0.05
         retries=$((retries - 1))
-        if [ "${retries}" -le 0 ]; then
+        if [[ "${retries}" -le 0 ]]; then
             print_error "Unable to acquire host lock for '${host_name}'. Please retry."
             current_host_lock_dir=""
             return 1
@@ -186,11 +186,11 @@ fn_release_host_lock() {
         return
     fi
 
-    if [ -f "${current_host_lock_dir}/pid" ]; then
+    if [[ -f "${current_host_lock_dir}/pid" ]]; then
         lock_pid=$(cat "${current_host_lock_dir}/pid" 2>/dev/null)
     fi
 
-    if [ -n "${current_host_lock_dir}" ] && [ -d "${current_host_lock_dir}" ] && [ "${lock_pid}" = "$$" ]; then
+    if [[ -n "${current_host_lock_dir}" ]] && [[ -d "${current_host_lock_dir}" ]] && [[ "${lock_pid}" = "$$" ]]; then
         rm -f "${current_host_lock_dir}/pid"
         rmdir "${current_host_lock_dir}" 2>/dev/null || true
     fi
@@ -205,9 +205,9 @@ fn_acquire_shared_artifacts_lock() {
     local existing_pid=""
 
     while ! mkdir "${shared_artifacts_lock_dir}" 2>/dev/null; do
-        if [ -f "${shared_artifacts_lock_dir}/pid" ]; then
+        if [[ -f "${shared_artifacts_lock_dir}/pid" ]]; then
             existing_pid=$(cat "${shared_artifacts_lock_dir}/pid" 2>/dev/null)
-            if [ -n "${existing_pid}" ] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
                 rm -f "${shared_artifacts_lock_dir}/pid"
                 rmdir "${shared_artifacts_lock_dir}" 2>/dev/null || true
                 continue
@@ -216,7 +216,7 @@ fn_acquire_shared_artifacts_lock() {
 
         sleep 0.05
         retries=$((retries - 1))
-        if [ "${retries}" -le 0 ]; then
+        if [[ "${retries}" -le 0 ]]; then
             print_error "Unable to acquire shared artifact lock. Please retry."
             return 1
         fi
@@ -233,11 +233,11 @@ fn_release_shared_artifacts_lock() {
         return
     fi
 
-    if [ -f "${shared_artifacts_lock_dir}/pid" ]; then
+    if [[ -f "${shared_artifacts_lock_dir}/pid" ]]; then
         lock_pid=$(cat "${shared_artifacts_lock_dir}/pid" 2>/dev/null)
     fi
 
-    if [ -d "${shared_artifacts_lock_dir}" ] && [ "${lock_pid}" = "$$" ]; then
+    if [[ -d "${shared_artifacts_lock_dir}" ]] && [[ "${lock_pid}" = "$$" ]]; then
         rm -f "${shared_artifacts_lock_dir}/pid"
         rmdir "${shared_artifacts_lock_dir}" 2>/dev/null || true
     fi
@@ -251,6 +251,7 @@ fn_release_all_locks() {
     fn_release_host_lock
 }
 
+trap 'fn_release_all_locks' EXIT
 trap 'fn_release_all_locks; trap - INT; kill -s INT $$' INT
 trap 'fn_release_all_locks; trap - TERM; kill -s TERM $$' TERM
 trap 'fn_release_all_locks; trap - HUP; kill -s HUP $$' HUP
@@ -258,7 +259,7 @@ trap 'fn_release_all_locks; trap - QUIT; kill -s QUIT $$' QUIT
 
 fn_chown_if_exists() {
     local target_path="$1"
-    if [ -e "${target_path}" ]; then
+    if [[ -e "${target_path}" ]]; then
         chown -R "${mgmt_super_user}:${mgmt_super_user}" "${target_path}"
     fi
 }
@@ -284,7 +285,7 @@ fn_check_and_create_host_record() {
     while :
     do
         # shellcheck disable=SC2162
-        if [ -z "${1}" ]
+        if [[ -z "${1}" ]]
         then
             print_info "Create kickstart host profiles for PXE boot."
             print_info "Points to keep in mind while entering the hostname:"
@@ -407,7 +408,7 @@ done
 
 # If --remove-host is requested, handle cleanup and exit
 if $remove_host_requested; then
-    if [ -z "${1}" ] || [[ "${1}" == "--remove-host" ]]; then
+    if [[ -z "${1}" ]] || [[ "${1}" == "--remove-host" ]]; then
         print_error "Hostname is required with --remove-host flag."
         print_info "Usage: sudo ksmanager hostname --remove-host"
         exit 1
@@ -450,7 +451,7 @@ if $remove_host_requested; then
     fi
 
     # 1. Snapshot and remove cache row atomically under lock
-    if [ -f "${mac_cache_file}" ]; then
+    if [[ -f "${mac_cache_file}" ]]; then
         if ! fn_acquire_mac_cache_lock; then
             fn_release_host_lock
             exit 1
@@ -478,7 +479,7 @@ if $remove_host_requested; then
     fi
     
     # 2. Remove kickstart directory
-    if [ -d "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}" ]; then
+    if [[ -d "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}" ]]; then
         rm -rf "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}"
         print_info "Removed kickstart files"
     else
@@ -487,7 +488,7 @@ if $remove_host_requested; then
     
     # 3. Remove iPXE config file
     if [[ -n "$ipxe_cfg_mac" ]]; then
-        if [ -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe" ]; then
+        if [[ -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe" ]]; then
             rm -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe"
             print_info "Removed iPXE config file (${ipxe_cfg_mac}.ipxe)"
         else
@@ -499,7 +500,7 @@ if $remove_host_requested; then
     
     # 4. Remove golden boot network config
     if [[ -n "$ipxe_cfg_mac" ]]; then
-        if [ -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}" ]; then
+        if [[ -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}" ]]; then
             rm -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}"
             print_info "Removed golden boot network config"
         else
@@ -698,7 +699,7 @@ if $golden_image_creation_not_requested; then
     ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
     
     # Query DNS for IPv6 address (if dual-stack configured)
-    if [[ ! -z "${ipv6_gateway}" ]]; then
+    if [[ -n "${ipv6_gateway}" ]]; then
         ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
     fi
 fi
@@ -783,6 +784,7 @@ done
 distro_from_flag=""
 version_from_flag=""
 mac_from_flag=""
+prev_arg=""
 for arg in "$@"; do
     if [[ "$prev_arg" == "--distro" ]]; then
         distro_from_flag="$arg"
@@ -817,7 +819,7 @@ fi
 
 print_info "Looking up MAC address for host \"${kickstart_hostname}\" from cache..."
 
-if [ ! -f "${mac_cache_file}" ]; then
+if [[ ! -f "${mac_cache_file}" ]]; then
     touch  "${mac_cache_file}"
 fi
 
@@ -927,13 +929,12 @@ fn_select_os_distro() {
         esac
     fi
     
+    while true; do
     # If distro not set via flag, show interactive distro selection menu
     if [[ -z "${os_distribution}" ]]; then
-        local -a distro_keys=("almalinux" "rocky" "oraclelinux" "centos-stream" "rhel" "ubuntu-lts" "opensuse-leap")
-        
         local menu="Please select the OS distribution to install:\n"
-        for i in "${!distro_keys[@]}"; do
-            local key="${distro_keys[$i]}"
+        for i in "${!DISTRO_KEYS[@]}"; do
+            local key="${DISTRO_KEYS[$i]}"
             local name="${DISTRO_DISPLAY_NAMES[$key]}"
             local versions="${DISTRO_AVAILABLE_VERSIONS[$key]}"
             printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${name}" "${versions}"
@@ -945,17 +946,13 @@ fn_select_os_distro() {
         echo -n "Enter option number: "
         read distro_choice
 
-        case "${distro_choice}" in
-            1 ) os_distribution="almalinux" ;;
-            2 ) os_distribution="rocky" ;;
-            3 ) os_distribution="oraclelinux" ;;
-            4 ) os_distribution="centos-stream" ;;
-            5 ) os_distribution="rhel" ;;
-            6 ) os_distribution="ubuntu-lts" ;;
-            7 ) os_distribution="opensuse-leap" ;;
-            q | Q )  print_info "Operation cancelled by user."; exit 130 ;;
-            * ) print_error "Invalid option. Please try again."; fn_select_os_distro; return ;;
-        esac
+        if [[ "${distro_choice}" == "q" || "${distro_choice}" == "Q" ]]; then
+            print_info "Operation cancelled by user."; exit 130
+        elif [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#DISTRO_KEYS[@]} )); then
+            os_distribution="${DISTRO_KEYS[$((distro_choice-1))]}"
+        else
+            print_error "Invalid option. Please try again."; continue
+        fi
     fi
 
     # Select version (if not set via --version flag)
@@ -982,8 +979,8 @@ fn_select_os_distro() {
         else
             print_error "Invalid option. Please try again."
             version=""
-            fn_select_os_distro
-            return
+            os_distribution=""
+            continue
         fi
     else
         # Validate the version from --version flag
@@ -994,6 +991,9 @@ fn_select_os_distro() {
         fi
     fi
     
+    break
+    done
+
     print_info "OS distribution selected: ${os_distribution} ${version}"
 }
 fn_select_os_distro
@@ -1047,7 +1047,7 @@ if ! $golden_image_creation_not_requested; then
     ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
     
     # Query DNS for IPv6 address (if dual-stack configured)
-    if [[ ! -z "${ipv6_gateway}" ]]; then
+    if [[ -n "${ipv6_gateway}" ]]; then
         ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}')
     fi
     
@@ -1121,11 +1121,6 @@ if $invoked_with_golden_image; then
     fi
 fi
 
-# shellcheck disable=SC2044
-escape_sed_replacement() {
-    printf '%s' "$1" | sed -e 's/[\/&$.*[\]^(){}|?+\\]/\\&/g'
-}
-
 fn_set_environment() {
     local input_dir_or_file="${1}"
     local working_file=
@@ -1169,13 +1164,13 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_ipv4_domain" "${ipv4_domain}"
         
         # IPv6 replacements (if configured)
-        if [[ ! -z "${ipv6_address}" ]]; then
+        if [[ -n "${ipv6_address}" ]]; then
             fn_replace_token_in_file "${working_file}" "get_ipv6_address" "${ipv6_address}"
             fn_replace_token_in_file "${working_file}" "get_ipv6_gateway" "${ipv6_gateway}"
             fn_replace_token_in_file "${working_file}" "get_ipv6_prefix" "${ipv6_prefix}"
         fi
         # Always replace IPv6 nameserver if configured
-        if [[ ! -z "${ipv6_nameserver}" ]]; then
+        if [[ -n "${ipv6_nameserver}" ]]; then
             fn_replace_token_in_file "${working_file}" "get_ipv6_nameserver" "${ipv6_nameserver}"
         fi
         fn_replace_token_in_file "${working_file}" "get_hostname" "${kickstart_short_hostname}"
@@ -1198,13 +1193,13 @@ fn_set_environment() {
         ' "${working_file}" > "${working_file}"_tmp_ksmanager && mv "${working_file}"_tmp_ksmanager "${working_file}"
     }
 
-    if [ -d "${input_dir_or_file}" ]
+    if [[ -d "${input_dir_or_file}" ]]
     then
         while IFS= read -r -d '' working_file; do
             fn_update_dynamic_parameters "${working_file}"
         done < <(find "${input_dir_or_file}" -type f -print0)
 
-    elif [ -f "${input_dir_or_file}" ]
+    elif [[ -f "${input_dir_or_file}" ]]
     then
         working_file="${input_dir_or_file}"
         fn_update_dynamic_parameters "${working_file}"
@@ -1270,7 +1265,7 @@ fn_update_kea_dhcp_reservations() {
         rm -f "${kea_cache_file}.tmp.$$"
     fi
 
-    if [ -f "${kea_cache_file}" ]; then
+    if [[ -f "${kea_cache_file}" ]]; then
         if ! cp "${kea_cache_file}" "${kea_cache_snapshot}"; then
             fn_release_mac_cache_lock
             print_task_fail

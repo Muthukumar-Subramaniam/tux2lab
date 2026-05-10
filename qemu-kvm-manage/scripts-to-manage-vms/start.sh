@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: start.sh                                                             #
 # Description: Start the KVM lab infrastructure and verify essential services            #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
@@ -46,7 +47,7 @@ when_lab_infra_server_is_host() {
     local bridge_creation_timeout_seconds=30
     local bridge_creation_elapsed_seconds=0
     until ip link show "$lab_bridge_interface_name" &>/dev/null; do
-        if [ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]; then
+        if [[ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]]; then
             print_task_fail
             print_error "Timeout waiting for $lab_bridge_interface_name"
             return 1
@@ -72,7 +73,7 @@ when_lab_infra_server_is_host() {
     local bridge_up_timeout_seconds=30
     local bridge_up_elapsed_seconds=0
     while ! ip link show "$lab_bridge_interface_name" 2>/dev/null | grep -q 'state UP'; do
-        if [ $bridge_up_elapsed_seconds -ge $bridge_up_timeout_seconds ]; then
+        if [[ $bridge_up_elapsed_seconds -ge $bridge_up_timeout_seconds ]]; then
             print_task_fail
             print_error "Timeout waiting for $lab_bridge_interface_name to come up"
             return 1
@@ -143,7 +144,7 @@ when_lab_infra_server_is_host() {
         fi
     done
     
-    if [ ${#failed_services_list[@]} -eq 0 ]; then
+    if [[ ${#failed_services_list[@]} -eq 0 ]]; then
         print_success "All lab services restarted successfully"
     else
         print_warning "Some services failed: ${failed_services_list[*]}"
@@ -193,7 +194,7 @@ when_lab_infra_server_is_vm() {
     local bridge_creation_timeout_seconds=30
     local bridge_creation_elapsed_seconds=0
     until ip link show "$lab_bridge_interface_name" &>/dev/null; do
-        if [ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]; then
+        if [[ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]]; then
             print_task_fail
             print_error "Timeout waiting for $lab_bridge_interface_name"
             return 1
@@ -226,17 +227,19 @@ when_lab_infra_server_is_vm() {
     local ssh_check_interval=5
     local vm_is_ssh_accessible=false
     
-    local ssh_connection_options="-o StrictHostKeyChecking=no \
-                                   -o UserKnownHostsFile=/dev/null \
-                                   -o LogLevel=QUIET \
-                                   -o ConnectTimeout=5 \
-                                   -o ConnectionAttempts=1 \
-                                   -o ServerAliveInterval=5 \
-                                   -o PreferredAuthentications=publickey \
-                                   -o ServerAliveCountMax=1"
+    local ssh_connection_options=(
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=QUIET
+        -o ConnectTimeout=5
+        -o ConnectionAttempts=1
+        -o ServerAliveInterval=5
+        -o PreferredAuthentications=publickey
+        -o ServerAliveCountMax=1
+    )
     
     while [[ $ssh_check_elapsed -lt $ssh_check_timeout ]]; do
-        if ssh $ssh_connection_options "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
+        if ssh "${ssh_connection_options[@]}" "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
            'systemctl is-system-running' >/dev/null 2>&1 </dev/null; then
             vm_is_ssh_accessible=true
             break
@@ -287,13 +290,14 @@ when_lab_infra_server_is_vm() {
     for entry in "${services_to_check[@]}"; do
         IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
         
+        local check_result=1
         if [[ "$service_proto" == "udp" ]]; then
-            nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null
+            nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
         else
-            nc -z -w 3 "$service_address" "$service_port" &>/dev/null
+            nc -z -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
         fi
         
-        if [[ $? -eq 0 ]]; then
+        if [[ $check_result -eq 0 ]]; then
             printf "\033[0;36m[ \033[0;32m✓\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
             ((active_services++))
         else

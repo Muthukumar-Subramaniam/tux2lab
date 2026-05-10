@@ -1,0 +1,33 @@
+server {
+    listen {{ ansible_facts.env.dnsbinder_server_ipv4_address }}:80;
+    listen [{{ ansible_facts.env.dnsbinder_server_ipv6_address }}]:80;
+    server_name {{ ansible_facts.env.dnsbinder_server_fqdn }};
+
+    root /{{ ansible_facts.env.dnsbinder_server_fqdn }};
+
+    autoindex on;              # show directory listing
+    autoindex_exact_size off;  # human-readable sizes
+    autoindex_localtime on;    # show local time instead of UTC
+    include /etc/nginx/mime.types;
+    default_type text/plain;
+}
+
+server {
+    listen {{ ansible_facts.env.dnsbinder_server_ipv4_address }}:443 ssl;
+    listen [{{ ansible_facts.env.dnsbinder_server_ipv6_address }}]:443 ssl;
+    server_name {{ ansible_facts.env.dnsbinder_server_fqdn }};
+
+    ssl_certificate /etc/pki/tls/certs/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.crt;
+    ssl_certificate_key /etc/pki/tls/private/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
+    ssl_prefer_server_ciphers on;
+
+    root /{{ ansible_facts.env.dnsbinder_server_fqdn }};
+
+    autoindex on;              # show directory listing
+    autoindex_exact_size off;  # human-readable sizes
+    autoindex_localtime on;    # show local time instead of UTC
+    include /etc/nginx/mime.types;
+    default_type text/plain;
+}

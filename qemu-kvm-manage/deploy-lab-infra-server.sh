@@ -3,7 +3,7 @@
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
-# Script Name : deploy_lab_infra_server.sh
+# Script Name : deploy-lab-infra-server.sh
 # Description : Interactive script to deploy the Lab Infra Server
 #               on either a dedicated KVM VM or directly on the KVM host.
 
@@ -11,6 +11,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 source /tux2lab/common-utils/color-functions.sh
+source /tux2lab/ks-manage/distro-versions.conf
 
 # Check if lab environment is already deployed
 check_existing_lab_deployment() {
@@ -115,7 +116,6 @@ Continuing may overwrite existing SSH keys or configuration."
 
 prepare_lab_infra_config() {
     print_info "Preparing general Lab Infra configuration..."
-    print_info "Common configuration steps go here..."
     local vendored_virt_manager_dir="/tux2lab/vendor/virt-manager"
 
     # Pre-flight environment checks
@@ -133,17 +133,38 @@ prepare_lab_infra_config() {
         exit 1
     fi
 
-    # ISO setup
+    # ISO setup — look for the marker file written by download-infra-server-iso.sh
     ISO_DIR="/tux2lab-data/iso-files"
-    ISO_NAME="AlmaLinux-10-latest-x86_64-dvd.iso"
+    INFRA_ISO_MARKER="${ISO_DIR}/infra-server-iso"
+    INFRA_DISTRO_MARKER="${ISO_DIR}/infra-server-distro"
+    ISO_NAME=""
+    INFRA_DISTRO=""
 
-    if [[ ! -f "${ISO_DIR}/${ISO_NAME}" ]]; then
-        print_error "ISO file not found: ${ISO_DIR}/${ISO_NAME}"
-        print_info "Please download it using the script \033[1mdownload-almalinux-latest.sh\033[0m"
+    if [[ -f "$INFRA_ISO_MARKER" ]]; then
+        ISO_NAME=$(< "$INFRA_ISO_MARKER")
+        # Validate the marker points to an actual file
+        if [[ ! -f "${ISO_DIR}/${ISO_NAME}" ]]; then
+            print_error "Marker references ${ISO_NAME} but file not found in ${ISO_DIR}/"
+            print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
+            exit 1
+        fi
+    else
+        print_error "No infra server ISO has been downloaded yet."
+        print_info "Please run: \033[1mdownload-infra-server-iso.sh\033[0m"
+        print_info "Supported: AlmaLinux, Rocky Linux, Oracle Linux, CentOS Stream, RHEL"
         exit 1
     fi
 
-    print_info "ISO file found: ${ISO_DIR}/${ISO_NAME}"
+    # Read the distro name written by download-infra-server-iso.sh
+    if [[ -f "$INFRA_DISTRO_MARKER" ]]; then
+        INFRA_DISTRO=$(< "$INFRA_DISTRO_MARKER")
+    else
+        print_error "No infra server distro marker found."
+        print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
+        exit 1
+    fi
+
+    print_info "ISO file found: ${ISO_DIR}/${ISO_NAME} (${INFRA_DISTRO} ${INFRA_SERVER_VERSION})"
 
     default_linux_distro_iso_path="${ISO_DIR}/${ISO_NAME}"
 
@@ -303,13 +324,12 @@ prepare_lab_infra_config() {
         print_info "KVM Lab Infra SSH public key already present in authorized_keys."
     fi
     # Print confirmation
-    print_info "Lab Infra SSH public key is ready for user \033[1m${lab_infra_admin_username}\033[0m on domain \033[1m${lab_infra_domain_name}\033[0m:"
-    echo "\033[1m${lab_infra_ssh_public_key}\033[0m"
+    print_info "Lab Infra SSH public key is ready for user \033[1m${lab_infra_admin_username}\033[0m on domain \033[1m${lab_infra_domain_name}\033[0m"
 
     # Capture network info from QEMU-KVM default bridge
     print_task "Capturing network info from QEMU-KVM default network bridge"
 
-    qemu_kvm_default_net_info=$(sudo virsh net-dumpxml default 2>/dev/null) || {
+    qemu_kvm_default_net_info=$(sudo virsh net-dumpxml tux2lab 2>/dev/null) || {
         print_error "Failed to get network info from virsh"
         exit 1
     }
@@ -455,8 +475,10 @@ EOF
 
     print_task "Updating /etc/hosts for ${lab_infra_server_hostname}"
 
-    # Remove any existing entry
-    sudo sed -i.bak "/${lab_infra_server_hostname}/d" /etc/hosts 
+    # Remove any existing entry (escape dots for regex safety)
+    local escaped_hostname
+    escaped_hostname=$(printf '%s' "${lab_infra_server_hostname}" | sed 's/\./\\./g')
+    sudo sed -i.bak "/${escaped_hostname}/d" /etc/hosts 
 
     # Add dual-stack entries
     echo "${lab_infra_server_ipv4_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts &>/dev/null
@@ -467,6 +489,10 @@ EOF
     LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
 
     print_info "Saving Lab Environment variables to: $LAB_ENV_VARS_FILE..."
+
+    # Create file with secure permissions before writing sensitive data (shadow password, SSH keys)
+    touch "$LAB_ENV_VARS_FILE"
+    chmod 600 "$LAB_ENV_VARS_FILE"
 
 tee "$LAB_ENV_VARS_FILE" &>/dev/null <<EOF
 lab_infra_server_hostname="${lab_infra_server_hostname}"
@@ -484,13 +510,6 @@ lab_infra_server_ipv6_prefix="${lab_infra_server_ipv6_prefix}"
 lab_infra_server_ipv6_ula_subnet="${lab_infra_server_ipv6_ula_subnet}"
 lab_infra_server_ipv6_address="${lab_infra_server_ipv6_address}"
 EOF
-
-    if [[ $? -ne 0 ]]; then
-        print_error "Failed to write lab environment file"
-        exit 1
-    fi
-
-    chmod 600 "$LAB_ENV_VARS_FILE"
 
     print_success "Lab environment variables saved successfully."
 
@@ -539,14 +558,14 @@ deploy_lab_infra_server_vm() {
 
     print_task "Mounting ISO ${ISO_DIR}/${ISO_NAME} for VM installation"
 
-    sudo mkdir -p /mnt/iso-for-${lab_infra_server_hostname}
+    sudo mkdir -p "/mnt/iso-for-${lab_infra_server_hostname}"
     
     # Check if ISO is already mounted
-    if mountpoint -q /mnt/iso-for-${lab_infra_server_hostname}; then
+    if mountpoint -q "/mnt/iso-for-${lab_infra_server_hostname}"; then
         print_task_skip
         print_warning "ISO already mounted at /mnt/iso-for-${lab_infra_server_hostname}, skipping mount..."
     else
-        sudo mount -o loop "${ISO_DIR}/${ISO_NAME}" /mnt/iso-for-${lab_infra_server_hostname} &>/dev/null
+        sudo mount -o loop "${ISO_DIR}/${ISO_NAME}" "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null
         print_task_done
     fi
 
@@ -557,18 +576,22 @@ deploy_lab_infra_server_vm() {
 
     KS_FILE="${VM_DIR}/${lab_infra_server_hostname}_ks.cfg"
 
-    cp -f almalinux-template-ks.cfg "${KS_FILE}" 
+    cp -f /tux2lab/qemu-kvm-manage/infra-server-ks-template.cfg "${KS_FILE}" 
 
-    sed -i "s/get_ipv4_address/${lab_infra_server_ipv4_address}/g" "${KS_FILE}"
-    sed -i "s/get_ipv4_netmask/${lab_infra_server_ipv4_netmask}/g" "${KS_FILE}"
-    sed -i "s/get_ipv4_gateway/${lab_infra_server_ipv4_gateway}/g" "${KS_FILE}"
-    sed -i "s/get_ipv6_address/${lab_infra_server_ipv6_address}/g" "${KS_FILE}"
-    sed -i "s/get_ipv6_gateway/${lab_infra_server_ipv6_gateway}/g" "${KS_FILE}"
-    sed -i "s/get_ipv6_prefix/${lab_infra_server_ipv6_prefix}/g" "${KS_FILE}"
-    sed -i "s/get_mgmt_super_user/${lab_infra_admin_username}/g" "${KS_FILE}"
-    sed -i "s/get_infra_server_name/${lab_infra_server_hostname}/g" "${KS_FILE}"
-    sed -i "s/get_lab_infra_domain_name/${lab_infra_domain_name}/g" "${KS_FILE}"
-    sed -i "s/get_subnets_to_allow_ssh_pub_access/${subnets_to_allow_ssh_pub_access}/g" "${KS_FILE}"
+    sed -i \
+        -e "s/get_ipv4_address/${lab_infra_server_ipv4_address}/g" \
+        -e "s/get_ipv4_netmask/${lab_infra_server_ipv4_netmask}/g" \
+        -e "s/get_ipv4_gateway/${lab_infra_server_ipv4_gateway}/g" \
+        -e "s/get_ipv6_address/${lab_infra_server_ipv6_address}/g" \
+        -e "s/get_ipv6_gateway/${lab_infra_server_ipv6_gateway}/g" \
+        -e "s/get_ipv6_prefix/${lab_infra_server_ipv6_prefix}/g" \
+        -e "s/get_mgmt_super_user/${lab_infra_admin_username}/g" \
+        -e "s/get_infra_server_name/${lab_infra_server_hostname}/g" \
+        -e "s/get_lab_infra_domain_name/${lab_infra_domain_name}/g" \
+        -e "s/get_subnets_to_allow_ssh_pub_access/${subnets_to_allow_ssh_pub_access}/g" \
+        -e "s/get_infra_server_distro/${INFRA_DISTRO}/g" \
+        -e "s/get_infra_server_version/${INFRA_SERVER_VERSION}/g" \
+        "${KS_FILE}"
 
     awk -v val="$lab_admin_shadow_password" '{ gsub(/get_shadow_password_super_mgmt_user/, val) } 1' \
             "${KS_FILE}" > "${KS_FILE}"_tmp_ksmanager && mv "${KS_FILE}"_tmp_ksmanager "${KS_FILE}" || { print_error "Failed to update shadow password in kickstart"; exit 1; }
@@ -608,8 +631,8 @@ deploy_lab_infra_server_vm() {
         --vcpus 2 \
         --disk path="${VM_DIR}/${lab_infra_server_hostname}.qcow2",size=30,bus=virtio \
         --disk path="$ISO_DIR/$ISO_NAME",device=cdrom,bus=sata \
-        --os-variant almalinux9 \
-        --network network=default,model=virtio \
+        --os-variant detect=on,require=off \
+        --network network=tux2lab,model=virtio \
         --initrd-inject="${KS_FILE}" \
         --location "/mnt/iso-for-${lab_infra_server_hostname}" \
         --extra-args "inst.ks=file:/${lab_infra_server_hostname}_ks.cfg inst.stage2=cdrom inst.repo=cdrom console=ttyS0 nomodeset inst.text quiet" \
@@ -633,9 +656,10 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     fi
 
     # Cleanup ISO mount
-    sudo umount -l /mnt/iso-for-${lab_infra_server_hostname} &>/dev/null
+    sudo umount -l "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
+    sudo rmdir "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
 
-    exit
+    exit 0
 }
 
 deploy_lab_infra_server_host() {
@@ -708,7 +732,7 @@ deploy_lab_infra_server_host() {
     local bridge_creation_timeout_seconds=30
     local bridge_creation_elapsed_seconds=0
     until ip link show "$lab_bridge_interface_name" &>/dev/null; do
-        if [ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]; then
+        if [[ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]]; then
             print_error "Timeout waiting for $lab_bridge_interface_name"
             exit 1
         fi
@@ -735,7 +759,7 @@ deploy_lab_infra_server_host() {
     local bridge_up_timeout_seconds=30
     local bridge_up_elapsed_seconds=0
     while ! ip link show "$lab_bridge_interface_name" 2>/dev/null | grep -q 'state UP'; do
-        if [ $bridge_up_elapsed_seconds -ge $bridge_up_timeout_seconds ]; then
+        if [[ $bridge_up_elapsed_seconds -ge $bridge_up_timeout_seconds ]]; then
             print_error "Timeout waiting for $lab_bridge_interface_name to come up"
             exit 1
         fi
@@ -796,7 +820,7 @@ deploy_lab_infra_server_host() {
         print_success "Ansible installation completed successfully."
     fi
 
-    ansible-galaxy collection install -r /tux2lab/build-almalinux-server/requirements.yml
+    ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml
 
     # ---------------------------
     # Lab Infra DNS configuration
@@ -832,6 +856,14 @@ deploy_lab_infra_server_host() {
         echo "default_linux_distro_iso_path=\"${default_linux_distro_iso_path}\"" | sudo tee -a /etc/environment &>/dev/null
     fi
 
+    # Set infra server distro and version in environment (for Ansible mount point)
+    if ! grep -q infra_server_distro /etc/environment; then
+        echo "infra_server_distro=\"${INFRA_DISTRO}\"" | sudo tee -a /etc/environment &>/dev/null
+    fi
+    if ! grep -q infra_server_version /etc/environment; then
+        echo "infra_server_version=\"${INFRA_SERVER_VERSION}\"" | sudo tee -a /etc/environment &>/dev/null
+    fi
+
     # Backup environment file
     sudo cp -p /etc/environment "/root/environment_bkp_$(date +%F)" || {
         print_warning "Failed to backup /etc/environment"
@@ -839,7 +871,7 @@ deploy_lab_infra_server_host() {
 
     # Reload environment to include new variables
     # Export all variables from /etc/environment
-    if [ -f /etc/environment ]; then
+    if [[ -f /etc/environment ]]; then
         while IFS='=' read -r key value; do
             # Ignore empty lines or lines without '='
             [[ -z "$key" || -z "$value" ]] && continue
@@ -878,12 +910,11 @@ deploy_lab_infra_server_host() {
 
     print_info "Executing Ansible playbook to configure Lab Infra Services..."
 
-    sed -i "/remote_user/c\\remote_user=${lab_infra_admin_username}" /tux2lab/build-almalinux-server/ansible.cfg
+    export ANSIBLE_REMOTE_USER="${lab_infra_admin_username}"
+    ANSIBLE_HOME="/tux2lab/configure-lab-infra-server/"
 
-    ANSIBLE_HOME="/tux2lab/build-almalinux-server/"
-
-    # Run ansible-playbook that congigures the essential services
-    if ! ansible-playbook /tux2lab/build-almalinux-server/build-server.yaml; then
+    # Run ansible-playbook that configures the essential services
+    if ! ansible-playbook /tux2lab/configure-lab-infra-server/configure-lab-infra-server.yaml; then
         print_error "Ansible playbook execution failed"
         exit 1
     fi

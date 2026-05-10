@@ -8,9 +8,10 @@
 #   ./lab-rootfs-extender [remote-host/localhost]
 
 source /tux2lab/common-utils/color-functions.sh
+set -euo pipefail
 
 # --- Config ---
-SSH_OPTS="-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SSH_OPTS=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 SCRIPT_LOCATION="/tux2lab/common-utils/lab-rootfs-extender"
 
 # ----------------------
@@ -28,15 +29,15 @@ fi
 # ----------------------
 if [[ "$REMOTE_HOST" != "localhost" ]]; then
     print_task "Checking SSH connectivity to $REMOTE_HOST..."
-    if ! ssh $SSH_OPTS "$REMOTE_HOST" "true" >/dev/null 2>&1; then
+    if ! ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "true" >/dev/null 2>&1; then
         print_task_fail
         print_error "SSH connection to $REMOTE_HOST failed. Ensure SSH access works."
         exit 1
     fi
     print_task_done
 
-    ssh $SSH_OPTS -t "$REMOTE_HOST" "sudo bash $SCRIPT_LOCATION localhost"
-    exit 0
+    ssh "${SSH_OPTS[@]}" -t "$REMOTE_HOST" "sudo bash $SCRIPT_LOCATION localhost"
+    exit $?
 fi
 
 # ----------------------
@@ -54,10 +55,14 @@ fn_get_growpart() {
         if ! sudo ln -s /tux2lab/common-utils/growpart /usr/bin/growpart 2>/dev/null; then
             print_task_fail
             print_task "Downloading growpart from official repository..."
-            if ! sudo curl -fsSL -o /usr/bin/growpart https://raw.githubusercontent.com/canonical/cloud-utils/main/bin/growpart 2>/dev/null; then
+            local tmp_growpart
+            tmp_growpart=$(mktemp)
+            if ! curl -fsSL -o "$tmp_growpart" https://raw.githubusercontent.com/canonical/cloud-utils/main/bin/growpart 2>/dev/null; then
+                rm -f "$tmp_growpart"
                 print_task_fail
                 return 1
             fi
+            sudo mv "$tmp_growpart" /usr/bin/growpart
             sudo chmod +x /usr/bin/growpart
             print_task_done
             return 0
@@ -94,6 +99,11 @@ if [[ "$ROOT_DEV" =~ ^/dev/mapper/ ]]; then
     DISK="/dev/$(lsblk -no pkname "$PV_PATH" | sort | head -n1 | tr -d '[:space:]')"
     # Extract partition number from device name (e.g., /dev/vda3 -> 3, /dev/nvme0n1p3 -> 3)
     PART_NUM=$(echo "$PV_PATH" | grep -o '[0-9]*$')
+
+    if [[ -z "$DISK" || "$DISK" == "/dev/" || -z "$PART_NUM" ]]; then
+        print_error "Failed to determine disk or partition number from PV path: $PV_PATH"
+        exit 1
+    fi
 
     if fn_get_growpart; then
         print_task "Growing partition $PV_PATH..."
@@ -133,6 +143,11 @@ else
     DISK="/dev/$(lsblk -no pkname "$ROOT_DEV" | sort | head -n1 | tr -d '[:space:]')"
     # Extract partition number from device name (e.g., /dev/vda3 -> 3, /dev/nvme0n1p3 -> 3)
     PART_NUM=$(echo "$ROOT_DEV" | grep -o '[0-9]*$')
+
+    if [[ -z "$DISK" || "$DISK" == "/dev/" || -z "$PART_NUM" ]]; then
+        print_error "Failed to determine disk or partition number from root device: $ROOT_DEV"
+        exit 1
+    fi
 
     print_info "Disk: $DISK, Partition: $PART_NUM"
 

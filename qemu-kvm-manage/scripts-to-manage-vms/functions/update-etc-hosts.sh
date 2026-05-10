@@ -12,9 +12,10 @@ update_etc_hosts() {
 
     print_task "Updating ${hosts_file} file for ${hostname} (dual-stack)..."
 
-    # Remove any existing entries for this hostname
+    # Remove any existing entries for this hostname (escape dots for regex)
+    local escaped_hostname="${hostname//./\\.}"
     if grep -q "${hostname}" "$hosts_file"; then
-        if ! error_msg=$(sudo sed -i.bak "/${hostname}/d" "$hosts_file" 2>&1); then
+        if ! error_msg=$(sudo sed -i.bak "/[[:space:]]${escaped_hostname}$/d" "$hosts_file" 2>&1); then
             print_task_fail
             print_error "$error_msg"
             return 1

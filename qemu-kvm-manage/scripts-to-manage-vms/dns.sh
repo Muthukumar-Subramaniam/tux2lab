@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: dns.sh                                                               #
 # Description: Manage DNS records for the KVM lab infrastructure                         #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
@@ -45,7 +46,7 @@ else
     file_based_option=""
     file_path=""
     
-    if [[ "$1" == "-cf" ]] || [[ "$1" == "-df" ]]; then
+    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "-df" ]]; }; then
         file_based_option="$1"
         file_path="$2"
         

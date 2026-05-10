@@ -1,0 +1,36 @@
+---
+# tasks file for configure_nfs_service_of_server
+- name: Create /lab-share with necessary ownership and permissions
+  become: true
+  ansible.builtin.file:
+    path: /lab-share
+    state: directory
+    mode: '2770'
+    owner: "{{ ansible_facts.env.mgmt_super_user }}"
+    group: "{{ ansible_facts.env.mgmt_super_user }}"
+
+- name: Create custom exports under /etc/exports
+  become: true
+  ansible.builtin.template:
+    src: nfs-exports.j2  
+    dest: /etc/exports
+  notify: Restart nfs-server
+
+- name: Configure NFS to listen on both IPv4 and IPv6 addresses in /etc/nfs.conf
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/nfs.conf
+    line: "host={{ ansible_facts.env.dnsbinder_server_ipv4_address }},{{ ansible_facts.env.dnsbinder_server_ipv6_address }}"
+    regexp: '^host='
+    insertafter: '^\[nfsd\]$'
+    backup: true
+  notify: Restart nfs-server
+
+- name: Enable and Start nfs-server service
+  become: true
+  ansible.builtin.systemd_service:
+    name: nfs-server
+    state: started
+    enabled: true
+
+############################# EOF ##############################

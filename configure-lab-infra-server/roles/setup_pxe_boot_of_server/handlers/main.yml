@@ -1,0 +1,25 @@
+---
+# handlers file for setup_pxe_boot_of_server
+- name: Restart kea-dhcp4
+  become: true
+  ansible.builtin.systemd_service:
+    name: kea-dhcp4
+    state: restarted
+
+- name: Restart kea-dhcp6
+  become: true
+  ansible.builtin.systemd_service:
+    name: kea-dhcp6
+    state: restarted
+
+- name: Restart kea-ctrl-agent
+  become: true
+  ansible.builtin.systemd_service:
+    name: kea-ctrl-agent
+    state: restarted
+
+- name: Restart radvd
+  become: true
+  ansible.builtin.systemd_service:
+    name: radvd
+    state: restarted

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name : prepare-distro-for-ksmanager.sh
 # Description : Manage OS distribution ISOs for PXE provisioning on the lab infra server
@@ -27,7 +27,6 @@ set -euo pipefail
 readonly ISO_DIR="/${dnsbinder_server_fqdn}/iso-files"
 readonly FSTAB="/etc/fstab"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
-readonly DISTRO_KEYS=("almalinux" "rocky" "oraclelinux" "centos-stream" "rhel" "ubuntu-lts" "opensuse-leap")
 
 # ====== DEPENDENCY CHECK ======
 MISSING_COMMANDS=()
@@ -91,6 +90,7 @@ fn_validate_version() {
 fn_select_distro() {
     local action_title="$1"
 
+    while true; do
     local menu="Please select the OS distribution to ${action_title}:\n"
     for i in "${!DISTRO_KEYS[@]}"; do
         local key="${DISTRO_KEYS[$i]}"
@@ -110,16 +110,19 @@ fn_select_distro() {
 
     if [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#DISTRO_KEYS[@]} )); then
         DISTRO="${DISTRO_KEYS[$((distro_choice-1))]}"
+        break
     else
         print_error "Invalid option. Please try again."
-        fn_select_distro "$action_title"
+        continue
     fi
+    done
 }
 
 fn_select_version() {
     local distro="$1"
     local available_versions=(${DISTRO_AVAILABLE_VERSIONS[$distro]})
 
+    while true; do
     local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$distro]}:\n"
     for i in "${!available_versions[@]}"; do
         local ver="${available_versions[$i]}"
@@ -145,10 +148,12 @@ fn_select_version() {
 
     if [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
         VERSION="${available_versions[$((version_choice-1))]}"
+        break
     else
         print_error "Invalid option. Please try again."
-        fn_select_version "$distro"
+        continue
     fi
+    done
 }
 
 # ====== LIST ======

@@ -3,7 +3,7 @@
 allow_self_reference_mode="${2:-}"
 
 # Use first argument or prompt for hostname
-if [ -n "$1" ]; then
+if [[ -n "$1" ]]; then
     qemu_kvm_hostname="$1"
 else
     read -rp "Please enter the hostname of the VM: " qemu_kvm_hostname

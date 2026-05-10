@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
@@ -112,7 +113,7 @@ mkdir -p /tux2lab-data/golden-images-disk-store
 golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
 
 # Check if golden image already exists
-if [ -f "${golden_image_path}" ]; then
+if [[ -f "${golden_image_path}" ]]; then
     print_warning "Golden image \"${qemu_kvm_hostname}\" already exists!"
     read -p "Do you want to delete and recreate it? (yes/no): " answer
     echo -ne "\033[1A\033[2K"  # Move up one line and clear it
@@ -154,7 +155,7 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --vcpus 2 \
     --disk path=${DISK_PATH},size=20,bus=virtio,boot.order=1 \
     --os-variant almalinux9 \
-    --network network=default,model=virtio,mac=${GENERATED_MAC},boot.order=2 \
+    --network network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2 \
     --graphics none \
     --console pty,target_type=serial \
     --machine q35 \

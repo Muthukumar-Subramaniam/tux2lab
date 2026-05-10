@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
@@ -96,7 +97,7 @@ remove_vm() {
     print_task_done
     
     # Remove VM directory
-    if [ -n "$vm_name" ] && [ -d "/tux2lab-data/vms/$vm_name" ]; then
+    if [[ -n "$vm_name" ]] && [[ -d "/tux2lab-data/vms/$vm_name" ]]; then
         print_task "Removing VM directory..."
         if sudo rm -rf "/tux2lab-data/vms/$vm_name" 2>/dev/null; then
             print_task_done
@@ -106,10 +107,11 @@ remove_vm() {
         fi
     fi
     
-    # Remove from /etc/hosts
-    if grep -q "$vm_name" "$ETC_HOSTS_FILE" 2>/dev/null; then
+    # Remove from /etc/hosts (escape dots for regex)
+    local escaped_vm_name="${vm_name//./\\.}"
+    if grep -q "${vm_name}" "$ETC_HOSTS_FILE" 2>/dev/null; then
         print_task "Removing from /etc/hosts..."
-        if sudo sed -i.bak "/$vm_name/d" "$ETC_HOSTS_FILE" 2>/dev/null; then
+        if sudo sed -i.bak "/[[:space:]]${escaped_vm_name}$/d" "$ETC_HOSTS_FILE" 2>/dev/null; then
             print_task_done
         else
             print_task_fail

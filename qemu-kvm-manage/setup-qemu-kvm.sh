@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
 
 source /tux2lab/common-utils/color-functions.sh
+set -euo pipefail
 
 if [[ "$EUID" -eq 0 ]]; then
     print_error "Running as root user is not allowed."
@@ -63,12 +64,12 @@ else
 fi
 
 print_info "Disabling libvirtd-tls and libvirtd-tcp sockets..."
-sudo systemctl disable --now libvirtd-tls.socket libvirtd-tcp.socket
-sudo systemctl mask libvirtd-tls.socket libvirtd-tcp.socket
+sudo systemctl disable --now libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
+sudo systemctl mask libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
 
 print_info "Enabling and starting libvirtd..."
 sudo systemctl enable --now libvirtd
-sudo systemctl status libvirtd -l --no-pager
+sudo systemctl status libvirtd -l --no-pager || true
 
 print_task "Creating /tux2lab-data/vms to manage VMs"
 sudo mkdir -p /tux2lab-data/vms || {
@@ -94,7 +95,7 @@ print_task_done
 
 print_info "Using direct vendored invocation for virt-install (no /usr/local/bin wrappers)."
 
-virsh_network_name="default"
+virsh_network_name="tux2lab"
 virsh_network_definition="/tux2lab/qemu-kvm-manage/labbr0.xml"
 
 if [[ ! -f "$virsh_network_definition" ]]; then
@@ -103,8 +104,8 @@ if [[ ! -f "$virsh_network_definition" ]]; then
 fi
 
 # Extract both IPv4 and IPv6 addresses from labbr0.xml (dual-stack)
-ipv4_labbr0=$(grep -oP "<ip address='\K[^']+" "$virsh_network_definition" | head -1)
-ipv6_labbr0=$(grep -oP "<ip family='ipv6' address='\K[^']+" "$virsh_network_definition")
+ipv4_labbr0=$(awk -F"'" '/<ip address=/ && !/family=/ {print $2}' "$virsh_network_definition" | head -1)
+ipv6_labbr0=$(awk -F"'" '/<ip family=.ipv6/ {print $4}' "$virsh_network_definition")
 
 if [[ -z "$ipv4_labbr0" ]]; then
     print_error "Failed to extract IPv4 address from $virsh_network_definition"
@@ -124,8 +125,8 @@ else
     run_virsh_cmd() {
         sudo virsh "$@" &>/dev/null
     }
-    run_virsh_cmd net-destroy "$virsh_network_name"
-    run_virsh_cmd net-undefine "$virsh_network_name"
+    run_virsh_cmd net-destroy "$virsh_network_name" || true
+    run_virsh_cmd net-undefine "$virsh_network_name" || true
     run_virsh_cmd net-define "$virsh_network_definition" || {
         print_error "Failed to define network from $virsh_network_definition"
         exit 1
@@ -140,10 +141,20 @@ fi
 
 print_task "Creating custom tools to manage QEMU/KVM"
 scripts_directory="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
+if [[ ! -f "$scripts_directory/tux2lab.sh" ]]; then
+    print_task_fail
+    print_error "tux2lab.sh not found at $scripts_directory/tux2lab.sh"
+    exit 1
+fi
 sudo ln -sf "$scripts_directory/tux2lab.sh" /usr/local/bin/tux2lab
 print_task_done
 
 print_task "Installing bash completion for tux2lab"
+if [[ ! -f "$scripts_directory/tux2lab-completion.bash" ]]; then
+    print_task_fail
+    print_error "tux2lab-completion.bash not found at $scripts_directory/tux2lab-completion.bash"
+    exit 1
+fi
 sudo ln -sf "$scripts_directory/tux2lab-completion.bash" /etc/bash_completion.d/tux2lab-completion.bash
 print_task_done
 

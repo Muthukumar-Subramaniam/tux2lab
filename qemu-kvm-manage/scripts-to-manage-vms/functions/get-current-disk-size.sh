@@ -24,7 +24,7 @@ get_current_disk_size() {
     
     local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
     
-    if [ ! -f "${vm_disk_path}" ]; then
+    if [[ ! -f "${vm_disk_path}" ]]; then
         print_warning "VM disk not found at: ${vm_disk_path}"
         CURRENT_DISK_SIZE=""
         return 1

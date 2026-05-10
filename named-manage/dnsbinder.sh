@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
@@ -7,7 +7,7 @@
 source /tux2lab/common-utils/color-functions.sh
 
 # Source environment variables for IPv6 dual-stack support
-if [ -f /etc/environment ]; then
+if [[ -f /etc/environment ]]; then
     source /etc/environment
 fi
 
@@ -18,10 +18,10 @@ then
 fi
 
 
-v_tmp_file_dnsbinder="/tmp/tmp_file_dnsbinder"
+v_tmp_file_dnsbinder="$(mktemp /tmp/dnsbinder.XXXXXXXXXX)"
 
-v_domain_name=$(if [ -f /etc/named.conf ];then awk '/zones-are-managed-by-dnsbinder/ {print $2}' /etc/named.conf;fi)
-dnsbinder_network=$(if [ -f /etc/named.conf ];then awk '/dnsbinder-network/ {print $3}' /etc/named.conf;fi)
+v_domain_name=$(if [[ -f /etc/named.conf ]];then awk '/zones-are-managed-by-dnsbinder/ {print $2}' /etc/named.conf;fi)
+dnsbinder_network=$(if [[ -f /etc/named.conf ]];then awk '/dnsbinder-network/ {print $3}' /etc/named.conf;fi)
 var_zone_dir='/var/named/dnsbinder-managed-zone-files'
 v_fw_zone="${var_zone_dir}/${v_domain_name}-forward.db"
 
@@ -35,9 +35,9 @@ fn_acquire_zone_lock() {
     local existing_pid=""
 
     while ! mkdir "${dnsbinder_lock_dir}" 2>/dev/null; do
-        if [ -f "${dnsbinder_lock_dir}/pid" ]; then
+        if [[ -f "${dnsbinder_lock_dir}/pid" ]]; then
             existing_pid=$(cat "${dnsbinder_lock_dir}/pid" 2>/dev/null)
-            if [ -n "${existing_pid}" ] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
                 rm -f "${dnsbinder_lock_dir}/pid"
                 rmdir "${dnsbinder_lock_dir}" 2>/dev/null || true
                 continue
@@ -46,7 +46,7 @@ fn_acquire_zone_lock() {
 
         sleep 0.05
         retries=$((retries - 1))
-        if [ "${retries}" -le 0 ]; then
+        if [[ "${retries}" -le 0 ]]; then
             print_error "Unable to acquire dnsbinder zone lock. Another instance may be running. Please retry."
             return 1
         fi
@@ -59,10 +59,10 @@ fn_acquire_zone_lock() {
 fn_release_zone_lock() {
     local lock_pid=""
     if ! $zone_lock_acquired; then return; fi
-    if [ -f "${dnsbinder_lock_dir}/pid" ]; then
+    if [[ -f "${dnsbinder_lock_dir}/pid" ]]; then
         lock_pid=$(cat "${dnsbinder_lock_dir}/pid" 2>/dev/null)
     fi
-    if [ -d "${dnsbinder_lock_dir}" ] && [ "${lock_pid}" = "$$" ]; then
+    if [[ -d "${dnsbinder_lock_dir}" ]] && [[ "${lock_pid}" = "$$" ]]; then
         rm -f "${dnsbinder_lock_dir}/pid"
         rmdir "${dnsbinder_lock_dir}" 2>/dev/null || true
     fi
@@ -82,7 +82,7 @@ trap 'fn_release_all_locks; trap - QUIT; kill -s QUIT $$' QUIT
 #--- End of File Locking Mechanism ---#
 
 fn_check_existence_of_domain() {
-    if [ -z "${v_domain_name}" ]
+    if [[ -z "${v_domain_name}" ]]
     then
         print_error "> Seems like bind dns service is not being handled by dnsbinder! "
         print_info "> Please check and setup the same using dnsbinder utility itself! "
@@ -249,7 +249,7 @@ fn_split_network_into_cidr24subnets() {
     fn_cidr_prefix_to_netmask "${v_cidr}"
     
     # Check if CIDR is valid
-    if ! [[ "${v_cidr}" =~ ^[0-9]+$ ]] || [ "${v_cidr}" -lt 16 ] || [ "${v_cidr}" -gt 24 ]; then
+    if ! [[ "${v_cidr}" =~ ^[0-9]+$ ]] || [[ "${v_cidr}" -lt 16 ]] || [[ "${v_cidr}" -gt 24 ]]; then
         print_error "Invalid CIDR. Only Networks with CIDR between 16 and 24 is allowed ! "
         exit 1
     fi
@@ -258,7 +258,7 @@ fn_split_network_into_cidr24subnets() {
     v_splited_subnets=$(fn_generate_subnets "${v_network}" "${v_cidr}" |  sed "s/\.0\/24//")
 }
 
-if [[ ! -z "${dnsbinder_network}" ]]; then
+if [[ -n "${dnsbinder_network}" ]]; then
     v_splited_subnets=$(ls "${var_zone_dir}"/*-reverse.db 2>/dev/null | awk -F'/' '!/ipv6-reverse\.db$/ {split($NF,a,"."); print a[1]"."a[2]"."a[3]}' | sort -n)
     v_total_ptr_zones=$(ls "${var_zone_dir}"/*-reverse.db 2>/dev/null | grep -vc "ipv6-reverse.db")
 
@@ -267,7 +267,7 @@ if [[ ! -z "${dnsbinder_network}" ]]; then
     do
         eval "v_ptr_zone${v_zone_number}=\"${var_zone_dir}/${v_subnet_part}.${v_domain_name}-reverse.db\""
         eval "v_subnet${v_zone_number}=\"${v_subnet_part}\""
-        let v_zone_number++
+        ((v_zone_number++))
     done
 fi
 
@@ -298,7 +298,7 @@ fn_configure_named_dns_server() {
         KVM_HOST_MODE_SET=true
     fi
 
-    if [ ! -z "${v_domain_name}" ]
+    if [[ -n "${v_domain_name}" ]]
     then
         print_error "> Seems like bind dns server and domain is already setup and managed by dnsbinder! "
         print_success "> Domain '${v_domain_name}' is already being managed by dnsbinder! "
@@ -306,7 +306,7 @@ fn_configure_named_dns_server() {
         exit
     fi
 
-    if [[ ! -z "${1}" ]]; then
+    if [[ -n "${1}" ]]; then
         v_given_domain="${1}"
     else
         fn_instruct_on_valid_domain_name
@@ -365,11 +365,11 @@ fn_configure_named_dns_server() {
         # Auto-detect IPv6 from system (lab infra server VM must have IPv6 configured)
         # Try to get IPv6 from primary interface (exclude link-local fe80 and loopback ::1)
         v_ipv6_address=$(ip -6 addr show "${v_primary_interface}" | awk '/inet6 fd[0-9a-f:]+/ && !/fe80/ && !/::1/ {for(i=1;i<=NF;i++) if($i ~ /^fd/) {sub(/\/.*/, "", $i); print $i; exit}}')
-        if [[ ! -z "${v_ipv6_address}" ]]; then
+        if [[ -n "${v_ipv6_address}" ]]; then
             # Extract prefix length
             v_ipv6_prefix=$(ip -6 addr show "${v_primary_interface}" | grep -oP 'fd[0-9a-f:]+/\K[0-9]+' | head -1)
             # Build ULA subnet
-            if [[ ! -z "${v_ipv6_address}" && ! -z "${v_ipv6_prefix}" ]]; then
+            if [[ -n "${v_ipv6_address}" && ! -z "${v_ipv6_prefix}" ]]; then
                 # Calculate the network address properly by applying the prefix mask
                 v_ipv6_network=$(fn_calculate_ipv6_network "${v_ipv6_address}" "${v_ipv6_prefix}")
                 v_ipv6_ula_subnet="${v_ipv6_network}/${v_ipv6_prefix}"
@@ -432,7 +432,7 @@ fn_configure_named_dns_server() {
         v_listen_ipv4="127.0.0.1; ${v_primary_ip}"
     fi
 
-    if [[ ! -z "${v_ipv6_address}" ]]; then
+    if [[ -n "${v_ipv6_address}" ]]; then
         if [[ "${KVM_HOST_MODE_SET}" == "true" ]]; then
             v_listen_ipv6="${v_ipv6_address}"
         else
@@ -443,14 +443,14 @@ fn_configure_named_dns_server() {
     fi
 
     # Prepare allow-query and allow-recursion networks
-    if [[ ! -z "${v_ipv6_address}" ]]; then
+    if [[ -n "${v_ipv6_address}" ]]; then
         v_allow_networks="localhost; ${v_network}/${v_cidr}; ${v_ipv6_ula_subnet}"
     else
         v_allow_networks="localhost; ${v_network}/${v_cidr}"
     fi
 
     # Generate named.conf from template
-    if [[ ! -z "${v_ipv6_address}" ]]; then
+    if [[ -n "${v_ipv6_address}" ]]; then
         # IPv6 is available - configure it normally
         sed -e "s|LISTEN_IPV4_ADDRESSES|${v_listen_ipv4}|g" \
             -e "s|LISTEN_IPV6_ADDRESSES|${v_listen_ipv6}|g" \
@@ -484,7 +484,7 @@ fn_configure_named_dns_server() {
 
     tee -a /etc/named.conf > /dev/null << EOF
 # BEGIN zones-of-${v_given_domain}-domain
-# dnsbinder-network ${v_network}/${v_cidr}$([ ! -z "${v_ipv6_ula_subnet}" ] && echo " ${v_ipv6_ula_subnet}")
+# dnsbinder-network ${v_network}/${v_cidr}$([[ -n "${v_ipv6_ula_subnet}" ]] && echo " ${v_ipv6_ula_subnet}")
 # ${v_given_domain} zones-are-managed-by-dnsbinder
 //Forward Zone for ${v_given_domain}
 zone "${v_given_domain}" IN {
@@ -513,7 +513,7 @@ EOF
     done
 
     # Add IPv6 reverse zone if IPv6 is configured
-    if [[ ! -z "${v_ipv6_ula_subnet}" ]]; then
+    if [[ -n "${v_ipv6_ula_subnet}" ]]; then
         # Extract IPv6 prefix for reverse zone (e.g., fd00:1234:1234:1234::/64)
         # Convert to reverse DNS format
         v_ipv6_base=$(echo "${v_ipv6_ula_subnet}" | cut -d'/' -f1 | sed 's/::$//')
@@ -576,7 +576,7 @@ EOF
     echo -e "${v_broadcast_adjusted_space} IN A ${v_last_subnet_part}.255" | tee -a  "${v_zone_file_name}" > /dev/null
 
     # Add AAAA records for IPv6 (dual-stack)
-    if [[ ! -z "${v_ipv6_address}" ]]; then
+    if [[ -n "${v_ipv6_address}" ]]; then
         echo -e "\n;AAAA-Records (IPv6)" | tee -a "${v_zone_file_name}" > /dev/null
         
         v_ipv6_gateway_adjusted_space=$(printf "%-*s" 63 "gateway")
@@ -607,7 +607,7 @@ EOF
     done
 
     # Create IPv6 reverse zone file if IPv6 is configured
-    if [[ ! -z "${v_ipv6_address}" && ! -z "${v_ipv6_ula_subnet}" ]]; then
+    if [[ -n "${v_ipv6_address}" && ! -z "${v_ipv6_ula_subnet}" ]]; then
         v_ipv6_zone_file="${var_zone_dir}/${v_given_domain}-ipv6-reverse.db"
         fn_update_dns_server_data_to_zone_file "${v_ipv6_zone_file}"
         echo -e "\n;IPv6 PTR-Records" | tee -a "${v_ipv6_zone_file}" > /dev/null
@@ -629,7 +629,7 @@ ptr = '.'.join(reversed(host_hex))
 print(ptr)
 ")
         
-        if [[ ! -z "${v_ipv6_ptr}" ]]; then
+        if [[ -n "${v_ipv6_ptr}" ]]; then
             echo -e "${v_ipv6_ptr} IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_ipv6_zone_file}" > /dev/null
         fi
     fi
@@ -664,7 +664,7 @@ print(ptr)
     )
 
     # Add IPv6 variables if configured
-    if [[ ! -z "${v_ipv6_address}" ]]; then
+    if [[ -n "${v_ipv6_address}" ]]; then
         dnsbinder_environment_map["dnsbinder_server_ipv6_address"]="$v_ipv6_address"
         dnsbinder_environment_map["dnsbinder_ipv6_gateway"]="$v_ipv6_gateway"
         dnsbinder_environment_map["dnsbinder_ipv6_prefix"]="$v_ipv6_prefix"
@@ -699,7 +699,7 @@ print(ptr)
         nmcli connection modify "${v_active_connection_name}" ipv4.dns "127.0.0.1,8.8.8.8,1.1.1.1"  &>/dev/null
         
         # Configure IPv6 address if dual-stack is configured (but use IPv4 for DNS)
-        if [[ ! -z "${v_ipv6_address}" ]]; then
+        if [[ -n "${v_ipv6_address}" ]]; then
             nmcli connection modify "${v_active_connection_name}" ipv6.method "manual" &>/dev/null
             nmcli connection modify "${v_active_connection_name}" ipv6.addresses "${v_ipv6_address}/${v_ipv6_prefix}" &>/dev/null
             # Clear any IPv6 DNS servers (we only use IPv4 DNS)
@@ -713,7 +713,7 @@ print(ptr)
     else
         print_task "Updating systemd-resolvd to point the local dns server and domain..."
         if command -v resolvectl &>/dev/null; then
-                if [[ ! -z "${v_ipv6_address}" ]]; then
+                if [[ -n "${v_ipv6_address}" ]]; then
                     resolvectl dns labbr0 "$v_primary_ip" "$v_ipv6_address"
                 else
                     resolvectl dns labbr0 "$v_primary_ip"
@@ -726,7 +726,7 @@ print(ptr)
     print_task "Make named service as a dependency for network-online.target..."
 
     if [[ "${KVM_HOST_MODE_SET}" != "true" ]]; then
-        if [ ! -f /etc/systemd/system/network-online.target.wants/named.service ]; then
+        if [[ ! -f /etc/systemd/system/network-online.target.wants/named.service ]]; then
             ln -s /usr/lib/systemd/system/named.service /etc/systemd/system/network-online.target.wants/named.service 
         fi
     fi
@@ -740,7 +740,7 @@ print(ptr)
     print_task_done
 
     # Display success message with dual-stack info if configured
-    if [[ ! -z "${v_ipv6_address}" ]]; then
+    if [[ -n "${v_ipv6_address}" ]]; then
         print_success "All done! Your domain \"${v_given_domain}\" with dual-stack DNS server IPv4: ${v_primary_ip}, IPv6: ${v_ipv6_address} [ ${v_dns_host_short_name}.${v_given_domain} ] has been configured."
     else
         print_success "All done! Your domain \"${v_given_domain}\" with DNS server ${v_primary_ip} [ ${v_dns_host_short_name}.${v_given_domain} ] has been configured."
@@ -771,7 +771,7 @@ fn_get_host_record() {
             then
                 read -p "Please Enter the name of host record to ${v_action_requested} : " v_input_host_record
             else
-                if [ -z "${v_host_record}" ]
+                if [[ -z "${v_host_record}" ]]
                 then
                     read -p "Please Enter the name of host record to ${v_action_requested} : " v_input_host_record
                 else
@@ -788,7 +788,7 @@ fn_get_host_record() {
                 then
                     v_host_record="${v_input_host_record}"
                 else
-                    if [ -z "${v_host_record}" ]
+                    if [[ -z "${v_host_record}" ]]
                     then
                         v_host_record="${v_input_host_record}"
                     else
@@ -803,7 +803,7 @@ fn_get_host_record() {
         done
     }
 
-    if [[ ! -z ${v_input_host} ]]
+    if [[ -n ${v_input_host} ]]
     then
         v_host_record=${1}
         v_host_record="${v_host_record%.${v_domain_name}.}"  
@@ -833,7 +833,7 @@ fn_get_host_record() {
 
         elif [[ "${v_action_requested}" == "rename" ]]
         then
-            if [[ ! -z ${v_rename_record} ]]
+            if [[ -n ${v_rename_record} ]]
             then
                 v_rename_record="${v_rename_record%.${v_domain_name}.}"  
                 v_rename_record="${v_rename_record%.${v_domain_name}}"
@@ -895,7 +895,7 @@ fn_update_serial_number_of_zones() {
         sed -i "/;Serial/s/${v_current_serial_ptr_zone}/${new_serial_ptr}/g" "${v_ptr_zone}"
         
         # Update IPv6 reverse zone if it exists
-        if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]]; then
+        if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
             v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
             if [[ -f "${v_ipv6_zone_file}" ]]; then
                 v_current_serial_ipv6_zone=$(grep ';Serial' "${v_ipv6_zone_file}" | cut -d ";" -f 1 | tr -d '[:space:]')
@@ -996,7 +996,7 @@ fn_reload_named_dns_service() {
             done
             
             # Also validate AAAA record if IPv6 is configured
-            if ${query_success} && [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]]; then
+            if ${query_success} && [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
                 retry_count=0
                 query_success=false
                 while [[ ${retry_count} -lt ${max_retries} ]]; do
@@ -1019,7 +1019,7 @@ fn_reload_named_dns_service() {
             done
             
             # Also validate AAAA record if IPv6 is configured
-            if ${query_success} && [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]]; then
+            if ${query_success} && [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
                 retry_count=0
                 query_success=false
                 while [[ ${retry_count} -lt ${max_retries} ]]; do
@@ -1074,13 +1074,13 @@ fn_reload_named_dns_service() {
 
         if  [[ "${v_action_requested}" == "rename" ]]
         then
-            if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]]; then
+            if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
                 print_info "FYI : ${v_rename_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_rename_record}.${v_domain_name} | head -1)"
             else
                 print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1)"
             fi
         else
-            if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]]; then
+            if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
                 print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1)"
             else
                 print_info "FYI : ${v_host_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)"
@@ -1107,7 +1107,7 @@ fn_set_ptr_zone() {
         if [[ "${v_current_ip_of_host_record}" == ${arr_subnets[i]}.* ]]
         then
             if ${v_if_autorun_false}; then
-                if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]] && [[ ! -z "${v_current_ipv6_of_host_record}" ]]; then
+                if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]] && [[ -n "${v_current_ipv6_of_host_record}" ]]; then
                     print_info "Match found for host record ${v_host_record}.${v_domain_name}\n             ├── IPv4: ${v_current_ip_of_host_record}\n             └── IPv6: ${v_current_ipv6_of_host_record}"
                 else
                     print_info "Match found with IP ${v_current_ip_of_host_record} for host record ${v_host_record}.${v_domain_name}"
@@ -1217,7 +1217,7 @@ fn_create_host_record() {
         return ${v_exit_status_fn_get_host_record}
     fi
 
-    if [ ! -z "${specific_ipv4_requested}" ] ; then
+    if [[ -n "${specific_ipv4_requested}" ]] ; then
         fn_get_ipv4_address "${2}"
     fi
 
@@ -1230,7 +1230,7 @@ fn_create_host_record() {
         local v_capture_list_of_ips=$(sed -n 's/^\([0-9]\+\).*/\1/p' "${v_file_ptr_zone}")
         declare -A v_existing_ips
 
-        if [ -z "${v_capture_list_of_ips}" ]
+        if [[ -z "${v_capture_list_of_ips}" ]]
         then
             v_host_part_of_current_ip="${v_start_ip}"
             v_current_ip_of_host_record="${v_subnet}.${v_host_part_of_current_ip}"
@@ -1294,7 +1294,7 @@ fn_create_host_record() {
 
         v_current_subnet="${!v_current_subnet}"
 
-        if [[ ! -z "${ipv4_provided}" ]]
+        if [[ -n "${ipv4_provided}" ]]
         then
             IFS='.' read -r ipv4_octet1 ipv4_octet2 ipv4_octet3 ipv4_octet4 <<< "${ipv4_provided}"
             subnet_part_of_ipv4_provided="${ipv4_octet1}.${ipv4_octet2}.${ipv4_octet3}"
@@ -1423,7 +1423,7 @@ fn_create_host_record() {
     ############### AAAA Record Creation Section (IPv6 dual-stack) ############################
 
     # Add AAAA record if IPv6 is configured
-    if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" && ! -z "${dnsbinder_ipv6_gateway}" ]]; then
+    if [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${dnsbinder_ipv6_gateway}" ]]; then
         # Convert IPv4 to IPv6 using the mapping scheme
         IFS=. read -r oct1 oct2 oct3 oct4 <<< "$v_current_ip_of_host_record"
         
@@ -1508,7 +1508,7 @@ print(insert_after)
     ################## IPv6 PTR Record Create Section ###################################
 
     # Add IPv6 PTR record if dual-stack is configured
-    if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" && ! -z "${v_ipv6_address_for_host}" ]]; then
+    if [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${v_ipv6_address_for_host}" ]]; then
         v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
         
         # Convert IPv6 address to PTR format (16 nibbles reversed)
@@ -1524,7 +1524,7 @@ ptr = '.'.join(reversed(host_hex))
 print(ptr)
 ")
         
-        if [[ ! -z "${v_ipv6_ptr}" ]]; then
+        if [[ -n "${v_ipv6_ptr}" ]]; then
             v_add_ipv6_ptr_record="${v_ipv6_ptr} IN PTR ${v_host_record}.${v_domain_name}."
             
             # Find correct insertion point based on lexicographic nibble order
@@ -1781,7 +1781,7 @@ fn_handle_multiple_host_record() {
 
     fn_progress_title
     
-    if [ -z "${v_host_list_file}" ]
+    if [[ -z "${v_host_list_file}" ]]
     then
         echo
         print_notify "Name of the file containing the list of host records to ${v_action_required} : " 
@@ -1792,18 +1792,23 @@ fn_handle_multiple_host_record() {
     
     if [[ ! -s "${v_host_list_file}" ]];then print_error "File \"${v_host_list_file}\" is empty!\n";fn_release_zone_lock;exit;fi
     
-    sed -i '/^[[:space:]]*$/d' "${v_host_list_file}"
+    # Work on a copy to avoid modifying the user's original file
+    local v_work_file
+    v_work_file="$(mktemp /tmp/dnsbinder-bulk.XXXXXXXXXX)"
+    cp "${v_host_list_file}" "${v_work_file}"
     
-    sed -i "s/\.${v_domain_name}\.//g" "${v_host_list_file}"
+    sed -i '/^[[:space:]]*$/d' "${v_work_file}"
     
-    sed -i "s/\.${v_domain_name}//g" "${v_host_list_file}"
+    sed -i "s/\.${v_domain_name}\.//g" "${v_work_file}"
+    
+    sed -i "s/\.${v_domain_name}//g" "${v_work_file}"
     
     
     while :
     do
         print_info "Records to be ${v_action_required^}d : "
     
-        cat "${v_host_list_file}"
+        cat "${v_work_file}"
     
         echo
         print_notify "Provide your confirmation to ${v_action_required} the above host records (y/n) : " "nskip"
@@ -1837,7 +1842,7 @@ fn_handle_multiple_host_record() {
     
     v_pre_execution_serial_fw_zone=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
     
-    v_total_host_records=$(wc -l < "${v_host_list_file}")
+    v_total_host_records=$(wc -l < "${v_work_file}")
     
     v_host_count=0
     
@@ -1854,7 +1859,7 @@ fn_handle_multiple_host_record() {
         print_green "Successful : ${v_count_successfull}"
         print_red "Failed     : ${v_count_failed}"
         
-        let v_host_count++
+        ((v_host_count++))
         
         print_task "Attempting to ${v_action_required} the host record ${v_host_record}.${v_domain_name} . . . " "nskip"
     
@@ -1886,7 +1891,7 @@ fn_handle_multiple_host_record() {
                 fi
                 
                 # Build address display (dual-stack)
-                if [[ ! -z "${v_ipv6_address}" ]]; then
+                if [[ -n "${v_ipv6_address}" ]]; then
                     v_address_display="IPv4: ${v_ip_address}, IPv6: ${v_ipv6_address}"
                 else
                     v_address_display="${v_ip_address}"
@@ -1906,8 +1911,8 @@ fn_handle_multiple_host_record() {
     then
             print_red "Invalid-Host     ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
         print_task_fail
-        let v_count_failed++
-        let v_count_invalid_host++ 
+        ((v_count_failed++))
+        ((v_count_invalid_host++))
 
     elif [[ ${var_exit_status} -eq 8 ]]
     then
@@ -1922,19 +1927,19 @@ fn_handle_multiple_host_record() {
 
             print_yellow "${v_existence_state} ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
         print_task_fail
-        let v_count_failed++
+        ((v_count_failed++))
         if [[ ${v_action_required} == "create" ]]; then
-            let v_count_already_exists++
+        ((v_count_already_exists++))
         else
-            let v_count_doesnt_exist++
+        ((v_count_doesnt_exist++))
         fi
 
     elif [[ ${var_exit_status} -eq 255 ]]
     then
             print_red "IP-Exhausted     ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
         print_task_fail
-        let v_count_failed++
-        let v_count_ip_exhausted++
+        ((v_count_failed++))
+        ((v_count_ip_exhausted++))
     else
         v_serial_fw_zone_post_execution=$(grep ';Serial' "${v_fw_zone}" | cut -d ";" -f 1 | tr -d '[:space:]')
 
@@ -1942,19 +1947,21 @@ fn_handle_multiple_host_record() {
         then
             print_green "${v_action_required^}d          ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
             print_task_done
-            let v_count_successfull++
+        ((v_count_successfull++))
         else
                 print_red "Failed-to-${v_action_required^} ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
             print_task_fail
-            let v_count_failed++
-            let v_count_other_failures++
+        ((v_count_failed++))
+        ((v_count_other_failures++))
         fi
     fi
 
     # Clear from cursor to end of screen for next iteration
     tput ed
     
-    done < "${v_host_list_file}"
+    done < "${v_work_file}"
+
+    rm -f "${v_work_file}"
 
     # Clear the progress display before showing final summary
     clear
@@ -1981,7 +1988,7 @@ fn_handle_multiple_host_record() {
 
     if [[ ${v_action_required} == "create" ]]
     then
-        if [[ ! -z "${dnsbinder_ipv6_ula_subnet}" ]]; then
+        if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
             print_white "Action-Taken     FQDN ( IPv4-Address, IPv6-Address )"
         else
             print_white "Action-Taken     FQDN ( IPv4-Address )"
@@ -2033,7 +2040,7 @@ fn_get_cname_record() {
     fn_get_cname_record_from_user() {
         while :
         do
-            if [ -z "${v_input_cname}" ]
+            if [[ -z "${v_input_cname}" ]]
             then
                 if [[ "${v_action_requested}" == "create" ]]
                 then
@@ -2059,7 +2066,7 @@ fn_get_cname_record() {
     fn_get_hostname_record_from_user() {
         while :
         do
-            if [ -z "${v_input_hostname}" ]
+            if [[ -z "${v_input_hostname}" ]]
             then
                 read -p "Please Enter the host record to which CNAME \"${v_input_cname}\" is required : " v_input_hostname
             fi
@@ -2187,14 +2194,16 @@ fn_delete_cname_record() {
     fn_release_zone_lock
 }
 
-v_domain_if_present=$(if [ ! -z "${v_domain_name}" ];then echo -n "${v_domain_name}";else echo '[dnsbinder-not-yet-configured]';fi)
+v_domain_if_present=$(if [[ -n "${v_domain_name}" ]];then echo -n "${v_domain_name}";else echo '[dnsbinder-not-yet-configured]';fi)
 v_domain_if_present=$(printf "%-*s" 53 "${v_domain_if_present}")
-v_network_if_present=$(if [ ! -z "${dnsbinder_network}" ];then echo -n "${dnsbinder_network}";else echo '[dnsbinder-not-yet-configured]';fi)
+v_network_if_present=$(if [[ -n "${dnsbinder_network}" ]];then echo -n "${dnsbinder_network}";else echo '[dnsbinder-not-yet-configured]';fi)
 v_network_if_present=$(printf "%-*s" 53 "${v_network_if_present}")
-v_ipv6_if_present=$(if [ ! -z "${dnsbinder_ipv6_ula_subnet}" ];then echo -n "${dnsbinder_ipv6_ula_subnet}";else echo '[ipv6-not-configured]';fi)
+v_ipv6_if_present=$(if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]];then echo -n "${dnsbinder_ipv6_ula_subnet}";else echo '[ipv6-not-configured]';fi)
 v_ipv6_if_present=$(printf "%-*s" 53 "${v_ipv6_if_present}")
 
 fn_main_menu() {
+
+while true; do
 
 print_notify "##################################################################
 #-------------------------[ DNS-BINDER ]-------------------------#
@@ -2269,10 +2278,10 @@ case ${var_function} in
         ;;
     *)
         print_error "Invalid Option! Try Again! "
-        fn_main_menu
-        exit 1
+        continue
         ;;
 esac
+done
 }
 
 
@@ -2306,13 +2315,13 @@ Note: All host record operations automatically create/manage both IPv4 (A) and I
 Run dnsbinder utility without any arguements to get menu driven actions."
 }
 
-if [ ! -z "${1}" ]
+if [[ -n "${1}" ]]
 then
 
     case "${1}" in
         -c)
             fn_check_existence_of_domain
-            if [[ ! -z "${3}" ]];then
+            if [[ -n "${3}" ]];then
                 print_error "Invalid Option! '-c' option takes only 1 arguement as hostname ! "
                 fn_usage_message
                 exit 1
@@ -2322,7 +2331,7 @@ then
             ;;
         -d|-dy)
             fn_check_existence_of_domain
-            if [[ ! -z "${3}" ]];then
+            if [[ -n "${3}" ]];then
                 print_error " Invalid Option! ${1} option takes only 1 arguement as hostname ! "
                 fn_usage_message
                 exit 1
@@ -2336,7 +2345,7 @@ then
             ;;
         -r|-ry)
             fn_check_existence_of_domain
-            if [[ ! -z "${4}" ]];then
+            if [[ -n "${4}" ]];then
                 print_error "Invalid Option! ${1} option takes only 2 arguements [ existing host record and new host record ] ! "
                 fn_usage_message
                 exit 1
@@ -2350,7 +2359,7 @@ then
             ;;
         -cf)
             fn_check_existence_of_domain
-            if [[ ! -z "${3}" ]];then
+            if [[ -n "${3}" ]];then
                 print_error "Invalid Option! '-cf' option takes only 1 arguement as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
@@ -2360,7 +2369,7 @@ then
             ;;
         -df)
             fn_check_existence_of_domain
-            if [[ ! -z "${3}" ]];then
+            if [[ -n "${3}" ]];then
                 print_error "Invalid Option! '-df' option takes only 1 arguement as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
@@ -2370,7 +2379,7 @@ then
             ;;
         -ci)    
             fn_check_existence_of_domain 
-            if [[ ! -z "${4}" ]];then
+            if [[ -n "${4}" ]];then
                 print_error "Invalid Option! '-ci' option takes only 2 arguements [ hostname and required ipv4 address ] ! "
                 fn_usage_message
                 exit 1
@@ -2381,7 +2390,7 @@ then
             ;;
         -cc)    
             fn_check_existence_of_domain 
-            if [[ ! -z "${4}" ]];then
+            if [[ -n "${4}" ]];then
                 print_error "Invalid Option! '-cc' option takes only 2 arguements [ cname and hostname ] ! "
                 fn_usage_message
                 exit 1
@@ -2391,7 +2400,7 @@ then
             ;;
         -dc|-dcy)   
             fn_check_existence_of_domain 
-            if [[ ! -z "${3}" ]];then
+            if [[ -n "${3}" ]];then
                 print_error "Invalid Option! ${1} option takes only 1 arguement as cname ! "
                 fn_usage_message
                 exit 1
@@ -2408,7 +2417,7 @@ then
             exit
             ;;
         *)
-            if [[ ! "${1}" =~ ^-h|--help$ ]]
+            if [[ ! "${1}" =~ ^(-h|--help)$ ]]
             then
                 print_error "Invalid Option \"${1}\"! "
             fi

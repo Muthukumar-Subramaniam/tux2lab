@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: health.sh                                                            #
 # Description: KVM Lab Infrastructure Health Check Tool                                  #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -uo pipefail
 
 # Source color functions and environment defaults
 source /tux2lab/common-utils/color-functions.sh
@@ -63,13 +64,14 @@ inactive_services=0
 for entry in "${services_to_check[@]}"; do
     IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
 
+    local check_result=1
     if [[ "$service_proto" == "udp" ]]; then
-        nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null
+        nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
     else
-        nc -z -w 3 "$service_address" "$service_port" &>/dev/null
+        nc -z -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
     fi
 
-    if [[ $? -eq 0 ]]; then
+    if [[ $check_result -eq 0 ]]; then
         printf "\033[0;36m[ \033[0;32m✓\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
         ((active_services++))
     else

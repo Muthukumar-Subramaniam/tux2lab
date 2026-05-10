@@ -1,5 +1,5 @@
 <network>
-  <name>default</name>
+  <name>tux2lab</name>
   <bridge name='labbr0'/>
   <forward mode='nat'/>
   <ip address='10.10.20.1' netmask='255.255.252.0'>

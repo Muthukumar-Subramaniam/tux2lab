@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
@@ -79,6 +80,9 @@ fi
 # Get disks to delete (from argument or prompt)
 declare -a DISKS_TO_DELETE
 
+# Escape dots in hostname for regex matching
+escaped_infra_hostname="${lab_infra_server_hostname//./\\.}"
+
 if [[ -n "$disks_arg" ]]; then
     # Parse comma-separated disk list
     IFS=',' read -ra DISKS_TO_DELETE <<< "$disks_arg"
@@ -108,7 +112,7 @@ else
         fi
         
         # Highlight lab infra server disks
-        if [[ "$disk" =~ ^${lab_infra_server_hostname}_vd[b-z]\.qcow2$ ]]; then
+        if [[ "$disk" =~ ^${escaped_infra_hostname}_vd[b-z]\.qcow2$ ]]; then
             if [[ -n "$disk_size" ]]; then
                 print_yellow "  $((i+1))) $disk ($disk_size) [LAB INFRA SERVER]"
             else
@@ -156,7 +160,7 @@ fi
 # Check if any selected disks belong to lab infra server
 lab_infra_disks=()
 for disk in "${DISKS_TO_DELETE[@]}"; do
-    if [[ "$disk" =~ ^${lab_infra_server_hostname}_vd[b-z]\.qcow2$ ]]; then
+    if [[ "$disk" =~ ^${escaped_infra_hostname}_vd[b-z]\.qcow2$ ]]; then
         lab_infra_disks+=("$disk")
     fi
 done
@@ -171,7 +175,7 @@ for disk in "${DISKS_TO_DELETE[@]}"; do
     fi
     
     # Highlight lab infra server disks
-    if [[ "$disk" =~ ^${lab_infra_server_hostname}_vd[b-z]\.qcow2$ ]]; then
+    if [[ "$disk" =~ ^${escaped_infra_hostname}_vd[b-z]\.qcow2$ ]]; then
         if [[ -n "$disk_size" ]]; then
             print_yellow "  - $disk ($disk_size) [LAB INFRA SERVER]"
         else

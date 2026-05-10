@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # IPv6 Default Route Manager for Lab VMs
 # Purpose: Enable/disable IPv6 default gateway when QEMU host has/loses IPv6 internet connectivity
@@ -32,14 +32,16 @@ IPV6_TEST_HOST="2001:4860:4860::8888"  # Google Public DNS IPv6
 IPV6_GATEWAY="${lab_infra_server_ipv6_gateway}"
 
 # SSH options for connecting to VMs
-ssh_options="-o StrictHostKeyChecking=no \
-             -o UserKnownHostsFile=/dev/null \
-             -o LogLevel=QUIET \
-             -o ConnectTimeout=2 \
-             -o PasswordAuthentication=no \
-             -o PubkeyAuthentication=yes \
-             -o PreferredAuthentications=publickey \
-             -o BatchMode=yes"
+ssh_options=(
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=QUIET
+    -o ConnectTimeout=2
+    -o PasswordAuthentication=no
+    -o PubkeyAuthentication=yes
+    -o PreferredAuthentications=publickey
+    -o BatchMode=yes
+)
 
 fn_usage() {
     cat << EOF
@@ -98,7 +100,7 @@ fn_enable_ipv6_route() {
     fi
     
     # Check if route already exists
-    local route_check=$(ssh $ssh_options "${lab_infra_admin_username}@${vm_name}" \
+    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
         'sudo ip -6 route show default' 2>/dev/null)
     
     if [[ "$route_check" =~ "default" ]]; then
@@ -107,7 +109,7 @@ fn_enable_ipv6_route() {
     fi
     
     # Add default route
-    if ssh $ssh_options "${lab_infra_admin_username}@${vm_name}" \
+    if ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
         "sudo ip -6 route add default via ${IPV6_GATEWAY}" &>/dev/null; then
         print_success "VM $vm_name: IPv6 default route added"
         return 0
@@ -126,7 +128,7 @@ fn_disable_ipv6_route() {
     fi
     
     # Remove default route (ignore errors if route doesn't exist)
-    ssh $ssh_options "${lab_infra_admin_username}@${vm_name}" \
+    ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
         'sudo ip -6 route del default 2>/dev/null' &>/dev/null || true
     
     print_success "VM $vm_name: IPv6 default route removed"
@@ -141,7 +143,7 @@ fn_check_vm_ipv6_route() {
         return 1
     fi
     
-    local route_check=$(ssh $ssh_options "${lab_infra_admin_username}@${vm_name}" \
+    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
         'sudo ip -6 route show default' 2>/dev/null)
     
     if [[ "$route_check" =~ "default" ]]; then

@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 source /tux2lab/common-utils/color-functions.sh
@@ -260,7 +261,7 @@ validate_cpu_args() {
 validate_disk_args() {
     vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
 
-    if [ ! -f "$vm_qcow2_disk_path" ]; then
+    if [[ ! -f "$vm_qcow2_disk_path" ]]; then
         print_error "OS disk image not found at $vm_qcow2_disk_path"
         exit 1
     fi
@@ -268,13 +269,13 @@ validate_disk_args() {
     # Get current disk size (works whether VM is running or stopped)
     local capacity_bytes
     capacity_bytes=$(sudo virsh domblkinfo "$qemu_kvm_hostname" vda 2>/dev/null | awk '/^Capacity:/ {print $2}')
-    if [[ -n "$capacity_bytes" && "$capacity_bytes" -gt 0 ]] 2>/dev/null; then
+    if [[ -n "$capacity_bytes" ]] && [[ "$capacity_bytes" =~ ^[0-9]+$ ]] && (( capacity_bytes > 0 )); then
         current_disk_gib=$(( capacity_bytes / 1024 / 1024 / 1024 ))
     else
         current_disk_gib=$(sudo qemu-img info "${vm_qcow2_disk_path}" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
     fi
 
-    if [[ -z "$current_disk_gib" || "$current_disk_gib" -eq 0 ]] 2>/dev/null; then
+    if [[ -z "$current_disk_gib" ]] || ! [[ "$current_disk_gib" =~ ^[0-9]+$ ]] || (( current_disk_gib == 0 )); then
         print_error "Unable to determine current OS disk size for VM '$qemu_kvm_hostname'."
         exit 1
     fi
@@ -420,7 +421,7 @@ resize_vm_disk() {
         if [[ -z "$current_disk_gib" ]]; then
             vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
 
-            if [ ! -f "$vm_qcow2_disk_path" ]; then
+            if [[ ! -f "$vm_qcow2_disk_path" ]]; then
 print_error "OS disk image not found at $vm_qcow2_disk_path"
             exit 1
         fi
@@ -497,18 +498,18 @@ fn_start_vm_after_resize() {
         SSH_TARGET_HOST="${qemu_kvm_hostname}"
         MAX_SSH_WAIT_SECONDS=120
         SSH_RETRY_INTERVAL_SECONDS=5
-        SSH_OPTS="-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        SSH_OPTS=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 
         ssh_start_time=$(date +%s)
         while true; do
             sleep "$SSH_RETRY_INTERVAL_SECONDS"
-            if ssh $SSH_OPTS ${lab_infra_admin_username}@${SSH_TARGET_HOST} "true" &>/dev/null; then
+            if ssh "${SSH_OPTS[@]}" "${lab_infra_admin_username}@${SSH_TARGET_HOST}" "true" &>/dev/null; then
                 print_task_done
                 break
             fi
             ssh_current_time=$(date +%s)
             ssh_elapsed_time=$((ssh_current_time - ssh_start_time))
-            if [ "$ssh_elapsed_time" -ge "$MAX_SSH_WAIT_SECONDS" ]; then
+            if [[ "$ssh_elapsed_time" -ge "$MAX_SSH_WAIT_SECONDS" ]]; then
                 print_task_fail
                 print_warning "Timed out waiting for SSH after $MAX_SSH_WAIT_SECONDS seconds."
                 print_info "Execute lab-rootfs-extender utility manually from $SSH_TARGET_HOST once booted."

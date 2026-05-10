@@ -1,0 +1,9 @@
+#!ipxe
+# Embedded iPXE script — compiled into ipxe.efi
+# If you modify this file, rebuild ipxe.efi:
+#   make bin-x86_64-efi/ipxe.efi EMBED=embed.ipxe
+dhcp
+set myhexmac ${net0/mac}
+set mymachexhyp ${net0/mac:hexhyp}
+echo Initiating iPXE boot for MAC ${myhexmac} ...
+chain http://${next-server}/ipxe/${mymachexhyp}.ipxe || exit

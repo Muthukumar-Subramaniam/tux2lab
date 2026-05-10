@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+set -euo pipefail
 # Script Name : kvm-info.sh
 # Description : Display detailed information about VM(s) - IP stack, storage, birthdate, uptime, CPU, memory
 # Usage       : tux2lab vm info [hostname] or tux2lab vm info -H host1,host2,host3
@@ -10,14 +11,16 @@
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # SSH options for connecting to VMs
-ssh_options="-o StrictHostKeyChecking=no \
-             -o UserKnownHostsFile=/dev/null \
-             -o LogLevel=QUIET \
-             -o ConnectTimeout=3 \
-             -o PasswordAuthentication=no \
-             -o PubkeyAuthentication=yes \
-             -o PreferredAuthentications=publickey \
-             -o BatchMode=yes"
+ssh_options=(
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=QUIET
+    -o ConnectTimeout=3
+    -o PasswordAuthentication=no
+    -o PubkeyAuthentication=yes
+    -o PreferredAuthentications=publickey
+    -o BatchMode=yes
+)
 
 # Display usage information
 show_usage() {
@@ -172,7 +175,7 @@ get_vm_info() {
     IFS='|' read -r cpu_cores memory_mb <<< "$hypervisor_info"
     
     # Gather information from VM
-    local vm_data=$(ssh $ssh_options "${lab_infra_admin_username}@${vm_name}" bash <<'EOSSH'
+    local vm_data=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" bash <<'EOSSH'
 # OS Distribution
 os_distro="N/A"
 if [ -f /etc/os-release ]; then

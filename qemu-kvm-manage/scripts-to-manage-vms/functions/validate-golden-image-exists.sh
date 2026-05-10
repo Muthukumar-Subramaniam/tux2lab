@@ -24,7 +24,7 @@ validate_golden_image_exists() {
     local golden_image_fqdn="${os_distro}-golden-image-${version}.${lab_infra_domain_name}"
     local golden_image_path="/tux2lab-data/golden-images-disk-store/${golden_image_fqdn}.qcow2"
     
-    if [ ! -f "${golden_image_path}" ]; then
+    if [[ ! -f "${golden_image_path}" ]]; then
         print_error "Golden image disk not found for \"$vm_hostname\"!"
         print_info "Expected at: ${golden_image_path}"
         print_info "To build the golden image disk, run: tux2lab golden-image create"

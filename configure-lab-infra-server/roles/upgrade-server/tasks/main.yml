@@ -1,0 +1,10 @@
+---
+# tasks file for upgrade-server
+- name: Upgrade the system packages
+  become: true
+  ansible.builtin.dnf:
+    update_cache: true
+    name: "*"
+    state: latest
+
+######################### EOF ######################### 

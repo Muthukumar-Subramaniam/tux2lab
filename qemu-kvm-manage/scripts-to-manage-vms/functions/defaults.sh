@@ -17,7 +17,7 @@ if command -v dmidecode &>/dev/null; then
 fi
 
 LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
-if [ -f "$LAB_ENV_VARS_FILE" ]; then
+if [[ -f "$LAB_ENV_VARS_FILE" ]]; then
     source "$LAB_ENV_VARS_FILE"
 else
     print_error "Lab environment variables file not found at $LAB_ENV_VARS_FILE"
