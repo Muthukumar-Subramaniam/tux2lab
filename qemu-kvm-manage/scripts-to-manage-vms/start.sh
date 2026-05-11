@@ -24,7 +24,7 @@ configure_dns_for_bridge() {
 when_lab_infra_server_is_host() {
     # ====== CONFIGURATION ======
     local lab_bridge_dummy_interface_name="dummy-vnet"
-    local lab_essential_services=("kea-dhcp4" "kea-dhcp6" "radvd" "nfs-server" "tftp.socket" "nginx")
+    local lab_essential_services=("kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "nfs-server" "tftp.socket" "nginx")
     
     # ====== CLEANUP ON EXIT ======
     trap 'print_error "Script interrupted!"' SIGINT
