@@ -92,7 +92,7 @@ shutdown_all_vms() {
 
 when_lab_infra_server_is_host() {
     local lab_bridge_dummy_interface_name="dummy-vnet"
-    local lab_essential_services=("nginx" "nfs-server" "tftp.socket" "kea-dhcp4" "kea-dhcp6" "radvd")
+    local lab_essential_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd")
 
     # ====== STEP 1: Shutdown all VMs ======
     shutdown_all_vms
