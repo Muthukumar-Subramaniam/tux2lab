@@ -277,13 +277,17 @@ tux2lab golden-image cleanup      Remove unused golden images
 ### Infrastructure & Network
 
 ```
-tux2lab start                     Start lab infrastructure (host mode)
+tux2lab start                     Start lab infrastructure
+tux2lab stop                      Stop lab infrastructure and shut down all VMs
+tux2lab enable                    Enable lab infrastructure auto-start on boot
+tux2lab disable                   Disable lab infrastructure auto-start on boot
 tux2lab health                    Check all lab service health
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab distro list               List distributions and setup status
 tux2lab distro setup              Prepare a distro for PXE provisioning
 tux2lab distro cleanup            Remove a distro's PXE setup
 tux2lab ipv6-route [action]       Manage IPv6 routes (enable/disable/auto/status)
+tux2lab version                   Show version information
 ```
 
 Use `tux2lab --help` or `tux2lab <command> --help` for detailed usage.
