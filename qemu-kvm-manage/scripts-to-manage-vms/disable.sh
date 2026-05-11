@@ -23,7 +23,7 @@ if ! sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
 else
     print_warning "Disabling auto-start means the lab infrastructure will NOT start on boot."
     print_warning "You will need to run 'tux2lab start' manually after every reboot."
-    echo -n "Are you sure you want to proceed? (yes/no): "
+    echo -n "Type CONFIRM to proceed: "
     read -r confirmation
     if [[ "${confirmation}" != "yes" ]]; then
         print_info "Operation cancelled."

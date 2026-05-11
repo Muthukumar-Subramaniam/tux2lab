@@ -126,9 +126,9 @@ print_cyan "--------------------------------------------------------------"
 
 print_warning "This will stop all lab infrastructure services."
 print_warning "VMs will lose access to DNS, DHCP, NFS, PXE, and Web services."
-echo -n "Are you sure you want to proceed? (yes/no): "
+echo -n "Type CONFIRM to proceed: "
 read -r confirmation
-if [[ "${confirmation}" != "yes" ]]; then
+if [[ "${confirmation}" != "CONFIRM" ]]; then
     print_info "Operation cancelled."
     exit 0
 fi
