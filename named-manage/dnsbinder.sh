@@ -515,10 +515,10 @@ EOF
 
     # Add IPv6 reverse zone if IPv6 is configured
     if [[ -n "${v_ipv6_ula_subnet}" ]]; then
-        # Extract IPv6 prefix for reverse zone (e.g., fd00:1234:1234:1234::/64)
+        # Extract IPv6 prefix for reverse zone (e.g., fd28:2808:2020::/64)
         # Convert to reverse DNS format
         v_ipv6_base=$(echo "${v_ipv6_ula_subnet}" | cut -d'/' -f1 | sed 's/::$//')
-        # For fd00:1234:1234:1234::, reverse is 4.3.2.1.4.3.2.1.4.3.2.1.0.0.d.f.ip6.arpa
+        # For fd28:2808:2020::, reverse is 0.2.0.2.8.0.8.2.8.2.d.f.ip6.arpa
         v_ipv6_reverse_zone=$(echo "${v_ipv6_base}" | awk -F':' '{
             for(i=NF; i>=1; i--) {
                 if($i != "") {

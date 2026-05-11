@@ -1173,7 +1173,7 @@ fn_set_environment() {
         local tmp_file="${target_file}.tmp_replace.$$"
 
         # Use awk-based replacement to avoid sed delimiter/escaping pitfalls
-        # with runtime values such as CIDR blocks (e.g., 10.10.20.0/22).
+        # with runtime values such as CIDR blocks (e.g., 10.28.28.0/22).
         if awk -v token="${token}" -v replacement="${replacement}" '
             BEGIN {
                 gsub(/\\/, "\\\\", replacement)
