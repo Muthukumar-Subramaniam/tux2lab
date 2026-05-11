@@ -8,28 +8,46 @@
 
 # ====== HOST MODE: Drop-in config ======
 
-- name: Ensure /etc/chrony.d directory exists (host mode)
+- name: Check for existing confdir in /etc/chrony.conf (host mode)
+  become: true
+  ansible.builtin.shell: |
+    grep -m1 '^confdir\s' /etc/chrony.conf | awk '{print $2}' || true
+  register: existing_confdir
+  changed_when: false
+  when: is_host_mode
+
+- name: Set chrony drop-in directory (host mode)
+  ansible.builtin.set_fact:
+    chrony_confdir: "{{ existing_confdir.stdout | default('') | trim }}"
+  when: is_host_mode
+
+- name: Use /etc/chrony.d as confdir if none exists (host mode)
+  ansible.builtin.set_fact:
+    chrony_confdir: "/etc/chrony.d"
+  when: is_host_mode and chrony_confdir == ''
+
+- name: Ensure chrony confdir directory exists (host mode)
   become: true
   ansible.builtin.file:
-    path: /etc/chrony.d
+    path: "{{ chrony_confdir }}"
     state: directory
     mode: '0755'
   when: is_host_mode
 
-- name: Ensure confdir directive exists in /etc/chrony.conf (host mode)
+- name: Add confdir directive to /etc/chrony.conf if missing (host mode)
   become: true
   ansible.builtin.lineinfile:
     path: /etc/chrony.conf
-    line: "confdir /etc/chrony.d"
-    regexp: '^confdir\s+/etc/chrony\.d'
+    line: "confdir {{ chrony_confdir }}"
+    regexp: '^confdir\s'
     insertbefore: BOF
     backup: true
-  when: is_host_mode
+  when: is_host_mode and existing_confdir.stdout | default('') | trim == ''
 
 - name: Deploy tux2lab chrony drop-in config (host mode)
   become: true
   ansible.builtin.copy:
-    dest: /etc/chrony.d/tux2lab.conf
+    dest: "{{ chrony_confdir }}/tux2lab.conf"
     content: |
       # tux2lab NTP configuration
       pool time.google.com iburst
