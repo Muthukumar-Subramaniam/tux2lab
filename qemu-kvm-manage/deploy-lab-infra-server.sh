@@ -674,10 +674,6 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     # Deploy tux2lab-lab-infra.service
     # -----------------------------
     print_info "Deploying tux2lab-lab-infra.service..."
-    local service_env="Environment=TUX2LAB_SYSTEMD=true"
-    if [[ "${TUX2LAB_NESTED_VM:-}" == "true" ]]; then
-        service_env+="\nEnvironment=TUX2LAB_NESTED_VM=true"
-    fi
     sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
@@ -688,7 +684,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 User=$(whoami)
-$(echo -e "$service_env")
+Environment=TUX2LAB_SYSTEMD=true
 ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 ExecStop=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/stop.sh
 
@@ -1000,10 +996,6 @@ deploy_lab_infra_server_host() {
     # Deploy tux2lab-lab-infra.service
     # -----------------------------
     print_info "Deploying tux2lab-lab-infra.service..."
-    local service_env="Environment=TUX2LAB_SYSTEMD=true"
-    if [[ "${TUX2LAB_NESTED_VM:-}" == "true" ]]; then
-        service_env+="\nEnvironment=TUX2LAB_NESTED_VM=true"
-    fi
     sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
@@ -1014,7 +1006,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 User=$(whoami)
-$(echo -e "$service_env")
+Environment=TUX2LAB_SYSTEMD=true
 ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 ExecStop=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/stop.sh
 
