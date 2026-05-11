@@ -41,6 +41,19 @@ when_lab_infra_server_is_host() {
         fi
         print_task_done
     fi
+
+    # ====== STEP 1.1: Ensure tux2lab virtual network is active ======
+    if sudo virsh net-info tux2lab 2>/dev/null | grep -q "Active:.*yes"; then
+        print_info "tux2lab virtual network is already active"
+    else
+        print_task "Starting tux2lab virtual network..."
+        if ! sudo virsh net-start tux2lab &>/dev/null; then
+            print_task_fail
+            print_error "Failed to start tux2lab virtual network"
+            return 1
+        fi
+        print_task_done
+    fi
     
     # ====== STEP 2: Wait for labbr0 ======
     print_task "Waiting for $lab_bridge_interface_name to be created..."
