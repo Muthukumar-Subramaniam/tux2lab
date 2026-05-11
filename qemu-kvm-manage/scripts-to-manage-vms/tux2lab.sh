@@ -38,6 +38,9 @@ COMMANDS:
     golden-image Manage golden image disks for OS provisioning
     distro      Manage OS distributions for PXE provisioning
     start       Start the lab infrastructure
+    stop        Stop the lab infrastructure
+    enable      Enable lab infrastructure auto-start on boot
+    disable     Disable lab infrastructure auto-start on boot
     health      Check lab infrastructure health
     dns         Manage DNS records for lab infrastructure
     ipv6-route  Manage IPv6 default routes on lab VMs
@@ -80,6 +83,15 @@ main() {
             ;;
         start)
             exec "$SCRIPT_DIR/start.sh" "$@"
+            ;;
+        stop)
+            exec "$SCRIPT_DIR/stop.sh" "$@"
+            ;;
+        enable)
+            exec "$SCRIPT_DIR/enable.sh" "$@"
+            ;;
+        disable)
+            exec "$SCRIPT_DIR/disable.sh" "$@"
             ;;
         health)
             exec "$SCRIPT_DIR/health.sh" "$@"
