@@ -118,7 +118,15 @@ when_lab_infra_server_is_host() {
         failed_services_list+=("named")
     fi
 
-    # ====== STEP 4: Stop libvirtd (also tears down labbr0 bridge and dummy interface) ======
+    # ====== STEP 4: Destroy virtual network (tears down labbr0 bridge, IPs, dummy interface) ======
+    print_task "Destroying tux2lab virtual network..." nskip
+    if sudo virsh net-destroy tux2lab 2>/dev/null; then
+        print_task_done
+    else
+        print_task_fail
+    fi
+
+    # ====== STEP 5: Stop libvirtd ======
     print_task "Stopping libvirtd..." nskip
     if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
         print_task_done
