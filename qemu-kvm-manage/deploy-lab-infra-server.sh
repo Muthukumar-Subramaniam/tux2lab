@@ -215,16 +215,12 @@ prepare_lab_infra_config() {
     Allowed characters:        Letters (a-z), digits (0-9), and hyphens (-)
     Hyphens:                   Cannot be at the start or end of subdomains
     Total length:              Must be between \e[1m1\e[0m and \e[1m63\e[0m characters
-    Format compliance:         Based on \e[3mRFC 1035\e[0m
 
 \e[1mExamples of valid domain names:\e[0m
-    test.internal
+    tux2lab.internal
     test.example.internal
     123-example.internal
     test-lab1.internal
-    123.example.internal
-    test1.lab1.internal
-    test-1.example-1.internal
 "
     }
 

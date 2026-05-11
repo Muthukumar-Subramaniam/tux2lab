@@ -273,16 +273,21 @@ if [[ -n "${dnsbinder_network}" ]]; then
 fi
 
 fn_instruct_on_valid_domain_name() {
-print_warning "FYI :
-  > Only allowed TLD is 'internal' .
-  > Maximum 2 subdomains are only allowed.
-  > Only letters, numbers, and hyphens are allowed with subdomains.
-  > Hyphens cannot appear at the start or end of the subdomains.
-  > The total length must be between 1 and 63 characters.
-  > Follows the format defined in RFC 1035.
-  > Examples for Valid Domain Names :
-      test.internal, test.example.internal, 123-example.internal, test-lab1.internal
-      123.example.internal, test1.lab1.internal, test-1.example-1.internal"
+print_warning "
+Domain Name Rules:
+─────────────────────────────
+    Only allowed TLD:          internal
+    Max subdomains allowed:    2
+    Allowed characters:        Letters (a-z), digits (0-9), and hyphens (-)
+    Hyphens:                   Cannot be at the start or end of subdomains
+    Total length:              Must be between 1 and 63 characters
+
+Examples of valid domain names:
+    test.internal
+    test.example.internal
+    123-example.internal
+    test-lab1.internal
+"
 }
 
 fn_configure_named_dns_server() {
