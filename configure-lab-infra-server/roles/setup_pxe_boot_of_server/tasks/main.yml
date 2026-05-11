@@ -87,6 +87,8 @@
   ansible.builtin.file:
     path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
     state: directory
+    owner: "{{ ansible_facts.env.mgmt_super_user }}"
+    group: "{{ ansible_facts.env.mgmt_super_user }}"
   when:
     - ansible_facts.env.default_linux_distro_iso_path is defined
     - ansible_facts.env.infra_server_distro is defined
@@ -110,6 +112,8 @@
   ansible.builtin.file:
     path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/ipxe"
     state: directory
+    owner: "{{ ansible_facts.env.mgmt_super_user }}"
+    group: "{{ ansible_facts.env.mgmt_super_user }}"
 
 - name: Deploy ipxe.efi for HTTP boot
   become: true

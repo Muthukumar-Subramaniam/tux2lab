@@ -412,7 +412,9 @@ fn_setup_distro() {
     # Create mount point
     print_task "Preparing mount point: ${mount_dir}"
     sudo mkdir -p "$mount_dir"
-    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$mount_dir"
+    # chown the distro parent dir and the version leaf dir
+    # (mkdir -p creates intermediate dirs as root)
+    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$(dirname "$mount_dir")" "$mount_dir"
     print_task_done
 
     # Add fstab entry
