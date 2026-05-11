@@ -26,6 +26,9 @@ DESCRIPTION:
     exit 0
 fi
 
+# ====== SOURCE SHUTDOWN FUNCTION ======
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
+
 # ====== SHUTDOWN ALL VMs ======
 shutdown_all_vms() {
     local running_vms
@@ -36,19 +39,23 @@ shutdown_all_vms() {
         return
     fi
 
-    # Send graceful shutdown to all VMs
+    # Send graceful shutdown to all VMs (infra server last in VM mode)
     print_info "Sending graceful shutdown to all running VMs..."
-    local vm_list=()
+    local infra_vm_running=false
     while IFS= read -r vm_name; do
         [[ -z "$vm_name" ]] && continue
-        vm_list+=("$vm_name")
-        print_task "Shutting down VM \"$vm_name\"..." nskip
-        if sudo virsh shutdown "$vm_name" >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
+        if [[ "$vm_name" == "$lab_infra_server_hostname" ]] && ! $lab_infra_server_mode_is_host; then
+            infra_vm_running=true
+            continue
         fi
+        shutdown_vm "$vm_name"
     done <<< "$running_vms"
+
+    # Shutdown infra server VM last
+    if $infra_vm_running; then
+        print_info "Shutting down lab infra server VM last..."
+        shutdown_vm "$lab_infra_server_hostname"
+    fi
 
     # Wait for all VMs to shut down
     print_task "Waiting up to ${vm_shutdown_timeout}s for VMs to shut down..."
@@ -172,12 +179,26 @@ else
 fi
 print_cyan "--------------------------------------------------------------"
 
-print_warning "This will shut down all running VMs and stop all lab services."
-echo -n "Type CONFIRM to proceed: "
-read -r confirmation
-if [[ "${confirmation}" != "CONFIRM" ]]; then
-    print_info "Operation cancelled."
-    exit 0
+print_warning "This will shut down all running VMs and stop all tux2lab services."
+
+# Show running VMs if any
+running_vms_list=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+if [[ -n "$running_vms_list" ]]; then
+    print_warning "The following VMs will be shut down:"
+    while IFS= read -r vm; do
+        [[ -z "$vm" ]] && continue
+        print_warning "  - $vm"
+    done <<< "$running_vms_list"
+fi
+
+# Skip confirmation when called by systemd (TUX2LAB_SYSTEMD=true)
+if [[ "${TUX2LAB_SYSTEMD:-}" != "true" ]]; then
+    echo -n "Type CONFIRM to proceed: "
+    read -r confirmation
+    if [[ "${confirmation}" != "CONFIRM" ]]; then
+        print_info "Operation cancelled."
+        exit 0
+    fi
 fi
 
 print_cyan "--------------------------------------------------------------"
@@ -189,5 +210,13 @@ else
 fi
 
 exit_code=$?
+
+# Sync systemd service state when stopped interactively
+if [[ "${TUX2LAB_SYSTEMD:-}" != "true" ]]; then
+    if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null; then
+        sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
+    fi
+fi
+
 print_cyan "--------------------------------------------------------------"
 exit $exit_code

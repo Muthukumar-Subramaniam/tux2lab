@@ -674,6 +674,32 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     sudo umount -l "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
     sudo rmdir "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
 
+    # -----------------------------
+    # Deploy tux2lab-lab-infra.service
+    # -----------------------------
+    print_info "Deploying tux2lab-lab-infra.service..."
+    sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
+[Unit]
+Description=tux2lab Lab Infrastructure
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=$(whoami)
+Environment=TUX2LAB_SYSTEMD=true
+ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStop=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/stop.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo chmod 644 /etc/systemd/system/tux2lab-lab-infra.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable tux2lab-lab-infra.service >/dev/null 2>&1
+    print_success "tux2lab-lab-infra.service deployed and enabled."
+
     exit 0
 }
 
@@ -969,6 +995,32 @@ deploy_lab_infra_server_host() {
         print_error "Ansible playbook execution failed"
         exit 1
     fi
+
+    # -----------------------------
+    # Deploy tux2lab-lab-infra.service
+    # -----------------------------
+    print_info "Deploying tux2lab-lab-infra.service..."
+    sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
+[Unit]
+Description=tux2lab Lab Infrastructure
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=$(whoami)
+Environment=TUX2LAB_SYSTEMD=true
+ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStop=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/stop.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo chmod 644 /etc/systemd/system/tux2lab-lab-infra.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable tux2lab-lab-infra.service >/dev/null 2>&1
+    print_success "tux2lab-lab-infra.service deployed and enabled."
 
     print_success "Successfully deployed Lab Infra Server ${lab_infra_server_hostname} on your machine!"
 
