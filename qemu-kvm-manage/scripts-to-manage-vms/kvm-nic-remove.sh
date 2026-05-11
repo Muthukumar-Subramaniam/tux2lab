@@ -324,7 +324,7 @@ for mac in "${MACS_TO_REMOVE[@]}"; do
     print_task "Removing NIC with MAC $mac from VM \"$qemu_kvm_hostname\"..." nskip
     if error_msg=$(sudo virsh detach-interface "$qemu_kvm_hostname" "$nic_type" --mac "$mac" --config 2>&1); then
         print_task_done
-        ((removed_count++))
+        ((++removed_count))
     else
         print_task_fail
         print_error "$error_msg"

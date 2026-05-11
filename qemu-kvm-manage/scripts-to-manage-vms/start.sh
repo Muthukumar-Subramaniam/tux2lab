@@ -113,7 +113,7 @@ when_lab_infra_server_is_host() {
             break
         fi
         sleep 1
-        ((dad_elapsed++))
+        ((++dad_elapsed))
     done
     if [[ $dad_elapsed -ge $dad_timeout ]]; then
         print_task_fail
@@ -299,10 +299,10 @@ when_lab_infra_server_is_vm() {
         
         if [[ $check_result -eq 0 ]]; then
             printf "\033[0;36m[ \033[0;32m✓\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
-            ((active_services++))
+            ((++active_services))
         else
             printf "\033[0;36m[ \033[0;31m✗\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
-            ((inactive_services++))
+            ((++inactive_services))
             all_services_active=false
         fi
     done

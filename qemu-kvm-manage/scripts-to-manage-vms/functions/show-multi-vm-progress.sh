@@ -17,7 +17,7 @@ show_multi_vm_progress() {
         return 1
     fi
     
-    ((CURRENT_VM++))
+    ((++CURRENT_VM))
     
     if [[ ${TOTAL_VMS:-1} -gt 1 ]]; then
         print_info "Processing VM ${CURRENT_VM}/${TOTAL_VMS}: ${vm_hostname}"

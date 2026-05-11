@@ -49,7 +49,7 @@ generate_unique_mac() {
             echo "$mac"
             return 0
         fi
-        ((attempt++))
+        ((++attempt))
     done
 
     print_error "Failed to generate unique MAC address for VM \"${hostname}\" after ${max_attempts} attempts."

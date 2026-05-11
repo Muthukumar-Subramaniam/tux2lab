@@ -219,7 +219,7 @@ for disk in "${DISKS_TO_DELETE[@]}"; do
     print_task "Deleting $disk..." nskip
     if error_msg=$(sudo rm -f "$disk_path" 2>&1); then
         print_task_done
-        ((deleted_count++))
+        ((++deleted_count))
     else
         print_task_fail
         print_error "$error_msg"

@@ -246,7 +246,7 @@ for ((i=1; i<=nic_count; i++)); do
         --mac "$mac" --model virtio --config 2>&1); then
         print_task_done
         USED_MACS+=("$mac")
-        ((added_count++))
+        ((++added_count))
     else
         print_task_fail
         print_error "$error_msg"

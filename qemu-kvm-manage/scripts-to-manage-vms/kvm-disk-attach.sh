@@ -330,7 +330,7 @@ for disk in "${DISKS_TO_ATTACH[@]}"; do
         --subdriver qcow2 --persistent 2>&1); then
         print_task_done
         USED_TARGETS+=("$next_target")
-        ((attached_count++))
+        ((++attached_count))
     else
         print_task_fail
         print_error "$error_msg"

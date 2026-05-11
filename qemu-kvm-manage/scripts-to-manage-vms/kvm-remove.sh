@@ -170,7 +170,7 @@ if [[ -n "$hosts_list" ]]; then
     current=0
     
     for vm_name in "${validated_hosts[@]}"; do
-        ((current++))
+        ((++current))
         print_info "Progress: $current/$total_vms"
         # Pass true to skip individual confirmation if force flag is set
         if remove_vm "$vm_name" "$force_remove"; then
