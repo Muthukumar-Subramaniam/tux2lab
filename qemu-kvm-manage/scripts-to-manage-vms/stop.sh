@@ -12,10 +12,61 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # ====== GLOBAL CONFIGURATION ======
 lab_bridge_interface_name="labbr0"
+force_stop=false
+
+# ====== ARGUMENT PARSING ======
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f|--force)
+            force_stop=true
+            shift
+            ;;
+        -h|--help)
+            print_cyan "USAGE:
+    tux2lab stop [options]
+
+OPTIONS:
+    -f, --force     Force stop all running VMs before stopping lab infra
+    -h, --help      Show this help message"
+            exit 0
+            ;;
+        *)
+            print_error "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# ====== FORCE STOP ALL VMs ======
+force_stop_all_vms() {
+    local running_vms
+    running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" | grep -v "^${lab_infra_server_hostname}$" || true)
+
+    if [[ -z "$running_vms" ]]; then
+        print_info "No running VMs to stop."
+        return
+    fi
+
+    print_info "Force stopping all running VMs..."
+    while IFS= read -r vm_name; do
+        [[ -z "$vm_name" ]] && continue
+        print_task "Force stopping VM \"$vm_name\"..." nskip
+        if sudo virsh destroy "$vm_name" >/dev/null 2>&1; then
+            print_task_done
+        else
+            print_task_fail
+        fi
+    done <<< "$running_vms"
+}
 
 when_lab_infra_server_is_host() {
     local lab_bridge_dummy_interface_name="dummy-vnet"
     local lab_essential_services=("nginx" "nfs-server" "tftp.socket" "kea-dhcp4" "kea-dhcp6" "radvd")
+
+    # ====== STEP 0: Force stop all VMs if -f ======
+    if $force_stop; then
+        force_stop_all_vms
+    fi
 
     # ====== STEP 1: Stop essential lab services ======
     print_info "Stopping lab services..."
@@ -71,6 +122,11 @@ when_lab_infra_server_is_host() {
 }
 
 when_lab_infra_server_is_vm() {
+    # ====== STEP 0: Force stop all VMs if -f ======
+    if $force_stop; then
+        force_stop_all_vms
+    fi
+
     # ====== STEP 1: Shutdown lab infra server VM ======
     if sudo virsh list --state-running | awk '{print $2}' | grep -Fxq "$lab_infra_server_hostname"; then
         print_task "Shutting down lab infra server VM..." nskip
@@ -125,6 +181,9 @@ fi
 print_cyan "--------------------------------------------------------------"
 
 print_warning "This will stop all lab infrastructure services."
+if $force_stop; then
+    print_warning "All running VMs will be FORCE STOPPED (immediate power off)."
+fi
 print_warning "VMs will lose access to DNS, DHCP, NFS, PXE, and Web services."
 echo -n "Type CONFIRM to proceed: "
 read -r confirmation
