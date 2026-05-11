@@ -21,6 +21,14 @@ fi
 if ! sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
     print_info "Auto-start is already disabled."
 else
+    print_warning "Disabling auto-start means the lab infrastructure will NOT start on boot."
+    print_warning "You will need to run 'tux2lab start' manually after every reboot."
+    echo -n "Are you sure you want to proceed? (yes/no): "
+    read -r confirmation
+    if [[ "${confirmation}" != "yes" ]]; then
+        print_info "Operation cancelled."
+        exit 0
+    fi
     print_task "Disabling lab infrastructure auto-start on boot..." nskip
     if sudo systemctl disable "$SERVICE_NAME" >/dev/null 2>&1; then
         print_task_done

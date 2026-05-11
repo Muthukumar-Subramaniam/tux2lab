@@ -119,11 +119,25 @@ print_cyan "--------------------------------------------------------------"
 
 if $lab_infra_server_mode_is_host; then
     print_notify "Lab Infra Server Mode: HOST ( $lab_infra_server_hostname )"
-    print_cyan "--------------------------------------------------------------"
-    when_lab_infra_server_is_host
 else
     print_notify "Lab Infra Server Mode: VM ( $lab_infra_server_hostname )"
-    print_cyan "--------------------------------------------------------------"
+fi
+print_cyan "--------------------------------------------------------------"
+
+print_warning "This will stop all lab infrastructure services."
+print_warning "VMs will lose access to DNS, DHCP, NFS, PXE, and Web services."
+echo -n "Are you sure you want to proceed? (yes/no): "
+read -r confirmation
+if [[ "${confirmation}" != "yes" ]]; then
+    print_info "Operation cancelled."
+    exit 0
+fi
+
+print_cyan "--------------------------------------------------------------"
+
+if $lab_infra_server_mode_is_host; then
+    when_lab_infra_server_is_host
+else
     when_lab_infra_server_is_vm
 fi
 
