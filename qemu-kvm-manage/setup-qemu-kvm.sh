@@ -14,11 +14,12 @@ if [[ "$EUID" -eq 0 ]]; then
 fi
 
 # Check if we're inside a QEMU guest
-if command -v dmidecode &>/dev/null; then
+if [[ "${TUX2LAB_NESTED_VM:-}" != "true" ]] && command -v dmidecode &>/dev/null; then
     if sudo dmidecode -s system-manufacturer | grep -qi 'QEMU'; then
         print_error "This script cannot be executed inside a QEMU guest VM."
         print_info "This script must be run on the host system managing QEMU/KVM virtual machines."
         print_info "Current environment is a QEMU guest, which is not supported."
+        print_info "If you are using nested virtualization, set TUX2LAB_NESTED_VM=true to override."
         exit 1
     fi
 fi
