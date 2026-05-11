@@ -677,7 +677,7 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
-After=network-online.target
+After=network-online.target libvirtd.service
 Wants=network-online.target
 
 [Service]
@@ -999,7 +999,7 @@ deploy_lab_infra_server_host() {
     sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
-After=network-online.target
+After=network-online.target libvirtd.service
 Wants=network-online.target
 
 [Service]
