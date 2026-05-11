@@ -4,7 +4,7 @@
   <forward mode='nat'/>
   <ip address='10.28.28.1' netmask='255.255.252.0'>
   </ip>
-  <ip family='ipv6' address='fd28:2808:2020::1' prefix='64'>
+  <ip family='ipv6' address='fd28:2808:2020:3000::1' prefix='64'>
   </ip>
   <dns enable='no'/>
 </network>

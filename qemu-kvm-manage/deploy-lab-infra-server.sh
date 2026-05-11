@@ -323,7 +323,7 @@ prepare_lab_infra_config() {
     lab_infra_server_ipv6_ula_subnet=$(echo "$lab_infra_server_ipv6_gateway" | sed 's/::[^:]*$/::/')/${lab_infra_server_ipv6_prefix}
   
     # Lab Infra Server gets special IPv6 address ::2 (gateway is ::1)
-    # Extract IPv6 prefix without host portion (e.g., fd28:2808:2020)
+    # Extract IPv6 prefix without host portion (e.g., fd28:2808:2020:3000)
     ipv6_prefix_base=$(echo "$lab_infra_server_ipv6_gateway" | sed 's/::[^:]*$//')
   
     # Assign ::2 as the infrastructure server address
