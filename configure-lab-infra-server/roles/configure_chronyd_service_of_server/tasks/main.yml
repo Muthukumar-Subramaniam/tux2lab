@@ -16,6 +16,16 @@
     mode: '0755'
   when: is_host_mode
 
+- name: Ensure confdir directive exists in /etc/chrony.conf (host mode)
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/chrony.conf
+    line: "confdir /etc/chrony.d"
+    regexp: '^confdir\s+/etc/chrony\.d'
+    insertbefore: BOF
+    backup: true
+  when: is_host_mode
+
 - name: Deploy tux2lab chrony drop-in config (host mode)
   become: true
   ansible.builtin.copy:
