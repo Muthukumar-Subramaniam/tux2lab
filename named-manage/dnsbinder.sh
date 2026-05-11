@@ -274,15 +274,15 @@ fi
 
 fn_instruct_on_valid_domain_name() {
 print_warning "FYI :
-  > Only allowed TLD is 'local' .
+  > Only allowed TLD is 'internal' .
   > Maximum 2 subdomains are only allowed.
   > Only letters, numbers, and hyphens are allowed with subdomains.
   > Hyphens cannot appear at the start or end of the subdomains.
   > The total length must be between 1 and 63 characters.
   > Follows the format defined in RFC 1035.
   > Examples for Valid Domain Names :
-      test.local, test.example.local, 123-example.local, test-lab1.local
-      123.example.local, test1.lab1.local, test-1.example-1.local"
+      test.internal, test.example.internal, 123-example.internal, test-lab1.internal
+      123.example.internal, test1.lab1.internal, test-1.example-1.internal"
 }
 
 fn_configure_named_dns_server() {
@@ -319,7 +319,7 @@ fn_configure_named_dns_server() {
             read -p "Provide the preferred local domain : " v_given_domain 
         fi
             
-        if [[ "${#v_given_domain}" -le 63 ]] && [[ "${v_given_domain}" =~ ^[[:alnum:]]+([-.][[:alnum:]]+)*(\.[[:alnum:]]+){0,2}\.local$ ]]
+        if [[ "${#v_given_domain}" -le 63 ]] && [[ "${v_given_domain}" =~ ^[[:alnum:]]+([-.][[:alnum:]]+)*(\.[[:alnum:]]+){0,2}\.internal$ ]]
         then
             break
         else
@@ -493,7 +493,7 @@ zone "${v_given_domain}" IN {
     file "dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
     allow-update { none; };
 };
-//Reverse Zones ms.local
+//Reverse Zones
 EOF
     
     for v_subnet_part in ${v_splited_subnets}
@@ -2536,7 +2536,7 @@ Use one of the following Options :
     --setup To configure local dns server and domain (dual-stack IPv4/IPv6)
             Both IPv4 and IPv6 networks are auto-detected from system
             Usage: dnsbinder --setup <domain>
-            Example: dnsbinder --setup lab.local
+            Example: dnsbinder --setup tux2lab.internal
     -h (or) --help To print this usage info 
 
 Note: All host record operations automatically create/manage both IPv4 (A) and IPv6 (AAAA) records

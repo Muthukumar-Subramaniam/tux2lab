@@ -210,7 +210,7 @@ prepare_lab_infra_config() {
         print_info "
 \e[1mDomain Name Rules:\e[0m
 ─────────────────────────────
-    Only allowed TLD:          \e[1mlocal\e[0m
+    Only allowed TLD:          \e[1minternal\e[0m
     Max subdomains allowed:    \e[1m2\e[0m
     Allowed characters:        Letters (a-z), digits (0-9), and hyphens (-)
     Hyphens:                   Cannot be at the start or end of subdomains
@@ -218,29 +218,29 @@ prepare_lab_infra_config() {
     Format compliance:         Based on \e[3mRFC 1035\e[0m
 
 \e[1mExamples of valid domain names:\e[0m
-    test.local
-    test.example.local
-    123-example.local
-    test-lab1.local
-    123.example.local
-    test1.lab1.local
-    test-1.example-1.local
+    test.internal
+    test.example.internal
+    123-example.internal
+    test-lab1.internal
+    123.example.internal
+    test1.lab1.internal
+    test-1.example-1.internal
 "
     }
 
     # Prompt user for local infra domain name
     while true; do
         fn_instruct_on_valid_domain_name
-        read -rp "Enter your local Infra Domain Name [default: lab.local]: " lab_infra_domain_name
+        read -rp "Enter your local Infra Domain Name [default: tux2lab.internal]: " lab_infra_domain_name
 
         # Use default if empty
         if [[ -z "${lab_infra_domain_name}" ]]; then
-            lab_infra_domain_name="lab.local"
+            lab_infra_domain_name="tux2lab.internal"
         fi
 
         # Validate domain length and pattern
         if [[ "${#lab_infra_domain_name}" -le 63 ]] && \
-            [[ "${lab_infra_domain_name}" =~ ^[[:alnum:]]+([-.][[:alnum:]]+)*(\.[[:alnum:]]+){0,2}\.local$ ]]; then
+            [[ "${lab_infra_domain_name}" =~ ^[[:alnum:]]+([-.][[:alnum:]]+)*(\.[[:alnum:]]+){0,2}\.internal$ ]]; then
             break
         else
             print_error "Invalid domain name. Please follow the rules above."

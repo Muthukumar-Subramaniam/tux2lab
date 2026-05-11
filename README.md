@@ -147,7 +147,7 @@ The ISO is used as the install medium for the infra server VM.
 ```
 
 The interactive wizard will guide you through:
-- Choosing a hostname and domain (default: `lab.local`)
+- Choosing a hostname and domain (default: `tux2lab.internal`)
 - Setting an admin user and password
 - Selecting VM mode (recommended) or Host mode
 - Configuring SSH keys for passwordless access
@@ -171,7 +171,7 @@ tux2lab health
 ```
 KVM Lab Infra Health Check
 Lab Infra Server Mode: VM
-Lab Infra Server     : lab-infra-server.lab.local
+Lab Infra Server     : lab-infra-server.tux2lab.internal
 
 [ ✓ ] DNS Server           [ 53/tcp  ]
 [ ✓ ] DHCP Server          [ 67/udp  ]

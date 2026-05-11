@@ -108,7 +108,7 @@ qemu_kvm_hostname="$EXTRACTED_HOSTNAME"
 mkdir -p /tux2lab-data/golden-images-disk-store
 
 # Golden image filename format: {hostname-fqdn}.qcow2
-# Example: almalinux-golden-image-10.lab.local.qcow2
+# Example: almalinux-golden-image-10.tux2lab.internal.qcow2
 # The hostname from ksmanager already includes the version
 golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
 
