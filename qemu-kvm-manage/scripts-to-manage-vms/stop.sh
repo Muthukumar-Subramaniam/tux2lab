@@ -91,7 +91,6 @@ shutdown_all_vms() {
 }
 
 when_lab_infra_server_is_host() {
-    local lab_bridge_dummy_interface_name="dummy-vnet"
     local lab_essential_services=("nginx" "nfs-server" "tftp.socket" "kea-dhcp4" "kea-dhcp6" "radvd")
 
     # ====== STEP 1: Shutdown all VMs ======
@@ -119,22 +118,7 @@ when_lab_infra_server_is_host() {
         failed_services_list+=("named")
     fi
 
-    # ====== STEP 4: Remove IP addresses from labbr0 ======
-    if ip link show "$lab_bridge_interface_name" &>/dev/null; then
-        print_task "Removing IP addresses from $lab_bridge_interface_name..." nskip
-        sudo ip addr flush dev "$lab_bridge_interface_name" 2>/dev/null || true
-        print_task_done
-    fi
-
-    # ====== STEP 5: Remove dummy interface ======
-    if ip link show "$lab_bridge_dummy_interface_name" &>/dev/null; then
-        print_task "Removing dummy interface $lab_bridge_dummy_interface_name..." nskip
-        sudo ip link set "$lab_bridge_dummy_interface_name" down 2>/dev/null || true
-        sudo ip link del "$lab_bridge_dummy_interface_name" 2>/dev/null || true
-        print_task_done
-    fi
-
-    # ====== STEP 6: Stop libvirtd ======
+    # ====== STEP 4: Stop libvirtd (also tears down labbr0 bridge and dummy interface) ======
     print_task "Stopping libvirtd..." nskip
     if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
         print_task_done
