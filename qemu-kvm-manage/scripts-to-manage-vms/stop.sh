@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: stop.sh                                                                   #
-# Description: Stop the KVM lab infrastructure and all essential services                 #
+# Description: Stop the entire KVM lab — all VMs, services, and infrastructure            #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#
@@ -12,63 +12,85 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # ====== GLOBAL CONFIGURATION ======
 lab_bridge_interface_name="labbr0"
-force_stop=false
+vm_shutdown_timeout=120
 
-# ====== ARGUMENT PARSING ======
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -f|--force)
-            force_stop=true
-            shift
-            ;;
-        -h|--help)
-            print_cyan "USAGE:
-    tux2lab stop [options]
+# ====== HELP ======
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    print_cyan "USAGE:
+    tux2lab stop
 
-OPTIONS:
-    -f, --force     Force stop all running VMs before stopping lab infra
-    -h, --help      Show this help message"
-            exit 0
-            ;;
-        *)
-            print_error "Unknown option: $1"
-            exit 1
-            ;;
-    esac
-done
+DESCRIPTION:
+    Gracefully shuts down all running VMs, stops all lab services,
+    and tears down the lab infrastructure.
+    VMs that do not shut down within ${vm_shutdown_timeout}s are force stopped."
+    exit 0
+fi
 
-# ====== FORCE STOP ALL VMs ======
-force_stop_all_vms() {
+# ====== SHUTDOWN ALL VMs ======
+shutdown_all_vms() {
     local running_vms
-    running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" | grep -v "^${lab_infra_server_hostname}$" || true)
+    running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
 
     if [[ -z "$running_vms" ]]; then
-        print_info "No running VMs to stop."
+        print_info "No running VMs to shut down."
         return
     fi
 
-    print_info "Force stopping all running VMs..."
+    # Send graceful shutdown to all VMs
+    print_info "Sending graceful shutdown to all running VMs..."
+    local vm_list=()
     while IFS= read -r vm_name; do
         [[ -z "$vm_name" ]] && continue
-        print_task "Force stopping VM \"$vm_name\"..." nskip
-        if sudo virsh destroy "$vm_name" >/dev/null 2>&1; then
+        vm_list+=("$vm_name")
+        print_task "Shutting down VM \"$vm_name\"..." nskip
+        if sudo virsh shutdown "$vm_name" >/dev/null 2>&1; then
             print_task_done
         else
             print_task_fail
         fi
     done <<< "$running_vms"
+
+    # Wait for all VMs to shut down
+    print_task "Waiting up to ${vm_shutdown_timeout}s for VMs to shut down..."
+    local elapsed=0
+    while [[ $elapsed -lt $vm_shutdown_timeout ]]; do
+        local still_running
+        still_running=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+        if [[ -z "$still_running" ]]; then
+            break
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    # Force stop any VMs still running
+    local remaining
+    remaining=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+    if [[ -n "$remaining" ]]; then
+        print_task_fail
+        print_warning "Some VMs did not shut down gracefully. Force stopping..."
+        while IFS= read -r vm_name; do
+            [[ -z "$vm_name" ]] && continue
+            print_task "Force stopping VM \"$vm_name\"..." nskip
+            if sudo virsh destroy "$vm_name" >/dev/null 2>&1; then
+                print_task_done
+            else
+                print_task_fail
+            fi
+        done <<< "$remaining"
+    else
+        print_task_done
+    fi
 }
 
 when_lab_infra_server_is_host() {
     local lab_bridge_dummy_interface_name="dummy-vnet"
     local lab_essential_services=("nginx" "nfs-server" "tftp.socket" "kea-dhcp4" "kea-dhcp6" "radvd")
 
-    # ====== STEP 0: Force stop all VMs if -f ======
-    if $force_stop; then
-        force_stop_all_vms
-    fi
+    # ====== STEP 1: Shutdown all VMs ======
+    shutdown_all_vms
 
-    # ====== STEP 1: Stop essential lab services ======
+    # ====== STEP 2: Stop essential lab services ======
     print_info "Stopping lab services..."
     local failed_services_list=()
     for service_name in "${lab_essential_services[@]}"; do
@@ -81,7 +103,7 @@ when_lab_infra_server_is_host() {
         fi
     done
 
-    # ====== STEP 2: Stop named ======
+    # ====== STEP 3: Stop named ======
     print_task "Stopping named service..." nskip
     if sudo systemctl stop named 2>/dev/null; then
         print_task_done
@@ -90,14 +112,14 @@ when_lab_infra_server_is_host() {
         failed_services_list+=("named")
     fi
 
-    # ====== STEP 3: Remove IP addresses from labbr0 ======
+    # ====== STEP 4: Remove IP addresses from labbr0 ======
     if ip link show "$lab_bridge_interface_name" &>/dev/null; then
         print_task "Removing IP addresses from $lab_bridge_interface_name..." nskip
         sudo ip addr flush dev "$lab_bridge_interface_name" 2>/dev/null || true
         print_task_done
     fi
 
-    # ====== STEP 4: Remove dummy interface ======
+    # ====== STEP 5: Remove dummy interface ======
     if ip link show "$lab_bridge_dummy_interface_name" &>/dev/null; then
         print_task "Removing dummy interface $lab_bridge_dummy_interface_name..." nskip
         sudo ip link set "$lab_bridge_dummy_interface_name" down 2>/dev/null || true
@@ -105,7 +127,7 @@ when_lab_infra_server_is_host() {
         print_task_done
     fi
 
-    # ====== STEP 5: Stop libvirtd ======
+    # ====== STEP 6: Stop libvirtd ======
     print_task "Stopping libvirtd..." nskip
     if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
         print_task_done
@@ -122,38 +144,8 @@ when_lab_infra_server_is_host() {
 }
 
 when_lab_infra_server_is_vm() {
-    # ====== STEP 0: Force stop all VMs if -f ======
-    if $force_stop; then
-        force_stop_all_vms
-    fi
-
-    # ====== STEP 1: Shutdown lab infra server VM ======
-    if sudo virsh list --state-running | awk '{print $2}' | grep -Fxq "$lab_infra_server_hostname"; then
-        print_task "Shutting down lab infra server VM..." nskip
-        if sudo virsh shutdown "$lab_infra_server_hostname" >/dev/null 2>&1; then
-            print_task_done
-            # Wait for VM to actually shut down
-            print_task "Waiting for VM to shut down..." nskip
-            local shutdown_timeout=60
-            local shutdown_elapsed=0
-            while sudo virsh list --state-running | awk '{print $2}' | grep -Fxq "$lab_infra_server_hostname"; do
-                if [[ $shutdown_elapsed -ge $shutdown_timeout ]]; then
-                    print_task_fail
-                    print_warning "VM did not shut down within ${shutdown_timeout}s. Force stopping..."
-                    sudo virsh destroy "$lab_infra_server_hostname" >/dev/null 2>&1 || true
-                    break
-                fi
-                sleep 2
-                shutdown_elapsed=$((shutdown_elapsed + 2))
-            done
-            print_task_done
-        else
-            print_task_fail
-            print_error "Failed to shut down lab infra server VM"
-        fi
-    else
-        print_info "Lab infra server VM is not running."
-    fi
+    # ====== STEP 1: Shutdown all VMs (including infra server) ======
+    shutdown_all_vms
 
     # ====== STEP 2: Stop libvirtd ======
     print_task "Stopping libvirtd..." nskip
@@ -180,11 +172,7 @@ else
 fi
 print_cyan "--------------------------------------------------------------"
 
-print_warning "This will stop all lab infrastructure services."
-if $force_stop; then
-    print_warning "All running VMs will be FORCE STOPPED (immediate power off)."
-fi
-print_warning "VMs will lose access to DNS, DHCP, NFS, PXE, and Web services."
+print_warning "This will shut down all running VMs and stop all lab services."
 echo -n "Type CONFIRM to proceed: "
 read -r confirmation
 if [[ "${confirmation}" != "CONFIRM" ]]; then
