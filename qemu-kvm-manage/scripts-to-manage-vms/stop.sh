@@ -191,14 +191,11 @@ if [[ -n "$running_vms_list" ]]; then
     done <<< "$running_vms_list"
 fi
 
-# Skip confirmation when called by systemd (TUX2LAB_SYSTEMD=true)
-if [[ "${TUX2LAB_SYSTEMD:-}" != "true" ]]; then
-    echo -n "Type CONFIRM to proceed: "
-    read -r confirmation
-    if [[ "${confirmation}" != "CONFIRM" ]]; then
-        print_info "Operation cancelled."
-        exit 0
-    fi
+echo -n "Type CONFIRM to proceed: "
+read -r confirmation
+if [[ "${confirmation}" != "CONFIRM" ]]; then
+    print_info "Operation cancelled."
+    exit 0
 fi
 
 print_cyan "--------------------------------------------------------------"
@@ -211,11 +208,9 @@ fi
 
 exit_code=$?
 
-# Sync systemd service state when stopped interactively
-if [[ "${TUX2LAB_SYSTEMD:-}" != "true" ]]; then
-    if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null; then
-        sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
-    fi
+# Sync systemd service state after interactive stop
+if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null; then
+    sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
 fi
 
 print_cyan "--------------------------------------------------------------"
