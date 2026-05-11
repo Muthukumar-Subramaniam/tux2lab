@@ -129,7 +129,7 @@ when_lab_infra_server_is_host() {
 
     # ====== STEP 5: Destroy virtual network and flush IPs from labbr0 ======
     print_task "Destroying tux2lab virtual network..." nskip
-    sudo virsh net-destroy tux2lab 2>/dev/null || true
+    sudo virsh net-destroy tux2lab &>/dev/null || true
     if ip link show "$lab_bridge_interface_name" &>/dev/null; then
         sudo ip addr flush dev "$lab_bridge_interface_name" 2>/dev/null || true
     fi
