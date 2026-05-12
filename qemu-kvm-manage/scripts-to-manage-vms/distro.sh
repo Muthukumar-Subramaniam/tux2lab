@@ -55,7 +55,19 @@ shift
 
 case "$subcommand" in
     list)
-        run_on_infra_server --list
+        # Golden images are always on the KVM host — collect filenames locally
+        # and pass to infra server so it can display the status
+        golden_images=""
+        if [[ -d "/tux2lab-data/golden-images-disk-store" ]]; then
+            golden_images=$(ls /tux2lab-data/golden-images-disk-store/*.qcow2 2>/dev/null | xargs -I{} basename {} .qcow2 | tr '\n' ',' || true)
+        fi
+        if $lab_infra_server_mode_is_host; then
+            GOLDEN_IMAGES_ON_HOST="$golden_images" "${PREPARE_SCRIPT}" --list
+        else
+            ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t \
+                "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
+                "GOLDEN_IMAGES_ON_HOST='${golden_images}' ${PREPARE_SCRIPT} --list"
+        fi
         ;;
     setup)
         run_on_infra_server --setup "$@"

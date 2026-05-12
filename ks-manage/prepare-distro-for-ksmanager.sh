@@ -78,7 +78,13 @@ fn_is_distro_ready() {
 fn_has_golden_image() {
     local distro="$1" ver="$2"
     local ver_sanitized="${ver//\./-}"
-    [[ -f "${GOLDEN_IMAGE_DIR}/${distro}-${ver_sanitized}-golden-image.${dnsbinder_domain}.qcow2" ]]
+    local image_name="${distro}-${ver_sanitized}-golden-image.${dnsbinder_domain}"
+    # If golden image list was passed from KVM host, check that
+    if [[ -n "${GOLDEN_IMAGES_ON_HOST:-}" ]]; then
+        [[ ",${GOLDEN_IMAGES_ON_HOST}," == *",${image_name},"* ]]
+    else
+        [[ -f "${GOLDEN_IMAGE_DIR}/${image_name}.qcow2" ]]
+    fi
 }
 
 fn_validate_distro() {
