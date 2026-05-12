@@ -52,7 +52,7 @@ validate_and_process_hostnames() {
     declare -A seen_hosts
     local unique_hosts=()
     for vm_name in "${validated_hosts[@]}"; do
-        if [[ -z "${seen_hosts[$vm_name]}" ]]; then
+        if [[ -z "${seen_hosts[$vm_name]+x}" ]]; then
             seen_hosts[$vm_name]=1
             unique_hosts+=("$vm_name")
         fi
