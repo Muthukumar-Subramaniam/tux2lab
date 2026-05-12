@@ -2,7 +2,7 @@
 #----------------------------------------------------------------------------------------#
 # Script Name: golden-image.sh                                                           #
 # Description: Manage golden image disks for OS provisioning                             #
-# Invoked by : tux2lab golden-image {create|list|cleanup}                                #
+# Invoked by : tux2lab golden-image {build|list|cleanup}                                #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
@@ -20,11 +20,11 @@ show_golden_image_help() {
     tux2lab golden-image <subcommand> [options]
 
 SUBCOMMANDS:
-    create [OPTIONS]        Build a golden image by installing a VM via PXE boot
+    build [OPTIONS]         Build a golden image by installing a VM via PXE boot
     list                    List all available golden images
     cleanup                 Remove golden image(s)
 
-CREATE OPTIONS:
+BUILD OPTIONS:
     -d, --distro <distro>   Specify OS distribution
     -v, --version <ver>     Specify OS version number
 
@@ -33,8 +33,8 @@ OPTIONS:
 
 EXAMPLES:
     tux2lab golden-image list
-    tux2lab golden-image create                             # Interactive mode
-    tux2lab golden-image create -d almalinux -v 10          # Non-interactive mode
+    tux2lab golden-image build                             # Interactive mode
+    tux2lab golden-image build -d almalinux -v 10          # Non-interactive mode
     tux2lab golden-image cleanup                            # Interactive cleanup"
 }
 
@@ -43,7 +43,7 @@ EXAMPLES:
 golden_image_list() {
     if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
         print_info "No golden images found."
-        print_info "Create one with: tux2lab golden-image create"
+        print_info "Create one with: tux2lab golden-image build"
         return 0
     fi
 
@@ -165,9 +165,9 @@ golden_image_cleanup() {
     print_success "Golden image cleanup complete."
 }
 
-# ====== CREATE ======
+# ====== BUILD ======
 
-golden_image_create() {
+golden_image_build() {
     exec "${SCRIPT_DIR}/kvm-build-golden-image.sh" "$@"
 }
 
@@ -182,8 +182,8 @@ subcommand="$1"
 shift
 
 case "$subcommand" in
-    create)
-        golden_image_create "$@"
+    build|create)
+        golden_image_build "$@"
         ;;
     list)
         golden_image_list

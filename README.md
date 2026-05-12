@@ -203,8 +203,8 @@ tux2lab distro list                              # Show setup status
 Golden images let you deploy VMs in seconds instead of running a full PXE install:
 
 ```bash
-tux2lab golden-image create                      # Interactive
-tux2lab golden-image create -d almalinux -v 10   # Non-interactive
+tux2lab golden-image build                      # Interactive
+tux2lab golden-image build -d almalinux -v 10   # Non-interactive
 tux2lab golden-image list                        # Show available images
 ```
 
@@ -269,7 +269,7 @@ tux2lab vm nic-remove <hostname>  Remove a network interface
 ### Golden Image Management
 
 ```
-tux2lab golden-image create       Build a reusable base image via PXE
+tux2lab golden-image build        Build a reusable base image via PXE
 tux2lab golden-image list         List available golden images
 tux2lab golden-image cleanup      Remove unused golden images
 ```

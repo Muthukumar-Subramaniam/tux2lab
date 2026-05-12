@@ -95,7 +95,7 @@ main() {
             script_name="kvm-${subcommand}.sh"
             ;;
         build-golden-image)
-            print_info "This command has moved. Use: tux2lab golden-image create"
+            print_info "This command has moved. Use: tux2lab golden-image build"
             exit 1
             ;;
         disk-add|disk-resize|disk-attach|disk-detach|disk-delete|nic-add|nic-remove)
