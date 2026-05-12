@@ -112,11 +112,14 @@ EOF
 
 echo -e "\nReserve Records for DHCP lease DNS (last 99 IPs: .156-.254) . . .\n"
 
+dhcp_lease_file="$(mktemp /tmp/dhcp-lease-records.XXXXXXXXXX)"
 for IP in $(seq 156 254); do
-    if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -ci "dhcp-lease${IP}" "${dnsbinder_last24_subnet}.${IP}"; then
-        echo -e "\nWarning: Failed to create DNS record for dhcp-lease${IP}\n"
-    fi
+    echo "dhcp-lease${IP} ${dnsbinder_last24_subnet}.${IP}" >> "$dhcp_lease_file"
 done
+if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cify "$dhcp_lease_file"; then
+    echo -e "\nWarning: Some DHCP lease DNS records may have failed to create.\n"
+fi
+rm -f "$dhcp_lease_file"
 
 echo -e "\nUpdate Network Interface to conventional naming . . .\n"
 
