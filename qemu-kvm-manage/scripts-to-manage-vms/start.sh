@@ -195,15 +195,21 @@ when_lab_infra_server_is_vm() {
         fi
         print_task_done
     fi
-    # ====== STEP 2: Wait for labbr0 ======
+    # ====== STEP 2: Wait for labbr0 (autostart or manual net-start) ======
     print_task "Waiting for $lab_bridge_interface_name to be created..."
     local bridge_creation_timeout_seconds=30
     local bridge_creation_elapsed_seconds=0
+    local net_start_attempted=false
     until ip link show "$lab_bridge_interface_name" &>/dev/null; do
         if [[ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]]; then
             print_task_fail
             print_error "Timeout waiting for $lab_bridge_interface_name"
             return 1
+        fi
+        # If bridge hasn't appeared after 5s, try starting the network manually
+        if [[ $bridge_creation_elapsed_seconds -ge 5 ]] && ! $net_start_attempted; then
+            sudo virsh net-start tux2lab &>/dev/null || true
+            net_start_attempted=true
         fi
         sleep 1
         bridge_creation_elapsed_seconds=$((bridge_creation_elapsed_seconds + 1))
