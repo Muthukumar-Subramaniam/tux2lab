@@ -155,7 +155,15 @@ when_lab_infra_server_is_vm() {
     # ====== STEP 1: Shutdown all VMs (including infra server) ======
     shutdown_all_vms
 
-    # ====== STEP 2: Stop libvirtd ======
+    # ====== STEP 2: Destroy virtual network and flush IPs from labbr0 ======
+    print_task "Destroying tux2lab virtual network..." nskip
+    sudo virsh net-destroy tux2lab &>/dev/null || true
+    if ip link show "$lab_bridge_interface_name" &>/dev/null; then
+        sudo ip addr flush dev "$lab_bridge_interface_name" 2>/dev/null || true
+    fi
+    print_task_done
+
+    # ====== STEP 3: Stop libvirtd ======
     print_task "Stopping libvirtd..." nskip
     if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
         print_task_done
