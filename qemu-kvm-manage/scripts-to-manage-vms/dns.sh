@@ -26,9 +26,11 @@ OPTIONS (passed to dnsbinder):
     -r              Rename an existing host record
     -ry             Rename without confirmation
     -cf <file>      Create multiple host records from a file
+    -cfy <file>     Create multiple host records without confirmation
     -cif <file>     Create host records with specific IPs from a file
     -cify <file>    Create with specific IPs without confirmation
     -df <file>      Delete multiple host records from a file
+    -dfy <file>     Delete multiple host records without confirmation
     -ci             Create a host record with a specific IPv4
     -cc             Create a CNAME/Alias record
     -dc             Delete a CNAME/Alias record
@@ -82,11 +84,11 @@ else
         exit 1
     fi
 
-    # Check if this is a file-based operation (-cf, -df, -cif, or -cify)
+    # Check if this is a file-based operation (-cf, -cfy, -df, -dfy, -cif, or -cify)
     file_based_option=""
     file_path=""
 
-    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "-cify" ]]; }; then
+    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "-cify" ]]; }; then
         file_based_option="$1"
         file_path="$2"
 

@@ -1994,6 +1994,7 @@ fn_handle_multiple_host_record() {
 
     v_host_list_file="${1}"
     v_action_required="${2}"
+    local v_auto_confirm="${3:-}"
 
     clear
 
@@ -2034,31 +2035,37 @@ fn_handle_multiple_host_record() {
     sed -i "s/\.${v_domain_name}//g" "${v_work_file}"
     
     
-    while :
-    do
-        print_info "Records to be ${v_action_required^}d : "
-    
-        cat "${v_work_file}"
-    
-        echo
-        print_notify "Provide your confirmation to ${v_action_required} the above host records (y/n) : " "nskip"
+    if [[ "${v_auto_confirm}" == "-y" ]]; then
+        local v_total_preview
+        v_total_preview=$(wc -l < "${v_work_file}")
+        print_info "Auto-confirmed: ${v_action_required^}ing ${v_total_preview} host records..."
+    else
+        while :
+        do
+            print_info "Records to be ${v_action_required^}d : "
         
-        read v_confirmation
-    
-        if [[ ${v_confirmation} == "y" ]]
-        then
-            break
-    
-        elif [[ ${v_confirmation} == "n" ]]
-        then
-            print_error "Cancelled without any changes !!"
-            fn_release_zone_lock
-            exit
-        else
-            print_error "Select either (y/n) only !"
-            continue
-        fi
-    done
+            cat "${v_work_file}"
+        
+            echo
+            print_notify "Provide your confirmation to ${v_action_required} the above host records (y/n) : " "nskip"
+            
+            read v_confirmation
+        
+            if [[ ${v_confirmation} == "y" ]]
+            then
+                break
+        
+            elif [[ ${v_confirmation} == "n" ]]
+            then
+                print_error "Cancelled without any changes !!"
+                fn_release_zone_lock
+                exit
+            else
+                print_error "Select either (y/n) only !"
+                continue
+            fi
+        done
+    fi
     
     > "${v_tmp_file_dnsbinder}"
     
@@ -2529,9 +2536,11 @@ Use one of the following Options :
     -r      To rename an existing host record (updates A and AAAA records)
     -ry     caution ! To do the above without any confirmation
     -cf     To create multiple host records provided in a file (dual-stack)
+    -cfy    caution ! To do the above without any confirmation
     -cif    To create multiple host records with specific IPs from a file (hostname ipv4)
     -cify   caution ! To do the above without any confirmation
     -df     To delete multiple host records provided in a file (dual-stack)
+    -dfy    caution ! To do the above without any confirmation
     -ci     To create a host record with specific IPv4 Address (auto-generates IPv6)
     -cc     To create a CNAME/Alias record for an existing host record
     -dc     To delete a CNAME/Alias record for an existing host record
@@ -2590,14 +2599,18 @@ then
             fi
             exit
             ;;
-        -cf)
+        -cf|-cfy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '-cf' option takes only 1 arguement as file containing list of hostnames ! "
+                print_error "Invalid Option! '${1}' option takes only 1 arguement as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
             fi
-            fn_handle_multiple_host_record "${2}" "create"
+            if [[ "${1}" == "-cf" ]]; then
+                fn_handle_multiple_host_record "${2}" "create"
+            elif [[ "${1}" == "-cfy" ]]; then
+                fn_handle_multiple_host_record "${2}" "create" "-y"
+            fi
             exit
             ;;
         -cif|-cify)
@@ -2614,14 +2627,18 @@ then
             fi
             exit
             ;;
-        -df)
+        -df|-dfy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '-df' option takes only 1 arguement as file containing list of hostnames ! "
+                print_error "Invalid Option! '${1}' option takes only 1 arguement as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
             fi
-            fn_handle_multiple_host_record "${2}" "delete"
+            if [[ "${1}" == "-df" ]]; then
+                fn_handle_multiple_host_record "${2}" "delete"
+            elif [[ "${1}" == "-dfy" ]]; then
+                fn_handle_multiple_host_record "${2}" "delete" "-y"
+            fi
             exit
             ;;
         -ci)    
