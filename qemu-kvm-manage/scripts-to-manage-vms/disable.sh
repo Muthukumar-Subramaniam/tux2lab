@@ -17,7 +17,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 
 DESCRIPTION:
     Disables the lab infrastructure from auto-starting on boot.
-    In VM mode, also disables VM autostart.
+    In VM mode, also disables libvirtd.
     Requires confirmation before proceeding."
     exit 0
 fi
