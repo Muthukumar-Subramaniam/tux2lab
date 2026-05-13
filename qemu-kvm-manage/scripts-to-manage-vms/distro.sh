@@ -55,6 +55,10 @@ shift
 
 case "$subcommand" in
     list)
+        if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+            show_distro_help
+            exit 0
+        fi
         # Golden images are always on the KVM host — collect filenames locally
         # and pass to infra server so it can display the status
         golden_images=""
@@ -70,9 +74,17 @@ case "$subcommand" in
         fi
         ;;
     setup)
+        if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+            show_distro_help
+            exit 0
+        fi
         run_on_infra_server --setup "$@"
         ;;
     cleanup)
+        if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+            show_distro_help
+            exit 0
+        fi
         run_on_infra_server --cleanup "$@"
         ;;
     *)
