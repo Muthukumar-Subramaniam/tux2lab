@@ -16,8 +16,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab enable
 
 DESCRIPTION:
-    Enables the lab infrastructure to auto-start on boot.
-    In VM mode, also enables libvirtd."
+    Enables the lab infrastructure to auto-start on boot."
     exit 0
 fi
 
@@ -49,19 +48,17 @@ else
     fi
 fi
 
-# ====== VM mode: also enable libvirtd ======
-if ! $lab_infra_server_mode_is_host; then
-    if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
-        print_info "libvirtd auto-start is already enabled."
+# ====== Enable libvirtd ======
+if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
+    print_info "libvirtd auto-start is already enabled."
+else
+    print_task "Enabling libvirtd..." nskip
+    if sudo systemctl enable libvirtd >/dev/null 2>&1; then
+        print_task_done
     else
-        print_task "Enabling libvirtd..." nskip
-        if sudo systemctl enable libvirtd >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
-            print_error "Failed to enable libvirtd."
-            exit 1
-        fi
+        print_task_fail
+        print_error "Failed to enable libvirtd."
+        exit 1
     fi
 fi
 

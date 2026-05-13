@@ -17,7 +17,6 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 
 DESCRIPTION:
     Disables the lab infrastructure from auto-starting on boot.
-    In VM mode, also disables libvirtd.
     Requires confirmation before proceeding."
     exit 0
 fi
@@ -60,20 +59,18 @@ else
     exit 1
 fi
 
-# ====== VM mode: also disable libvirtd ======
-if ! $lab_infra_server_mode_is_host; then
-    if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
-        print_task "Disabling libvirtd..." nskip
-        if sudo systemctl disable libvirtd >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
-            print_error "Failed to disable libvirtd."
-            exit 1
-        fi
+# ====== Disable libvirtd ======
+if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
+    print_task "Disabling libvirtd..." nskip
+    if sudo systemctl disable libvirtd >/dev/null 2>&1; then
+        print_task_done
     else
-        print_info "libvirtd auto-start is already disabled."
+        print_task_fail
+        print_error "Failed to disable libvirtd."
+        exit 1
     fi
+else
+    print_info "libvirtd auto-start is already disabled."
 fi
 
 print_success "Lab infrastructure will no longer auto-start on boot."
