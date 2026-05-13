@@ -465,6 +465,18 @@ fn_setup_distro() {
 fn_cleanup_distro() {
     local distro="$1" version="$2"
 
+    # Guard: refuse to clean up the distro that built the infra server
+    local infra_distro="" infra_version=""
+    if [[ -f /etc/environment ]]; then
+        infra_distro=$(awk -F'"' '/^infra_server_distro=/{print $2}' /etc/environment)
+        infra_version=$(awk -F'"' '/^infra_server_version=/{print $2}' /etc/environment)
+    fi
+    if [[ -n "$infra_distro" ]] && [[ "$distro" == "$infra_distro" ]] && [[ "$version" == "$infra_version" ]]; then
+        print_error "${DISTRO_DISPLAY_NAMES[$distro]} ${version} is the distro used to build this infra server."
+        print_error "Cleanup is blocked to prevent breaking the lab infrastructure."
+        exit 1
+    fi
+
     local iso_file="${ISO_FILENAMES[${distro}:${version}]:-}"
     if [[ -z "$iso_file" ]]; then
         print_error "No ISO filename configured for ${distro} ${version}."
