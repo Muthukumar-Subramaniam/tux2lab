@@ -60,17 +60,19 @@ else
     exit 1
 fi
 
-# ====== VM mode: also disable virsh autostart ======
+# ====== VM mode: also disable libvirtd ======
 if ! $lab_infra_server_mode_is_host; then
-    if sudo virsh dominfo "$lab_infra_server_hostname" 2>/dev/null | grep -q "Autostart:.*enable"; then
-        print_task "Disabling VM autostart for ${lab_infra_server_hostname}..." nskip
-        if sudo virsh autostart --disable "$lab_infra_server_hostname" >/dev/null 2>&1; then
+    if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
+        print_task "Disabling libvirtd..." nskip
+        if sudo systemctl disable libvirtd >/dev/null 2>&1; then
             print_task_done
         else
             print_task_fail
-            print_error "Failed to disable VM autostart."
+            print_error "Failed to disable libvirtd."
             exit 1
         fi
+    else
+        print_info "libvirtd auto-start is already disabled."
     fi
 fi
 
