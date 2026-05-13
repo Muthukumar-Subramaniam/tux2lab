@@ -106,7 +106,7 @@ cat << EOF | sudo tee /etc/motd &>/dev/null
 | Automation toolkits are available to manage the lab.        |
 +-------------------------------------------------------------+
 | Have a bug report, suggestion, or query? Drop it here:      |
-| https://github.com/Muthukumar-Subramaniam/tux2lab/issues |
+| https://github.com/Muthukumar-Subramaniam/tux2lab/issues    |
 +-------------------------------------------------------------+
 EOF
 
