@@ -26,6 +26,12 @@ DESCRIPTION:
     exit 0
 fi
 
+if [[ $# -gt 0 ]]; then
+    print_error "Unknown argument: $1"
+    echo "Run 'tux2lab stop --help' for usage information."
+    exit 1
+fi
+
 # ====== SOURCE SHUTDOWN FUNCTION ======
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
 

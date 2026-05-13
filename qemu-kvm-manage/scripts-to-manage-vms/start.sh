@@ -10,6 +10,24 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
+# ====== HELP ======
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    print_cyan "USAGE:
+    tux2lab start
+
+DESCRIPTION:
+    Starts the KVM lab infrastructure, including libvirtd, the virtual
+    network, and the lab infra server (VM or host services).
+    Verifies all essential services are reachable after startup."
+    exit 0
+fi
+
+if [[ $# -gt 0 ]]; then
+    print_error "Unknown argument: $1"
+    echo "Run 'tux2lab start --help' for usage information."
+    exit 1
+fi
+
 # ====== GLOBAL CONFIGURATION ======
 lab_bridge_interface_name="labbr0"
 
@@ -268,6 +286,14 @@ when_lab_infra_server_is_vm() {
     fi
     print_task_done
     # ====== STEP 5: Check essential services connectivity ======
+    if ! command -v nc &>/dev/null; then
+        print_warning "'nc' (netcat) is not installed — skipping service connectivity checks."
+        configure_dns_for_bridge || return 1
+        print_cyan "--------------------------------------------------------------"
+        print_success "KVM Lab Infra is started (service checks skipped — install nc for full verification)."
+        return 0
+    fi
+
     print_info "Checking essential services connectivity..."
     
     # Define port numbers
@@ -298,9 +324,15 @@ when_lab_infra_server_is_vm() {
     local active_services=0
     local inactive_services=0
     local all_services_active=true
+    local dns_is_down=false
     
     for entry in "${services_to_check[@]}"; do
         IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
+
+        # If DNS is down, fall back to IP address for hostname-based checks
+        if $dns_is_down && [[ "$service_address" == "$lab_infra_server_hostname" ]]; then
+            service_address="$lab_infra_server_ipv4_address"
+        fi
         
         local check_result=1
         if [[ "$service_proto" == "udp" ]]; then
@@ -316,6 +348,10 @@ when_lab_infra_server_is_vm() {
             printf "\033[0;36m[ \033[0;31m✗\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
             ((++inactive_services))
             all_services_active=false
+            # Track DNS failure to avoid cascade
+            if [[ "$service_name" == "DNS Server" ]]; then
+                dns_is_down=true
+            fi
         fi
     done
 
