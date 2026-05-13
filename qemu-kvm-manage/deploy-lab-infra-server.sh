@@ -87,7 +87,7 @@ Re-running this script will OVERWRITE your existing setup.
         print_yellow "If you want to redeploy from scratch, you must:
     1. Backup any important data from your lab
     2. Manually remove the existing deployment:
-        • Delete VM: sudo virsh undefine ${lab_infra_server_hostname:-lab-infra-server} --remove-all-storage
+        • Delete VM: sudo virsh undefine ${lab_infra_server_hostname:-tux2lab-infra-server} --remove-all-storage
         • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
     3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
     4. Remove SSH keys: rm -f ~/.ssh/tux2lab_id_rsa*"
@@ -143,10 +143,10 @@ prepare_lab_infra_config() {
     # Get Infra Server Name
     while true; do
         echo
-        read -rp "Enter your Lab Infra Server name [default: lab-infra-server]: " lab_infra_server_shortname
+        read -rp "Enter your Lab Infra Server name [default: tux2lab-infra-server]: " lab_infra_server_shortname
 
         if [[ -z "$lab_infra_server_shortname" ]]; then
-            lab_infra_server_shortname="lab-infra-server"
+            lab_infra_server_shortname="tux2lab-infra-server"
             break
         fi
 
@@ -885,14 +885,14 @@ deploy_lab_infra_server_host() {
         exit 1
     fi
 
-    # Only create CNAME if server name is not already lab-infra-server
-    if [[ "${lab_infra_server_shortname}" != "lab-infra-server" ]]; then
-        print_info "Creating CNAME record for lab-infra-server..."
-        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "lab-infra-server" "${lab_infra_server_hostname}"; then
-            print_warning "Failed to create CNAME for lab-infra-server"
+    # Only create CNAME if server name is not already tux2lab-infra-server
+    if [[ "${lab_infra_server_shortname}" != "tux2lab-infra-server" ]]; then
+        print_info "Creating CNAME record for tux2lab-infra-server..."
+        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "tux2lab-infra-server" "${lab_infra_server_hostname}"; then
+            print_warning "Failed to create CNAME for tux2lab-infra-server"
         fi
     else
-        print_info "Skipping CNAME creation (server name is already lab-infra-server)"
+        print_info "Skipping CNAME creation (server name is already tux2lab-infra-server)"
     fi
 
     # Set mgmt_super_user in environment using lab_infra_admin_username
