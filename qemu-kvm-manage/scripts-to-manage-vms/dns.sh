@@ -38,6 +38,23 @@ OPTIONS (passed to dnsbinder):
     exit 0
 fi
 
+# ====== VALIDATE OPTION ======
+if [[ $# -gt 0 ]]; then
+    valid_options=(-c -d -dy -r -ry -cf -cfy -cif -cify -df -dfy -ci -cc -dc -dcy --setup)
+    option_is_valid=false
+    for opt in "${valid_options[@]}"; do
+        if [[ "$1" == "$opt" ]]; then
+            option_is_valid=true
+            break
+        fi
+    done
+    if ! $option_is_valid; then
+        print_error "Invalid option \"$1\"!"
+        print_info "Run 'tux2lab dns --help' for usage info."
+        exit 1
+    fi
+fi
+
 # ====== PREREQUISITE: labbr0 must be up ======
 if ! ip link show labbr0 &>/dev/null; then
     print_error "labbr0 interface is not available!"
