@@ -10,6 +10,23 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
+# ====== HELP ======
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    print_cyan "USAGE:
+    tux2lab enable
+
+DESCRIPTION:
+    Enables the lab infrastructure to auto-start on boot.
+    In VM mode, also enables libvirtd and VM autostart."
+    exit 0
+fi
+
+if [[ $# -gt 0 ]]; then
+    print_error "Unknown argument: $1"
+    echo "Run 'tux2lab enable --help' for usage information."
+    exit 1
+fi
+
 readonly SERVICE_NAME="tux2lab-lab-infra.service"
 
 if ! systemctl list-unit-files "$SERVICE_NAME" &>/dev/null; then
