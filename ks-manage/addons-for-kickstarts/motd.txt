@@ -6,5 +6,5 @@
 | Just keep your lab infra in your mind.                       |
 +--------------------------------------------------------------+
 | Bug report, suggestion, or query? Drop it here:              |
-| https://github.com/Muthukumar-Subramaniam/tux2lab/issues    |
+| https://github.com/Muthukumar-Subramaniam/tux2lab/issues     |
 +--------------------------------------------------------------+
