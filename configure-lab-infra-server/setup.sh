@@ -83,16 +83,18 @@ source /etc/environment
 : "${dnsbinder_server_short_name:?Error: dnsbinder did not set server name}"
 : "${dnsbinder_last24_subnet:?Error: dnsbinder did not set subnet}"
 
-# Only create CNAME if server name is not already lab-infra-server
-if [[ "${dnsbinder_server_short_name}" != "lab-infra-server" ]]; then
-    echo -e "\nCreating CNAME record for lab-infra-server . . .\n"
-
-    if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "lab-infra-server" "${dnsbinder_server_short_name}"; then
-        echo -e "\nWarning: Failed to create CNAME for lab-infra-server\n"
+# Create CNAME aliases so well-known names always resolve
+cname_aliases=("tux2lab-infra-server" "lab-infra-server")
+for cname_alias in "${cname_aliases[@]}"; do
+    if [[ "${dnsbinder_server_short_name}" == "${cname_alias}" ]]; then
+        echo -e "\nSkipping CNAME for ${cname_alias} (matches server name) . . .\n"
+        continue
     fi
-else
-    echo -e "\nSkipping CNAME creation (server name is already lab-infra-server) . . .\n"
-fi
+    echo -e "\nCreating CNAME record: ${cname_alias} -> ${dnsbinder_server_short_name} . . .\n"
+    if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "${cname_alias}" "${dnsbinder_server_short_name}"; then
+        echo -e "\nWarning: Failed to create CNAME for ${cname_alias}\n"
+    fi
+done
 
 echo -e "\nSetting motd . . .\n"
 

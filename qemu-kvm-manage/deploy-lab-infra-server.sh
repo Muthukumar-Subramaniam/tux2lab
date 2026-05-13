@@ -885,15 +885,18 @@ deploy_lab_infra_server_host() {
         exit 1
     fi
 
-    # Only create CNAME if server name is not already tux2lab-infra-server
-    if [[ "${lab_infra_server_shortname}" != "tux2lab-infra-server" ]]; then
-        print_info "Creating CNAME record for tux2lab-infra-server..."
-        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "tux2lab-infra-server" "${lab_infra_server_hostname}"; then
-            print_warning "Failed to create CNAME for tux2lab-infra-server"
+    # Create CNAME aliases so well-known names always resolve
+    local cname_aliases=("tux2lab-infra-server" "lab-infra-server")
+    for cname_alias in "${cname_aliases[@]}"; do
+        if [[ "${lab_infra_server_shortname}" == "${cname_alias}" ]]; then
+            print_info "Skipping CNAME for ${cname_alias} (matches server name)"
+            continue
         fi
-    else
-        print_info "Skipping CNAME creation (server name is already tux2lab-infra-server)"
-    fi
+        print_info "Creating CNAME record: ${cname_alias} -> ${lab_infra_server_hostname}..."
+        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "${cname_alias}" "${lab_infra_server_hostname}"; then
+            print_warning "Failed to create CNAME for ${cname_alias}"
+        fi
+    done
 
     # Set mgmt_super_user in environment using lab_infra_admin_username
     if ! grep -q mgmt_super_user /etc/environment; then
