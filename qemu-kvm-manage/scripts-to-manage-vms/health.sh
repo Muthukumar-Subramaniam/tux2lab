@@ -135,6 +135,7 @@ Inactive Services : $inactive_services
 -------------------------------------------------------------"
 if [[ $active_services -eq 0 ]]; then
     print_error "KVM Lab Infra health is CRITICAL."
+    print_info "All services are down. Try: tux2lab start"
     print_cyan "-------------------------------------------------------------"
     exit 2
 elif [[ $total_services -eq $active_services ]]; then
@@ -143,6 +144,7 @@ elif [[ $total_services -eq $active_services ]]; then
     exit 0
 else
     print_warning "KVM Lab Infra health is DEGRADED."
+    print_info "Some services are down. Try: tux2lab start"
     print_cyan "-------------------------------------------------------------"
     exit 1
 fi
