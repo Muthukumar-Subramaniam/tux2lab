@@ -7,6 +7,23 @@ set -euo pipefail
 
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
+fn_show_help() {
+    print_cyan "Usage: tux2lab vm list
+
+List all VMs with their state, OS state, and OS distribution.
+
+Options:
+  -h, --help           Show this help message
+
+This command takes no other arguments.
+"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    fn_show_help
+    exit 0
+fi
+
 if [[ "$#" -ne 0 ]]; then
     print_error "'tux2lab vm list' does not take any arguments."
     exit 1
