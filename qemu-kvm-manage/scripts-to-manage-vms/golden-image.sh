@@ -47,8 +47,8 @@ golden_image_list() {
         return 0
     fi
 
-    printf "\n  %-20s %-12s %-12s %-30s\n" "DISTRO" "VERSION" "SIZE" "CREATED"
-    printf "  %-20s %-12s %-12s %-30s\n" "------" "-------" "----" "-------"
+    printf "\n  %-20s %-12s %-22s %-30s\n" "DISTRO" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
+    printf "  %-20s %-12s %-22s %-30s\n" "------" "-------" "---------------------" "-------"
 
     for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
         local filename
@@ -70,14 +70,17 @@ golden_image_list() {
         done
 
         local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
-        local size
-        size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {printf "%s GiB", $i; exit}}')
-        size="${size:-unknown}"
+        local disk_size virtual_size size
+        disk_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^disk size:/ {print $3, $4; exit}')
+        disk_size="${disk_size:-?}"
+        virtual_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^virtual size:/ {print $3, $4; exit}')
+        virtual_size="${virtual_size:-?}"
+        size="${disk_size} / ${virtual_size}"
         local created
         created=$(stat -c '%y' "$qcow2_file" 2>/dev/null | cut -d'.' -f1)
         created="${created:-unknown}"
 
-        printf "  %-20s %-12s %-12s %-30s\n" "$display_name" "$version" "$size" "$created"
+        printf "  %-20s %-12s %-22s %-30s\n" "$display_name" "$version" "$size" "$created"
     done
     echo
 }
