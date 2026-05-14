@@ -114,7 +114,7 @@ _tux2lab_completions() {
         fi
 
         # Complete flags after build subcommand
-        if [[ "${COMP_WORDS[2]}" == "build" ]] && [[ ${cur} == -* ]]; then
+        if [[ "${COMP_WORDS[2]}" == "build" ]]; then
             COMPREPLY=( $(compgen -W "-d --distro -v --version -h --help" -- "${cur}") )
             return 0
         fi
