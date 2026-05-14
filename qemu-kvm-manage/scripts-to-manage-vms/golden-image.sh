@@ -28,6 +28,11 @@ BUILD OPTIONS:
     -d, --distro <distro>   Specify OS distribution
     -v, --version <ver>     Specify OS version number
 
+CLEANUP OPTIONS:
+    -d, --distro <distro>   Specify OS distribution to remove
+    -v, --version <ver>     Specify OS version number to remove
+    -f, --force             Skip confirmation prompt
+
 OPTIONS:
     -h, --help              Show this help message
 
@@ -35,7 +40,9 @@ EXAMPLES:
     tux2lab golden-image list
     tux2lab golden-image build                             # Interactive mode
     tux2lab golden-image build -d almalinux -v 10          # Non-interactive mode
-    tux2lab golden-image cleanup                            # Interactive cleanup"
+    tux2lab golden-image cleanup                            # Interactive cleanup
+    tux2lab golden-image cleanup -d almalinux -v 10        # Remove specific golden image
+    tux2lab golden-image cleanup -f -d rocky -v 9          # Remove without confirmation"
 }
 
 # ====== LIST ======
@@ -88,12 +95,102 @@ golden_image_list() {
 # ====== CLEANUP ======
 
 golden_image_cleanup() {
+    local cleanup_distro=""
+    local cleanup_version=""
+    local force=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -d|--distro)
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                    print_error "--distro/-d requires a distribution name."
+                    show_golden_image_help
+                    exit 1
+                fi
+                cleanup_distro="$2"
+                shift 2
+                ;;
+            -v|--version)
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                    print_error "--version/-v requires a version number."
+                    show_golden_image_help
+                    exit 1
+                fi
+                cleanup_version="$2"
+                shift 2
+                ;;
+            -f|--force)
+                force=true
+                shift
+                ;;
+            -h|--help)
+                show_golden_image_help
+                exit 0
+                ;;
+            -*)
+                print_error "Unknown option: $1"
+                show_golden_image_help
+                exit 1
+                ;;
+            *)
+                print_error "'tux2lab golden-image cleanup' does not accept positional arguments."
+                show_golden_image_help
+                exit 1
+                ;;
+        esac
+    done
+
     if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
         print_info "No golden images found. Nothing to clean up."
         return 0
     fi
 
-    # Build list of available golden images
+    # Non-interactive mode: -d and -v specified
+    if [[ -n "$cleanup_distro" ]]; then
+        if [[ -z "${DISTRO_DISPLAY_NAMES[$cleanup_distro]:-}" ]]; then
+            print_error "Unknown distribution: $cleanup_distro"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap"
+            exit 1
+        fi
+        if [[ -z "$cleanup_version" ]]; then
+            print_error "--version/-v is required when --distro/-d is specified."
+            exit 1
+        fi
+        local version_dashed="${cleanup_version//./-}"
+        local pattern="${GOLDEN_IMAGE_DIR}/${cleanup_distro}-${version_dashed}-golden-image.*.qcow2"
+        local -a matched_files=()
+        for f in $pattern; do
+            [[ -e "$f" ]] && matched_files+=("$f")
+        done
+        if [[ ${#matched_files[@]} -eq 0 ]]; then
+            print_error "No golden image found for ${DISTRO_DISPLAY_NAMES[$cleanup_distro]} ${cleanup_version}"
+            exit 1
+        fi
+        local -a files_to_remove=("${matched_files[@]}")
+        if [[ "$force" != true ]]; then
+            print_warning "The following golden image(s) will be permanently deleted:"
+            for f in "${files_to_remove[@]}"; do
+                print_info "  $(basename "$f")"
+            done
+            read -rp "Are you sure? (yes/no): " confirm
+            if [[ "$confirm" != "yes" ]]; then
+                print_info "Cleanup aborted."
+                exit 0
+            fi
+        fi
+        for f in "${files_to_remove[@]}"; do
+            local base
+            base=$(basename "$f" .qcow2)
+            print_task "Removing ${base}..."
+            sudo rm -f "$f"
+            sudo rm -f "${GOLDEN_IMAGE_DIR}/${base}_VARS.fd"
+            print_task_done
+        done
+        print_success "Golden image cleanup complete."
+        return 0
+    fi
+
+    # Interactive mode
     local -a image_files=()
     local -a image_labels=()
     for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
@@ -144,15 +241,17 @@ golden_image_cleanup() {
         exit 1
     fi
 
-    # Confirmation
-    print_warning "The following golden image(s) will be permanently deleted:"
-    for f in "${files_to_remove[@]}"; do
-        print_info "  $(basename "$f")"
-    done
-    read -rp "Are you sure? (yes/no): " confirm
-    if [[ "$confirm" != "yes" ]]; then
-        print_info "Cleanup aborted."
-        exit 0
+    # Confirmation (unless -f)
+    if [[ "$force" != true ]]; then
+        print_warning "The following golden image(s) will be permanently deleted:"
+        for f in "${files_to_remove[@]}"; do
+            print_info "  $(basename "$f")"
+        done
+        read -rp "Are you sure? (yes/no): " confirm
+        if [[ "$confirm" != "yes" ]]; then
+            print_info "Cleanup aborted."
+            exit 0
+        fi
     fi
 
     for f in "${files_to_remove[@]}"; do
@@ -160,7 +259,6 @@ golden_image_cleanup() {
         base=$(basename "$f" .qcow2)
         print_task "Removing ${base}..."
         sudo rm -f "$f"
-        # Also remove associated NVRAM file if it exists
         sudo rm -f "${GOLDEN_IMAGE_DIR}/${base}_VARS.fd"
         print_task_done
     done
@@ -196,11 +294,7 @@ case "$subcommand" in
         golden_image_list
         ;;
     cleanup)
-        if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-            show_golden_image_help
-            exit 0
-        fi
-        golden_image_cleanup
+        golden_image_cleanup "$@"
         ;;
     *)
         print_error "Unknown golden-image subcommand: $subcommand"
