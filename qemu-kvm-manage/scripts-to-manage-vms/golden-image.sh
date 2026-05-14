@@ -94,6 +94,26 @@ golden_image_list() {
 
 # ====== CLEANUP ======
 
+show_cleanup_help() {
+    print_cyan "Usage: tux2lab golden-image cleanup [OPTIONS]
+Description:
+    Remove golden image disk(s) from the golden images disk store.
+    Run without options for an interactive menu.
+
+Options:
+    -d, --distro <distro>   Specify OS distribution to remove
+                                            (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
+    -v, --version <ver>     Specify OS version number to remove
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+Examples:
+    tux2lab golden-image cleanup                            # Interactive cleanup
+    tux2lab golden-image cleanup -d almalinux -v 10        # Remove specific golden image
+    tux2lab golden-image cleanup -f -d rocky -v 9          # Remove without confirmation
+"
+}
+
 golden_image_cleanup() {
     local cleanup_distro=""
     local cleanup_version=""
@@ -104,7 +124,7 @@ golden_image_cleanup() {
             -d|--distro)
                 if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--distro/-d requires a distribution name."
-                    show_golden_image_help
+                    show_cleanup_help
                     exit 1
                 fi
                 cleanup_distro="$2"
@@ -113,7 +133,7 @@ golden_image_cleanup() {
             -v|--version)
                 if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--version/-v requires a version number."
-                    show_golden_image_help
+                    show_cleanup_help
                     exit 1
                 fi
                 cleanup_version="$2"
@@ -124,17 +144,17 @@ golden_image_cleanup() {
                 shift
                 ;;
             -h|--help)
-                show_golden_image_help
+                show_cleanup_help
                 exit 0
                 ;;
             -*)
                 print_error "Unknown option: $1"
-                show_golden_image_help
+                show_cleanup_help
                 exit 1
                 ;;
             *)
                 print_error "'tux2lab golden-image cleanup' does not accept positional arguments."
-                show_golden_image_help
+                show_cleanup_help
                 exit 1
                 ;;
         esac
