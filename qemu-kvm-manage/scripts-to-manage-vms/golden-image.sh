@@ -186,9 +186,17 @@ case "$subcommand" in
         golden_image_build "$@"
         ;;
     list)
+        if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+            show_golden_image_help
+            exit 0
+        fi
         golden_image_list
         ;;
     cleanup)
+        if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+            show_golden_image_help
+            exit 0
+        fi
         golden_image_cleanup
         ;;
     *)
