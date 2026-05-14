@@ -107,8 +107,8 @@ _tux2lab_completions() {
             return 0
         fi
         
-        # Complete flags after create subcommand
-        if [[ "${COMP_WORDS[2]}" == "create" ]] && [[ ${cur} == -* ]]; then
+        # Complete flags after build subcommand
+        if [[ "${COMP_WORDS[2]}" == "build" ]] && [[ ${cur} == -* ]]; then
             COMPREPLY=( $(compgen -W "-d --distro -v --version -h --help" -- "${cur}") )
             return 0
         fi
