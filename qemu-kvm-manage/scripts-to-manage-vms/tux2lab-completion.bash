@@ -107,6 +107,12 @@ _tux2lab_completions() {
             return 0
         fi
         
+        # Complete distro names after build/cleanup subcommand
+        if [[ ${COMP_CWORD} -eq 3 ]] && [[ "${COMP_WORDS[2]}" == "build" || "${COMP_WORDS[2]}" == "cleanup" ]]; then
+            COMPREPLY=( $(compgen -W "almalinux rocky oraclelinux centos-stream rhel ubuntu-lts opensuse-leap" -- "${cur}") )
+            return 0
+        fi
+
         # Complete flags after build subcommand
         if [[ "${COMP_WORDS[2]}" == "build" ]] && [[ ${cur} == -* ]]; then
             COMPREPLY=( $(compgen -W "-d --distro -v --version -h --help" -- "${cur}") )
