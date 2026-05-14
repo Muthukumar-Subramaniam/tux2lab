@@ -127,7 +127,16 @@ fn_disable_ipv6_route() {
         return 1
     fi
     
-    # Remove default route (ignore errors if route doesn't exist)
+    # Check if route exists before attempting removal
+    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
+        'sudo ip -6 route show default' 2>/dev/null)
+    
+    if [[ ! "$route_check" =~ "default" ]]; then
+        print_info "VM $vm_name: IPv6 default route already disabled"
+        return 2
+    fi
+    
+    # Remove default route
     ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
         'sudo ip -6 route del default 2>/dev/null' &>/dev/null || true
     
@@ -230,12 +239,19 @@ fn_disable_all() {
         return 0
     fi
     
+    local removed=0
     for vm in $vms; do
         fn_disable_ipv6_route "$vm"
+        local rc=$?
+        [[ $rc -eq 0 ]] && ((++removed))
     done
     
     echo ""
-    print_success "IPv6 default route removal complete"
+    if [[ $removed -gt 0 ]]; then
+        print_success "IPv6 default route removal complete"
+    else
+        print_info "No IPv6 default routes were active"
+    fi
 }
 
 fn_auto_configure() {
