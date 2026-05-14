@@ -47,6 +47,18 @@ EXAMPLES:
 
 # ====== LIST ======
 
+show_list_help() {
+    print_cyan "Usage: tux2lab golden-image list
+
+List all available golden images with their distro, version, size, and creation date.
+
+Options:
+    -h, --help           Show this help message
+
+This command takes no other arguments.
+"
+}
+
 golden_image_list() {
     if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
         print_info "No golden images found."
@@ -308,7 +320,7 @@ case "$subcommand" in
         ;;
     list)
         if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-            show_golden_image_help
+            show_list_help
             exit 0
         fi
         golden_image_list
