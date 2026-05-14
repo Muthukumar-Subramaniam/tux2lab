@@ -45,7 +45,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -n|--count)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -n/--count requires a value."
                 exit 1
             fi
@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -s|--size)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -s/--size requires a value."
                 exit 1
             fi

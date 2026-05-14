@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -d|--disk)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -d/--disk requires a value."
                 exit 1
             fi
@@ -58,7 +58,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -g|--gib)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -g/--gib requires a value."
                 exit 1
             fi

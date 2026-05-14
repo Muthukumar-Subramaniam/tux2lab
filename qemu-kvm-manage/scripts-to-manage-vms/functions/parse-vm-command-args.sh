@@ -74,7 +74,7 @@ parse_vm_command_args() {
                     fn_show_help
                     exit 1
                 fi
-                if [[ -z "$2" || "$2" == -* ]]; then
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--distro/-d requires a distribution name."
                     fn_show_help
                     exit 1
@@ -93,7 +93,7 @@ parse_vm_command_args() {
                     fn_show_help
                     exit 1
                 fi
-                if [[ -z "$2" || "$2" == -* ]]; then
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--version/-v requires a version number (e.g., 10, 9, 24.04, 15.6)."
                     fn_show_help
                     exit 1
@@ -107,7 +107,7 @@ parse_vm_command_args() {
                 shift 2
                 ;;
             -H|--hosts)
-                if [[ -z "$2" || "$2" == -* ]]; then
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--hosts/-H requires a comma-separated list of hostnames."
                     fn_show_help
                     exit 1

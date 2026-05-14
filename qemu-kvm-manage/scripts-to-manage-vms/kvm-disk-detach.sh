@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -d|--disks)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -d/--disks requires a value."
                 exit 1
             fi

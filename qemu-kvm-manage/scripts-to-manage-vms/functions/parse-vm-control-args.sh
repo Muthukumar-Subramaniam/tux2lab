@@ -55,7 +55,7 @@ parse_vm_control_args() {
                 fi
                 ;;
             -H|--hosts)
-                if [[ -z "$2" || "$2" == -* ]]; then
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--hosts requires a comma-separated list of hostnames."
                     fn_show_help
                     exit 1

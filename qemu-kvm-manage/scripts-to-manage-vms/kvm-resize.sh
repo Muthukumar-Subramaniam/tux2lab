@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         memory)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "'memory' requires a size value in GiB."
                 exit 1
             fi
@@ -63,7 +63,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         cpu)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "'cpu' requires a vCPU count value."
                 exit 1
             fi
@@ -72,7 +72,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         disk)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "'disk' requires a size value in GiB."
                 exit 1
             fi

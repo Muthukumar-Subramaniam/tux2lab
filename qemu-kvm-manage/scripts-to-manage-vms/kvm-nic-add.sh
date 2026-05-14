@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -c|--count)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -c/--count requires a value."
                 exit 1
             fi
@@ -56,7 +56,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -n|--network)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -n/--network requires a value."
                 exit 1
             fi

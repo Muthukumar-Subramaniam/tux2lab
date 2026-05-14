@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         -d|--distro)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "--distro/-d requires a distribution name."
                 fn_show_help
                 exit 1
@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -v|--version)
-            if [[ -z "$2" || "$2" == -* ]]; then
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "--version/-v requires a version number (e.g., 10, 9, 24.04, 15.6)."
                 fn_show_help
                 exit 1
