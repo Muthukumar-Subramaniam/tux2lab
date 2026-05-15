@@ -80,6 +80,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate CLI-provided disk count and size early (before hostname/shutdown)
+if [[ -n "$disk_count_arg" ]]; then
+    if [[ ! "$disk_count_arg" =~ ^[1-9][0-9]*$ ]] || (( disk_count_arg > 10 )); then
+        print_error "Invalid disk count: $disk_count_arg. Must be between 1 and 10."
+        exit 1
+    fi
+fi
+if [[ -n "$disk_size_arg" ]]; then
+    if [[ ! "$disk_size_arg" =~ ^[1-9][0-9]*$ ]] || (( disk_size_arg > 100 )); then
+        print_error "Invalid disk size: ${disk_size_arg}. Must be between 1 and 100 GiB."
+        exit 1
+    fi
+fi
+
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
@@ -181,11 +195,6 @@ fi
 
 # Get disk count (from argument or prompt)
 if [[ -n "$disk_count_arg" ]]; then
-    # Validate provided disk count
-    if [[ ! "$disk_count_arg" =~ ^[1-9][0-9]*$ ]] || (( disk_count_arg > 10 )); then
-        print_error "Invalid disk count: $disk_count_arg. Must be between 1 and 10."
-        exit 1
-    fi
     DISK_COUNT="$disk_count_arg"
     print_info "Using disk count: $DISK_COUNT"
 else
@@ -204,11 +213,6 @@ fi
 
 # Get disk size (from argument or prompt)
 if [[ -n "$disk_size_arg" ]]; then
-    # Validate provided disk size
-    if [[ ! "$disk_size_arg" =~ ^[1-9][0-9]*$ ]] || (( disk_size_arg > 100 )); then
-        print_error "Invalid disk size: ${disk_size_arg}. Must be between 1 and 100 GiB."
-        exit 1
-    fi
     DISK_SIZE_GB="$disk_size_arg"
     print_info "Using disk size: ${DISK_SIZE_GB} GiB"
 else
