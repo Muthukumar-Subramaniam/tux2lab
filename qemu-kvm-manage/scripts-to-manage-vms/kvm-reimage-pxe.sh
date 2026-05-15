@@ -87,6 +87,19 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
+    # PXE installation requires minimum 2 GiB memory and 2 vCPUs
+    if [[ "$CLEAN_INSTALL" != "yes" ]]; then
+        current_mem_kib=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^Max memory/ {print $3}')
+        current_mem_gib=$(( current_mem_kib / 1024 / 1024 ))
+        current_vcpus=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^CPU\(s\)/ {print $2}')
+        if (( current_mem_gib < 2 || current_vcpus < 2 )); then
+            print_error "VM '${qemu_kvm_hostname}' has ${current_vcpus} vCPU(s) and ${current_mem_gib} GiB memory — minimum 2 vCPUs and 2 GiB required for PXE installation."
+            print_info "Run 'tux2lab vm resize cpu 2 memory 2 -H ${qemu_kvm_hostname}' first, or use --clean-install to reset to defaults."
+            FAILED_VMS+=("$qemu_kvm_hostname")
+            continue
+        fi
+    fi
+
     # If --distro not specified, look up previous provisioning data
     if [[ -z "$CMDLINE_OS_DISTRO" ]]; then
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lookup-previous-provision.sh
@@ -149,19 +162,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Shut down VM if running
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
     POWEROFF_VM_CONTEXT="Powering off before reimaging" poweroff_vm "$qemu_kvm_hostname"
-
-    # PXE installation requires minimum 2 GiB memory and 2 vCPUs
-    if [[ "$CLEAN_INSTALL" != "yes" ]]; then
-        current_mem_kib=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^Max memory/ {print $3}')
-        current_mem_gib=$(( current_mem_kib / 1024 / 1024 ))
-        current_vcpus=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^CPU\(s\)/ {print $2}')
-        if (( current_mem_gib < 2 || current_vcpus < 2 )); then
-            print_error "VM '${qemu_kvm_hostname}' has ${current_vcpus} vCPU(s) and ${current_mem_gib} GiB memory — minimum 2 vCPUs and 2 GiB required for PXE installation."
-            print_info "Run 'tux2lab vm resize cpu 2 memory 2 -H ${qemu_kvm_hostname}' first, or use --clean-install to reset to defaults."
-            FAILED_VMS+=("$qemu_kvm_hostname")
-            continue
-        fi
-    fi
 
     # If --clean-install is specified, destroy and reinstall VM with default specs
     if [[ "$CLEAN_INSTALL" == "yes" ]]; then
