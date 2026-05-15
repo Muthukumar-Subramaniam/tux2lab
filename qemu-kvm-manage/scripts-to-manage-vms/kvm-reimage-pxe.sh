@@ -152,7 +152,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # PXE installation requires minimum 2 GiB memory and 2 vCPUs
     if [[ "$CLEAN_INSTALL" != "yes" ]]; then
-        local current_mem_kib current_mem_gib current_vcpus pxe_specs_ok=true
         current_mem_kib=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^Max memory/ {print $3}')
         current_mem_gib=$(( current_mem_kib / 1024 / 1024 ))
         current_vcpus=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^CPU\(s\)/ {print $2}')
