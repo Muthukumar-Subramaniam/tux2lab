@@ -93,14 +93,14 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         if ! ls /tux2lab-data/golden-images-disk-store/${golden_image_pattern} &>/dev/null; then
             print_error "Golden image not found for '${OS_DISTRO}' (${VERSION_TYPE})"
             print_info "Available golden images:"
+            source /tux2lab/ks-manage/distro-versions.conf
             if ls /tux2lab-data/golden-images-disk-store/*.qcow2 &>/dev/null; then
                 for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do
-                    local base
                     base=$(basename "$f" .qcow2)
-                    local prefix="${base%%-golden-image.*}"
+                    prefix="${base%%-golden-image.*}"
                     for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
                         if [[ "$prefix" == "${known_distro}-"* ]]; then
-                            local ver="${prefix#${known_distro}-}"
+                            ver="${prefix#${known_distro}-}"
                             echo "  - ${known_distro} (${ver//-/.})"
                             break
                         fi
