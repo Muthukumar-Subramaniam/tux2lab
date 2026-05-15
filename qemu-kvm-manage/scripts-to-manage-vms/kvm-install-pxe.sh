@@ -18,24 +18,21 @@ SUPPORTS_VERSION="yes"
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm install-pxe [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm install-pxe [OPTIONS]
 Options:
+  -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
   -c, --console        Attach console during installation (single VM only)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
   -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
-  -H, --hosts          Specify multiple hostnames (comma-separated)
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to install via PXE boot (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm install-pxe vm1                              # Install single VM (will prompt for distro/version)
-  tux2lab vm install-pxe vm1 --console                    # Install and attach console
-  tux2lab vm install-pxe vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
-  tux2lab vm install-pxe vm1 -d almalinux -v 9            # Install with AlmaLinux 9
-  tux2lab vm install-pxe --hosts vm1,vm2,vm3              # Install multiple VMs
+  tux2lab vm install-pxe -H vm1                              # Install single VM (will prompt for distro/version)
+  tux2lab vm install-pxe -H vm1 --console                    # Install and attach console
+  tux2lab vm install-pxe -H vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
+  tux2lab vm install-pxe -H vm1 -d almalinux -v 9            # Install with AlmaLinux 9
+  tux2lab vm install-pxe -H vm1,vm2,vm3                      # Install multiple VMs
   tux2lab vm install-pxe -H vm1,vm2,vm3 -d ubuntu-lts -v 24.04  # Install multiple with Ubuntu 24.04
 "
 }

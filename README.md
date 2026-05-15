@@ -212,18 +212,18 @@ tux2lab golden-image list                        # Show available images
 
 ```bash
 # From golden image (fast — disk clone)
-tux2lab vm install-golden vm1
-tux2lab vm install-golden vm1 -d almalinux -v 10
+tux2lab vm install-golden -H vm1
+tux2lab vm install-golden -H vm1 -d almalinux -v 10
 
 # Via PXE boot (full network install)
-tux2lab vm install-pxe vm1
-tux2lab vm install-pxe vm1 -d ubuntu-lts -v 24.04
+tux2lab vm install-pxe -H vm1
+tux2lab vm install-pxe -H vm1 -d ubuntu-lts -v 24.04
 
 # Multiple VMs at once
 tux2lab vm install-golden -H vm1,vm2,vm3
 
 # Attach to console during install
-tux2lab vm install-pxe vm1 --console
+tux2lab vm install-pxe -H vm1 --console
 ```
 
 ---
@@ -234,14 +234,15 @@ tux2lab vm install-pxe vm1 --console
 
 ```
 tux2lab vm list                   List all VMs and their status
-tux2lab vm info <hostname>        Detailed VM information
+tux2lab vm info                   Detailed VM information (all VMs)
+tux2lab vm info -H <hostname>     Detailed VM information (specific VM)
 tux2lab vm console -H <hostname>  Attach to serial console (Ctrl+] to exit)
-tux2lab vm start <hostname>       Power on
-tux2lab vm stop <hostname>        Force power off
-tux2lab vm shutdown <hostname>    Graceful shutdown via ACPI
-tux2lab vm reboot <hostname>      Graceful reboot
-tux2lab vm restart <hostname>     Hard reset (power cycle)
-tux2lab vm remove <hostname>      Delete VM and all its data
+tux2lab vm start -H <hostname>    Power on
+tux2lab vm stop -H <hostname>     Force power off
+tux2lab vm shutdown -H <hostname> Graceful shutdown via ACPI
+tux2lab vm reboot -H <hostname>   Graceful reboot
+tux2lab vm restart -H <hostname>  Hard reset (power cycle)
+tux2lab vm remove -H <hostname>   Delete VM and all its data
 ```
 
 ### VM Provisioning
@@ -257,13 +258,13 @@ tux2lab vm reimage-pxe            Wipe and reinstall via PXE
 
 ```
 tux2lab vm resize -H <hostname>   Resize memory, CPU, or root disk
-tux2lab vm disk-add <hostname>    Add a new storage disk
-tux2lab vm disk-resize <hostname> Resize an additional disk
-tux2lab vm disk-attach <hostname> Re-attach a previously detached disk
-tux2lab vm disk-detach <hostname> Detach a disk (preserved in storage)
-tux2lab vm disk-delete <hostname> Permanently delete a detached disk
-tux2lab vm nic-add <hostname>     Add a network interface
-tux2lab vm nic-remove <hostname>  Remove a network interface
+tux2lab vm disk-add -H <hostname>    Add a new storage disk
+tux2lab vm disk-resize -H <hostname> Resize an additional disk
+tux2lab vm disk-attach -H <hostname> Re-attach a previously detached disk
+tux2lab vm disk-detach -H <hostname> Detach a disk (preserved in storage)
+tux2lab vm disk-delete -H <hostname> Permanently delete a detached disk
+tux2lab vm nic-add -H <hostname>     Add a network interface
+tux2lab vm nic-remove -H <hostname>  Remove a network interface
 ```
 
 ### Golden Image Management

@@ -24,7 +24,7 @@ ssh_options=(
 
 # Display usage information
 show_usage() {
-    print_cyan "Usage: tux2lab vm info [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm info [OPTIONS]
 
 Display detailed VM information including IP stack, storage, birthdate, uptime, CPU, and memory.
 
@@ -32,17 +32,13 @@ OPTIONS:
     -H, --hosts <hosts>     Comma-separated list of hostnames (e.g., vm1,vm2,vm3)
     -h, --help              Show this help message
 
-ARGUMENTS:
-    hostname                Single hostname to query (optional)
-
 BEHAVIOR:
     - Without arguments: Shows info for all VMs (detailed for running, state-only for powered off)
-    - With hostname: Shows info for specified VM
     - With -H flag: Shows info for specified comma-separated VMs
 
 EXAMPLES:
     tux2lab vm info                    # Show info for all running VMs
-    tux2lab vm info vm1                # Show info for vm1
+    tux2lab vm info -H vm1             # Show info for vm1
     tux2lab vm info -H vm1,vm2,vm3     # Show info for vm1, vm2, and vm3
 
 INFORMATION DISPLAYED:
@@ -81,13 +77,10 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            if [[ -z "$single_host" ]]; then
-                single_host="$1"
-            else
-                print_error "Multiple positional arguments provided. Use -H for multiple hosts."
-                exit 1
-            fi
-            shift
+            print_error "Unexpected argument: $1"
+            print_info "Use -H/--hosts to specify hostname(s)."
+            show_usage
+            exit 1
             ;;
     esac
 done

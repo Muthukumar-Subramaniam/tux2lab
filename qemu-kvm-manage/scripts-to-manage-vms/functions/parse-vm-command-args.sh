@@ -121,14 +121,10 @@ parse_vm_command_args() {
                 exit 1
                 ;;
             *)
-                if [[ ${#HOSTNAMES[@]} -eq 0 ]]; then
-                    HOSTNAMES+=("$1")
-                else
-                    print_error "Multiple positional hostnames not supported. Use -H for multiple VMs."
-                    fn_show_help
-                    exit 1
-                fi
-                shift
+                print_error "Unexpected argument: $1"
+                print_info "Use -H/--hosts to specify hostname(s)."
+                fn_show_help
+                exit 1
                 ;;
         esac
     done

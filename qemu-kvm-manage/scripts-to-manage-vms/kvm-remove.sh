@@ -12,22 +12,19 @@ ETC_HOSTS_FILE='/etc/hosts'
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm remove [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm remove [OPTIONS]
 Options:
+  -H, --hosts <list>               Comma-separated list of VM hostnames to remove
   -f, --force                      Skip confirmation prompt (except for lab infra server)
   --ignore-ksmanager-cleanup       Skip cleanup of ksmanager databases (DNS, MAC, kickstart, iPXE, DHCP)
-  -H, --hosts <list>               Comma-separated list of VM hostnames to remove
   -h, --help                       Show this help message
 
-Arguments:
-  hostname                         Name of the VM to be deleted permanently (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm remove vm1                             # Remove single VM with confirmation
-  tux2lab vm remove -f vm1                          # Remove single VM without confirmation
-  tux2lab vm remove --ignore-ksmanager-cleanup vm1  # Remove VM but keep ksmanager data
-  tux2lab vm remove --hosts vm1,vm2,vm3             # Remove multiple VMs with confirmation
-  tux2lab vm remove -f --hosts vm1,vm2              # Remove multiple VMs without confirmation
+  tux2lab vm remove -H vm1                             # Remove single VM with confirmation
+  tux2lab vm remove -f -H vm1                          # Remove single VM without confirmation
+  tux2lab vm remove --ignore-ksmanager-cleanup -H vm1  # Remove VM but keep ksmanager data
+  tux2lab vm remove -H vm1,vm2,vm3                     # Remove multiple VMs with confirmation
+  tux2lab vm remove -f -H vm1,vm2                      # Remove multiple VMs without confirmation
 
 Note: Lab infra server always requires special confirmation regardless of -f flag.
 "

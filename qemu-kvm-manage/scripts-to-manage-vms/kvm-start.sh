@@ -10,17 +10,14 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm start [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm start [OPTIONS]
 Options:
   -H, --hosts <list>   Comma-separated list of VM hostnames to start
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to Power-ON (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm start vm1                    # Start single VM
-  tux2lab vm start --hosts vm1,vm2,vm3    # Start multiple VMs
+  tux2lab vm start -H vm1                    # Start single VM
+  tux2lab vm start -H vm1,vm2,vm3            # Start multiple VMs
 "
 }
 

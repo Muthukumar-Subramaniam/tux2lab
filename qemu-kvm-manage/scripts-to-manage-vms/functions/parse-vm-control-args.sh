@@ -69,14 +69,10 @@ parse_vm_control_args() {
                 exit 1
                 ;;
             *)
-                # This is the hostname argument
-                if [[ -n "$HOSTS_LIST" ]]; then
-                    print_error "Cannot use both hostname argument and --hosts option."
-                    fn_show_help
-                    exit 1
-                fi
-                VM_HOSTNAME_ARG="$1"
-                shift
+                print_error "Unexpected argument: $1"
+                print_info "Use -H/--hosts to specify hostname(s)."
+                fn_show_help
+                exit 1
                 ;;
         esac
     done
