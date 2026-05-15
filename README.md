@@ -235,7 +235,7 @@ tux2lab vm install-pxe vm1 --console
 ```
 tux2lab vm list                   List all VMs and their status
 tux2lab vm info <hostname>        Detailed VM information
-tux2lab vm console <hostname>     Attach to serial console (Ctrl+] to exit)
+tux2lab vm console -H <hostname>  Attach to serial console (Ctrl+] to exit)
 tux2lab vm start <hostname>       Power on
 tux2lab vm stop <hostname>        Force power off
 tux2lab vm shutdown <hostname>    Graceful shutdown via ACPI
@@ -256,7 +256,7 @@ tux2lab vm reimage-pxe            Wipe and reinstall via PXE
 ### VM Configuration
 
 ```
-tux2lab vm resize <hostname>      Resize memory, CPU, or root disk
+tux2lab vm resize -H <hostname>   Resize memory, CPU, or root disk
 tux2lab vm disk-add <hostname>    Add a new storage disk
 tux2lab vm disk-resize <hostname> Resize an additional disk
 tux2lab vm disk-attach <hostname> Re-attach a previously detached disk
