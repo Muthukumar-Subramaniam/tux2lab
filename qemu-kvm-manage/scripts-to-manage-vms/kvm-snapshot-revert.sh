@@ -150,8 +150,8 @@ for vm_name in "${validated_hosts[@]}"; do
             fi
 
             # Wait for shutdown with timeout
-            local timeout=60
-            local elapsed=0
+            timeout=60
+            elapsed=0
             while fn_is_vm_running "$vm_name"; do
                 if (( elapsed >= timeout )); then
                     # Force power off after timeout
@@ -190,16 +190,16 @@ for vm_name in "${validated_hosts[@]}"; do
         continue
     fi
 
-    local vm_dir="/tux2lab-data/vms/${vm_name}"
+    vm_dir="/tux2lab-data/vms/${vm_name}"
 
     print_task "Reverting VM '$vm_name' to snapshot '$snapshot_name'..."
 
     # Restore disk files from snapshot
-    local revert_failed=false
+    revert_failed=false
     for disk_entry in "${META_DISKS[@]}"; do
-        local disk_name="${disk_entry%%:*}"
-        local source_file="${local_snapshot_dir}/${disk_name}"
-        local target_file="${vm_dir}/${disk_name}"
+        disk_name="${disk_entry%%:*}"
+        source_file="${local_snapshot_dir}/${disk_name}"
+        target_file="${vm_dir}/${disk_name}"
 
         if [[ ! -f "$source_file" ]]; then
             print_task_fail
@@ -223,8 +223,8 @@ for vm_name in "${validated_hosts[@]}"; do
 
     # Restore NVRAM if present in snapshot
     if [[ -n "$META_NVRAM" ]]; then
-        local nvram_source="${local_snapshot_dir}/${META_NVRAM}"
-        local nvram_target="${vm_dir}/${META_NVRAM}"
+        nvram_source="${local_snapshot_dir}/${META_NVRAM}"
+        nvram_target="${vm_dir}/${META_NVRAM}"
 
         if [[ -f "$nvram_source" ]]; then
             if ! cp --reflink=auto "$nvram_source" "$nvram_target"; then

@@ -146,8 +146,8 @@ for vm_name in "${validated_hosts[@]}"; do
             fi
 
             # Wait for shutdown with timeout
-            local timeout=60
-            local elapsed=0
+            timeout=60
+            elapsed=0
             while fn_is_vm_running "$vm_name"; do
                 if (( elapsed >= timeout )); then
                     # Force power off after timeout
@@ -182,7 +182,7 @@ for vm_name in "${validated_hosts[@]}"; do
 
     # Create snapshot directory
     fn_get_snapshots_dir "$vm_name"
-    local snapshot_path="${SNAPSHOTS_DIR}/${local_snapshot_name}"
+    snapshot_path="${SNAPSHOTS_DIR}/${local_snapshot_name}"
 
     if [[ -d "$snapshot_path" ]]; then
         print_error "Snapshot already exists: $local_snapshot_name (VM: $vm_name)"
@@ -200,7 +200,7 @@ for vm_name in "${validated_hosts[@]}"; do
     fi
 
     # Copy disk files
-    local copy_failed=false
+    copy_failed=false
     for disk_file in "${VM_DISK_FILES[@]}"; do
         if ! cp --reflink=auto "$disk_file" "$snapshot_path/"; then
             print_task_fail
