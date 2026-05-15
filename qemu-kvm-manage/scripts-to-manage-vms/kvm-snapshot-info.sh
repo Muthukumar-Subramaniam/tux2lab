@@ -134,9 +134,8 @@ for vm_name in "${validated_hosts[@]}"; do
     echo
     echo "  Disk files:"
     for disk_entry in "${META_DISKS[@]}"; do
-        local disk_name="${disk_entry%%:*}"
-        local disk_size="${disk_entry##*:}"
-        local disk_size_human
+        disk_name="${disk_entry%%:*}"
+        disk_size="${disk_entry##*:}"
         disk_size_human=$(numfmt --to=iec "$disk_size" 2>/dev/null || echo "${disk_size} bytes")
         echo "    - $disk_name ($disk_size_human)"
     done

@@ -168,9 +168,55 @@ for vm_name in "${validated_hosts[@]}"; do
             done
             print_task_done
         else
-            print_error "VM \"$vm_name\" is running. Shut it down first or use -f/--force."
-            failed_vms+=("$vm_name")
-            continue
+            print_warning "VM \"$vm_name\" is running! It must be shut down for revert."
+            print_info "Select an option to proceed:
+  1) Try Graceful Shutdown
+  2) Force Power Off
+  q) Quit"
+
+            read -rp "Enter your choice: " selected_choice
+
+            case "$selected_choice" in
+                1)
+                    print_task "Shutting down VM '$vm_name' gracefully..."
+                    if ! sudo virsh shutdown "$vm_name" &>/dev/null; then
+                        print_task_fail
+                        failed_vms+=("$vm_name")
+                        continue
+                    fi
+                    timeout=60
+                    elapsed=0
+                    while fn_is_vm_running "$vm_name"; do
+                        if (( elapsed >= timeout )); then
+                            print_task_fail
+                            print_warning "VM did not shut down within ${timeout}s."
+                            failed_vms+=("$vm_name")
+                            continue 2
+                        fi
+                        sleep 2
+                        ((elapsed+=2))
+                    done
+                    print_task_done
+                    ;;
+                2)
+                    print_task "Forcing power off VM '$vm_name'..."
+                    if ! sudo virsh destroy "$vm_name" &>/dev/null; then
+                        print_task_fail
+                        failed_vms+=("$vm_name")
+                        continue
+                    fi
+                    print_task_done
+                    ;;
+                q)
+                    print_info "Quitting without any action."
+                    exit 0
+                    ;;
+                *)
+                    print_error "Invalid option!"
+                    failed_vms+=("$vm_name")
+                    continue
+                    ;;
+            esac
         fi
     fi
 
@@ -238,6 +284,16 @@ for vm_name in "${validated_hosts[@]}"; do
 
     print_task_done
     print_info "VM '$vm_name' reverted to snapshot: $snapshot_name"
+
+    # Start VM after successful revert
+    print_task "Starting VM '$vm_name'..."
+    if sudo virsh start "$vm_name" &>/dev/null; then
+        print_task_done
+    else
+        print_task_fail
+        print_warning "VM reverted successfully but failed to start."
+    fi
+
     successful_vms+=("$vm_name")
 done
 
