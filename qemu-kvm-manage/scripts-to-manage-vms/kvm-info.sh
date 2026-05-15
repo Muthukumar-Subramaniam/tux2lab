@@ -147,7 +147,8 @@ get_vm_info() {
     local vm_name="$1"
     
     # Check if VM is running
-    local vm_state=$(sudo virsh domstate "$vm_name" 2>/dev/null || echo "unknown")
+    local vm_state
+    vm_state=$(sudo virsh domstate "$vm_name" 2>/dev/null) || vm_state="unknown"
     
     if [[ "$vm_state" != "running" ]]; then
         print_yellow "$vm_name"
