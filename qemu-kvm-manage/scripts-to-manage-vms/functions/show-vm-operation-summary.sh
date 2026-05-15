@@ -21,8 +21,11 @@ show_vm_operation_summary() {
     local additional_info="$5"
     local skipped_array_name="${6:-}"
 
-    # Only show summary for multiple VMs
+    # Only show summary for multiple VMs, but still return correct exit code
     if [[ $total_vms -le 1 ]]; then
+        local _fail_count
+        _fail_count=$(eval "echo \${#${failed_array_name}[@]}")
+        [[ $_fail_count -gt 0 ]] && return 1
         return 0
     fi
 
