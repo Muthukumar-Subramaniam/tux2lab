@@ -172,8 +172,8 @@ if [[ -n "$hosts_list" ]]; then
     for vm_name in "${validated_hosts[@]}"; do
         ((++current))
         print_info "Progress: $current/$total_vms"
-        # Pass true to skip individual confirmation if force flag is set
-        if remove_vm "$vm_name" "$force_remove"; then
+        # Pass true to skip individual confirmation (bulk confirmation already handled above)
+        if remove_vm "$vm_name" true; then
             successful_vms+=("$vm_name")
         else
             failed_vms+=("$vm_name")
