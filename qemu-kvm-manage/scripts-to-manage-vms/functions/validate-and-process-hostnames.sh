@@ -17,6 +17,7 @@ validate_and_process_hostnames() {
     
     # Validate and normalize all hostnames
     local validated_hosts=()
+    local invalid_hosts=()
     for vm_name in "${input_array[@]}"; do
         vm_name=${vm_name// /}  # Trim all whitespace
         [[ -z "$vm_name" ]] && continue  # Skip empty entries
@@ -25,22 +26,33 @@ validate_and_process_hostnames() {
         if [[ "${vm_name}" == *.${lab_infra_domain_name} ]]; then
             local stripped="${vm_name%.${lab_infra_domain_name}}"
             if [[ "${stripped}" == *.* ]] || [[ ! "${stripped}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
-                print_warning "Skipping invalid hostname: ${vm_name}"
+                invalid_hosts+=("$vm_name")
                 continue
             fi
             normalized="${vm_name}"
         elif [[ "${vm_name}" == *.* ]]; then
-            print_warning "Skipping invalid hostname (wrong domain): ${vm_name}"
+            invalid_hosts+=("$vm_name")
             continue
         else
             if [[ ! "${vm_name}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
-                print_warning "Skipping invalid hostname: ${vm_name}"
+                invalid_hosts+=("$vm_name")
                 continue
             fi
             normalized="${vm_name}.${lab_infra_domain_name}"
         fi
         validated_hosts+=("$normalized")
     done
+    
+    # Fail if any hostnames were invalid
+    if [[ ${#invalid_hosts[@]} -gt 0 ]]; then
+        print_error "Invalid hostname(s) found:"
+        for h in "${invalid_hosts[@]}"; do
+            print_error "  - $h"
+        done
+        print_info "Hostnames must contain only lowercase letters, numbers, and hyphens."
+        print_info "Domain must be '${lab_infra_domain_name}' or omitted (will be appended automatically)."
+        return 1
+    fi
     
     # Check if any valid hosts remain after validation
     if [[ ${#validated_hosts[@]} -eq 0 ]]; then
