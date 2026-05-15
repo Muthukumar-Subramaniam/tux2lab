@@ -106,8 +106,8 @@ if [[ -n "$hosts_list" ]]; then
     for vm_name in "${validated_hosts[@]}"; do
         ((++current))
         print_info "Progress: $current/$total_vms"
-        shutdown_vm_wrapper "$vm_name"
-        exit_code=$?
+        exit_code=0
+        shutdown_vm_wrapper "$vm_name" || exit_code=$?
         if [[ $exit_code -eq 0 ]]; then
             successful_vms+=("$vm_name")
         elif [[ $exit_code -eq 2 ]]; then
