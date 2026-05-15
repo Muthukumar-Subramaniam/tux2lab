@@ -10,20 +10,18 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm nic-remove [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm nic-remove [OPTIONS]
 Options:
+  -H, --host <name>    Name of the VM to remove NICs from (will prompt if not given)
   -f, --force          Force power-off without prompt if VM is running
   -m, --macs <list>    Comma-separated list of MAC addresses to remove
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to remove NICs from (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm nic-remove vm1                              # Interactive mode - select NICs
-  tux2lab vm nic-remove -f vm1                           # Force power-off if running
-  tux2lab vm nic-remove -m 52:54:00:aa:bb:cc vm1        # Remove specific NIC
-  tux2lab vm nic-remove -f -m 52:54:00:11:22:33 vm2     # Fully automated
+  tux2lab vm nic-remove -H vm1                              # Interactive mode - select NICs
+  tux2lab vm nic-remove -f -H vm1                           # Force power-off if running
+  tux2lab vm nic-remove -m 52:54:00:aa:bb:cc -H vm1        # Remove specific NIC
+  tux2lab vm nic-remove -f -m 52:54:00:11:22:33 -H vm2     # Fully automated
 "
 }
 
@@ -42,6 +40,14 @@ while [[ $# -gt 0 ]]; do
             force_poweroff=true
             shift
             ;;
+        -H|--host)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                print_error "Option -H/--host requires a value."
+                exit 1
+            fi
+            vm_hostname_arg="$2"
+            shift 2
+            ;;
         -m|--macs)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "Option -m/--macs requires a value."
@@ -56,19 +62,22 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            if [[ -n "$vm_hostname_arg" ]]; then
-                print_error "Multiple hostnames provided. Only one VM can be processed at a time."
-                fn_show_help
-                exit 1
-            fi
-            vm_hostname_arg="$1"
-            shift
+            print_error "Unexpected argument: $1"
+            print_info "Use -H/--host to specify the VM hostname."
+            fn_show_help
+            exit 1
             ;;
     esac
 done
 
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
+
+# Check if VM exists
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
+if ! check_vm_exists "$qemu_kvm_hostname" "reimage"; then
+    exit 1
+fi
 
 # Lab infra server protection
 if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
@@ -80,12 +89,6 @@ if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
         print_info "Operation cancelled by user."
         exit 1
     fi
-fi
-
-# Check if VM exists
-if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_error "VM \"$qemu_kvm_hostname\" does not exist."
-    exit 1
 fi
 
 fn_shutdown_or_poweroff() {
@@ -204,16 +207,20 @@ declare -a MACS_TO_REMOVE
 
 if [[ -n "$macs_arg" ]]; then
     # Parse comma-separated MAC list
-    IFS=',' read -ra MACS_TO_REMOVE <<< "$macs_arg"
+    IFS=',' read -ra raw_macs <<< "$macs_arg"
+    
+    # Trim whitespace from each MAC and store in MACS_TO_REMOVE
+    for mac in "${raw_macs[@]}"; do
+        mac="${mac#"${mac%%[![:space:]]*}"}"  # Trim leading
+        mac="${mac%"${mac##*[![:space:]]}"}"  # Trim trailing
+        [[ -n "$mac" ]] && MACS_TO_REMOVE+=("$mac")
+    done
     
     # Get primary NIC MAC (first one)
     primary_mac="${AVAILABLE_NICS[0]%%|*}"
     
     # Validate each MAC
     for mac in "${MACS_TO_REMOVE[@]}"; do
-        # Remove whitespace
-        mac="${mac#"${mac%%[![:space:]]*}"}"  # Trim leading
-        mac="${mac%"${mac##*[![:space:]]}"}"  # Trim trailing
         
         # Check if trying to remove primary NIC
         if [[ "$mac" == "$primary_mac" ]]; then
