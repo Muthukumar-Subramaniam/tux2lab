@@ -67,7 +67,7 @@ fi
 
 # Get list of available detached disks
 print_info "Scanning detached disks..."
-declare -a AVAILABLE_DISKS
+AVAILABLE_DISKS=()
 while IFS= read -r disk_file; do
     AVAILABLE_DISKS+=("$(basename "$disk_file")")
 done < <(sudo find "$DETACHED_DIR" -maxdepth 1 -type f -name "*.qcow2" 2>/dev/null)
@@ -78,7 +78,7 @@ if [[ ${#AVAILABLE_DISKS[@]} -eq 0 ]]; then
 fi
 
 # Get disks to delete (from argument or prompt)
-declare -a DISKS_TO_DELETE
+DISKS_TO_DELETE=()
 
 # Escape dots in hostname for regex matching
 escaped_infra_hostname="${lab_infra_server_hostname//./\\.}"
@@ -108,7 +108,7 @@ else
         disk_path="$DETACHED_DIR/$disk"
         disk_size=""
         if [[ -f "$disk_path" ]]; then
-            disk_size=$(du -h "$disk_path" | awk '{print $1}')
+            disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
         fi
         
         # Highlight lab infra server disks
@@ -171,7 +171,7 @@ for disk in "${DISKS_TO_DELETE[@]}"; do
     disk_path="$DETACHED_DIR/$disk"
     disk_size=""
     if [[ -f "$disk_path" ]]; then
-        disk_size=$(du -h "$disk_path" | awk '{print $1}')
+        disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
     fi
     
     # Highlight lab infra server disks
