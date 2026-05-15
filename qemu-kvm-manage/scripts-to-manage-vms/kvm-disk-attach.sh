@@ -239,7 +239,7 @@ else
         disk="${AVAILABLE_DISKS[$i]}"
         disk_path="$DETACHED_DIR/$disk"
         if [[ -f "$disk_path" ]]; then
-            disk_size=$(sudo du -h "$disk_path" | awk '{print $1}')
+            disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
             echo "  $((i+1))) $disk ($disk_size)"
         else
             echo "  $((i+1))) $disk"
@@ -281,7 +281,7 @@ print_warning "The following disk(s) will be attached to VM \"$qemu_kvm_hostname
 for disk in "${DISKS_TO_ATTACH[@]}"; do
     disk_path="$DETACHED_DIR/$disk"
     if [[ -f "$disk_path" ]]; then
-        disk_size=$(sudo du -h "$disk_path" | awk '{print $1}')
+        disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
         echo "  - $disk ($disk_size)"
     else
         echo "  - $disk"
