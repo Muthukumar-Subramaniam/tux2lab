@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -H|--hosts)
             shift
-            if [[ -z "$1" ]]; then
+            if [[ -z "${1:-}" ]]; then
                 print_error "Option -H/--hosts requires a comma-separated list of hostnames"
                 exit 1
             fi
