@@ -233,7 +233,7 @@ if [[ -z "$disk_target_arg" ]]; then
 fi
 
 # Track resized disks for interactive multi-resize
-declare -a RESIZED_DISKS
+RESIZED_DISKS=()
 declare -A DISK_NEW_SIZES
 
 # Main resize loop (for interactive mode with multiple disks)
