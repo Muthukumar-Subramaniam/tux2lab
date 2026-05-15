@@ -190,6 +190,12 @@ else
     print_warning "Could not cleanup temporary VM \"${qemu_kvm_hostname}\": $error_msg"
 fi
 
+# Remove auto-created storage pool (virt-install artifact, not needed)
+if sudo virsh pool-info golden-images-disk-store &>/dev/null; then
+    sudo virsh pool-destroy golden-images-disk-store &>/dev/null || true
+    sudo virsh pool-undefine golden-images-disk-store &>/dev/null || true
+fi
+
 # Clean up ksmanager databases (DNS, MAC cache, kickstart, iPXE, DHCP)
 print_info "Cleaning up ksmanager databases for temporary VM..."
 if $lab_infra_server_mode_is_host; then
