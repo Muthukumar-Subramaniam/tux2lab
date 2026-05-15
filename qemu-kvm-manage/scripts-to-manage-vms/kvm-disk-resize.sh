@@ -10,26 +10,24 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-resize [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm disk-resize [OPTIONS]
 Options:
+  -H, --host <host>    Hostname of the VM
   -f, --force          Force power-off without prompt if VM is running
-  -d, --disk <disk>    Disk target to resize (e.g., vdb, vdc,vdd, all, default: prompt)
-  -g, --gib <size>     Size in GiB to increase (multiple of 5, range: 5-50, default: prompt)
+  -d, --disk <disk>    Disk target to resize (e.g., vdb, vdc, vdd, all, default: prompt)
+  -g, --gib <size>     Size in GiB to increase (1-100, default: prompt)
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm disk-resize vm1                      # Interactive mode with prompts
-  tux2lab vm disk-resize -f vm1                   # Force power-off if running
-  tux2lab vm disk-resize -d vdb -g 5 vm1          # Add 5GiB to vdb with prompts
-  tux2lab vm disk-resize -f -d vdc -g 10 vm1      # Fully automated: add 10GiB to vdc
-  tux2lab vm disk-resize -f -d vdc,vdd -g 10 vm1  # Fully automated: add 10GiB to vdc and vdd
-  tux2lab vm disk-resize -f -d all -g 10 vm1      # Fully automated: add 10GiB to all additional disks
+  tux2lab vm disk-resize -H vm1                      # Interactive mode with prompts
+  tux2lab vm disk-resize -f -H vm1                   # Force power-off if running
+  tux2lab vm disk-resize -d vdb -g 5 -H vm1          # Add 5 GiB to vdb
+  tux2lab vm disk-resize -f -d vdc -g 10 -H vm1      # Fully automated: add 10 GiB to vdc
+  tux2lab vm disk-resize -f -d vdc,vdd -g 10 -H vm1  # Fully automated: add 10 GiB to vdc and vdd
+  tux2lab vm disk-resize -f -d all -g 10 -H vm1      # Fully automated: add 10 GiB to all additional disks
 
-Note: This script only resizes additional disks (vdb, vdc, etc.). 
-      Use 'tux2lab vm resize -t disk' for OS disk (vda) resizing.
+Note: This script only resizes additional disks (vdb, vdc, etc.).
+      Use 'tux2lab vm resize disk <GiB> -H <hostname>' for OS disk (vda) resizing.
 "
 }
 
@@ -48,6 +46,14 @@ while [[ $# -gt 0 ]]; do
         -f|--force)
             force_poweroff=true
             shift
+            ;;
+        -H|--host)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                print_error "Option -H/--host requires a hostname."
+                exit 1
+            fi
+            vm_hostname_arg="$2"
+            shift 2
             ;;
         -d|--disk)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
@@ -71,16 +77,21 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            if [[ -n "$vm_hostname_arg" ]]; then
-                print_error "Multiple hostnames provided. Only one VM can be processed at a time."
-                fn_show_help
-                exit 1
-            fi
-            vm_hostname_arg="$1"
-            shift
+            print_error "Unexpected argument: $1"
+            print_info "Use -H/--host to specify the hostname."
+            fn_show_help
+            exit 1
             ;;
     esac
 done
+
+# Validate CLI-provided -g value early (before hostname/shutdown)
+if [[ -n "$gib_arg" ]]; then
+    if [[ ! "$gib_arg" =~ ^[1-9][0-9]*$ ]] || (( gib_arg > 100 )); then
+        print_error "Invalid disk increase size: ${gib_arg}. Must be between 1 and 100 GiB."
+        exit 1
+    fi
+fi
 
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
@@ -91,11 +102,9 @@ if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
     print_info "This requires shutting down the lab infra server temporarily."
 fi
 
-# Check if VM exists in 'virsh list --all'
-if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_error "VM \"$qemu_kvm_hostname\" does not exist."
-    exit 1
-fi
+# Check if VM exists
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
+check_vm_exists "$qemu_kvm_hostname" "reimage"
 
 fn_shutdown_or_poweroff() {
     # If force flag is set, try graceful shutdown first, then force if needed
@@ -103,7 +112,7 @@ fn_shutdown_or_poweroff() {
         print_task "Shutting down VM (graceful then force if needed)..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
         SHUTDOWN_VM_CONTEXT="Attempting graceful shutdown" SHUTDOWN_VM_STRICT=false shutdown_vm "$qemu_kvm_hostname" &>/dev/null
-        
+
         # Wait for VM to shut down with timeout
         TIMEOUT=30
         ELAPSED=0
@@ -119,35 +128,36 @@ fn_shutdown_or_poweroff() {
             sleep 2
             ((ELAPSED+=2))
         done
-        
+
         if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
             print_task_done
         fi
         return 0
     fi
-    
+
     print_warning "VM \"$qemu_kvm_hostname\" is still running!"
-    print_notify "Select an option to proceed:
-	1) Try Graceful Shutdown
-	2) Force Power Off
-	q) Quit"
+    print_info "Select an option to proceed:
+  1) Try Graceful Shutdown
+  2) Force Power Off
+  q) Quit"
 
     read -rp "Enter your choice: " selected_choice
 
     case "$selected_choice" in
         1)
-            print_info "Initiating graceful shutdown..."
+            print_task "Shutting down VM gracefully..."
             source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
-            if ! SHUTDOWN_VM_CONTEXT="Initiating graceful shutdown" shutdown_vm "$qemu_kvm_hostname"; then
+            if ! SHUTDOWN_VM_CONTEXT="Initiating graceful shutdown" shutdown_vm "$qemu_kvm_hostname" &>/dev/null; then
+                print_task_fail
                 exit 1
             fi
-            
+
             # Wait for VM to shut down with timeout
-            print_info "Waiting for VM \"${qemu_kvm_hostname}\" to shut down (timeout: 60s)..."
             TIMEOUT=60
             ELAPSED=0
             while sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; do
                 if (( ELAPSED >= TIMEOUT )); then
+                    print_task_fail
                     print_warning "VM did not shut down within ${TIMEOUT}s."
                     print_info "You may want to force power off instead."
                     exit 1
@@ -155,14 +165,16 @@ fn_shutdown_or_poweroff() {
                 sleep 2
                 ((ELAPSED+=2))
             done
-            print_success "VM has been shut down successfully. Proceeding further."
+            print_task_done
             ;;
         2)
-            print_info "Forcing power off..."
+            print_task "Forcing power off VM..."
             source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
-            if ! POWEROFF_VM_CONTEXT="Forcing power off" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname"; then
+            if ! POWEROFF_VM_CONTEXT="Forcing power off" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname" &>/dev/null; then
+                print_task_fail
                 exit 1
             fi
+            print_task_done
             ;;
         q)
             print_info "Quitting without any action."
@@ -198,7 +210,7 @@ for disk_file in "$VM_DIR"/*.qcow2; do
     if [[ "$BASENAME" =~ ${qemu_kvm_hostname}_(vd[b-z])\.qcow2 ]]; then
         DISK_TARGET="${BASH_REMATCH[1]}"
         # Only add if not already seen (avoid duplicates)
-        if [[ -z "${SEEN_DISKS[$DISK_TARGET]}" ]]; then
+        if [[ -z "${SEEN_DISKS[$DISK_TARGET]+isset}" ]]; then
             ADDITIONAL_DISKS+=("$DISK_TARGET")
             DISK_PATHS["$DISK_TARGET"]="$disk_file"
             SEEN_DISKS["$DISK_TARGET"]=1
@@ -210,7 +222,7 @@ done
 if (( ${#ADDITIONAL_DISKS[@]} == 0 )); then
     print_error "No additional disks found for VM \"$qemu_kvm_hostname\"."
     print_info "This script only resizes additional disks (vdb, vdc, etc.)."
-    print_info "Use 'tux2lab vm resize -t disk' to resize the OS disk."
+    print_info "Use 'tux2lab vm resize disk <GiB> -H <hostname>' to resize the OS disk."
     exit 1
 fi
 
@@ -351,18 +363,6 @@ while true; do
     # Validate gib argument if provided (only first iteration in interactive mode)
     if [[ -n "$gib_arg" ]] || [[ "$INTERACTIVE_MODE" == false ]]; then
         if [[ -n "$gib_arg" ]]; then
-            if ! [[ "$gib_arg" =~ ^[0-9]+$ ]]; then
-                print_error "Invalid disk increase size: $gib_arg. Must be numeric."
-                exit 1
-            fi
-            if (( gib_arg % 5 != 0 )); then
-                print_error "Disk increase size must be a multiple of 5 GiB."
-                exit 1
-            fi
-            if (( gib_arg < 5 || gib_arg > 50 )); then
-                print_error "Disk increase size must be between 5 and 50 GiB."
-                exit 1
-            fi
             grow_size_gib="$gib_arg"
             print_info "Using increase size: ${grow_size_gib} GiB"
         fi
@@ -381,26 +381,16 @@ while true; do
             current_disk_gib=$(sudo qemu-img info "$SELECTED_DISK_PATH" | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
             print_info "Current size of $SELECTED_DISK: ${current_disk_gib} GiB"
         fi
-        print_info "Allowed sizes for increase: Steps of 5 GiB — e.g., 5, 10, 15... up to 50 GiB"
+        print_info "Allowed increase size: 1-100 GiB"
 
         while true; do
             read -rp "Enter increase size (GiB): " grow_size_gib
 
-            if ! [[ "$grow_size_gib" =~ ^[0-9]+$ ]]; then
-                print_error "Invalid input for increase size of disk. Must be numeric."
-                continue
+            if [[ "$grow_size_gib" =~ ^[1-9][0-9]*$ ]] && (( grow_size_gib <= 100 )); then
+                break
+            else
+                print_error "Invalid size! Enter a number between 1 and 100."
             fi
-
-            if (( grow_size_gib % 5 != 0 )); then
-                print_error "Increase in disk size must be a multiple of 5 GiB."
-                continue
-            fi
-
-            if (( grow_size_gib < 5 || grow_size_gib > 50 )); then
-                print_error "Increase in disk size must be between 5 and 50 GiB."
-                continue
-            fi
-            break
         done
     fi
 
@@ -427,7 +417,7 @@ while true; do
             else
                 print_task_fail
                 print_error "$error_msg"
-                exit 1
+                break
             fi
         done
         # After resizing all, we're done
@@ -450,7 +440,7 @@ while true; do
             else
                 print_task_fail
                 print_error "$error_msg"
-                exit 1
+                break
             fi
         done
         # After resizing multiple, we're done
@@ -470,7 +460,6 @@ while true; do
         else
             print_task_fail
             print_error "$error_msg"
-            exit 1
         fi
     fi
     
@@ -480,7 +469,7 @@ while true; do
     fi
     
     # In interactive mode, check if there are more disks available and ask if user wants to resize another
-    declare -a REMAINING_DISKS
+    REMAINING_DISKS=()
     for disk in "${ADDITIONAL_DISKS[@]}"; do
         ALREADY_RESIZED=false
         for resized in "${RESIZED_DISKS[@]}"; do
