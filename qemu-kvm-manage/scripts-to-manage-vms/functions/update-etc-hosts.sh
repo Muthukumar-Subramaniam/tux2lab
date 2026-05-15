@@ -23,12 +23,13 @@ update_etc_hosts() {
     fi
 
     # Add both IPv4 and IPv6 entries
-    if error_msg=$(echo -e "${ipv4_address}\t${hostname}\n${ipv6_address}\t${hostname}" | sudo tee -a "$hosts_file" >/dev/null 2>&1); then
-        print_task_done
-        return 0
-    else
+    if ! error_msg=$(echo -e "${ipv4_address}\t${hostname}\n${ipv6_address}\t${hostname}" | sudo tee -a "$hosts_file" >/dev/null 2>&1); then
         print_task_fail
-        print_error "$error_msg"
+        print_error "Failed to add host entries for ${hostname} to ${hosts_file}."
+        [[ -n "$error_msg" ]] && print_error "$error_msg"
         return 1
     fi
+
+    print_task_done
+    return 0
 }

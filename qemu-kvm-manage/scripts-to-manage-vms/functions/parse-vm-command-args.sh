@@ -124,7 +124,7 @@ parse_vm_command_args() {
                 if [[ ${#HOSTNAMES[@]} -eq 0 ]]; then
                     HOSTNAMES+=("$1")
                 else
-                    print_error "Cannot mix positional hostname with --hosts/-H option."
+                    print_error "Multiple positional hostnames not supported. Use -H for multiple VMs."
                     fn_show_help
                     exit 1
                 fi
