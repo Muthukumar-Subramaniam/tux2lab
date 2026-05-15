@@ -52,9 +52,9 @@ remove_vm() {
     # Check if VM exists in 'virsh list --all'
     print_task "Checking if VM exists..."
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then
-        print_task_fail
-        print_error "VM \"$vm_name\" does not exist."
-        return 1
+        print_task_skip
+        print_info "VM \"$vm_name\" does not exist."
+        return 2
     fi
     print_task_done
     
@@ -166,6 +166,7 @@ if [[ -n "$hosts_list" ]]; then
     # Remove each VM
     failed_vms=()
     successful_vms=()
+    skipped_vms=()
     total_vms=${#validated_hosts[@]}
     current=0
     
@@ -173,8 +174,12 @@ if [[ -n "$hosts_list" ]]; then
         ((++current))
         print_info "Progress: $current/$total_vms"
         # Pass true to skip individual confirmation (bulk confirmation already handled above)
-        if remove_vm "$vm_name" true; then
+        exit_code=0
+        remove_vm "$vm_name" true || exit_code=$?
+        if [[ $exit_code -eq 0 ]]; then
             successful_vms+=("$vm_name")
+        elif [[ $exit_code -eq 2 ]]; then
+            skipped_vms+=("$vm_name")
         else
             failed_vms+=("$vm_name")
         fi
@@ -186,6 +191,12 @@ if [[ -n "$hosts_list" ]]; then
         print_green "  DONE: ${#successful_vms[@]}/$total_vms"
         for vm in "${successful_vms[@]}"; do
             print_green "    - $vm"
+        done
+    fi
+    if [[ ${#skipped_vms[@]} -gt 0 ]]; then
+        print_yellow "  SKIP: ${#skipped_vms[@]}/$total_vms"
+        for vm in "${skipped_vms[@]}"; do
+            print_yellow "    - $vm"
         done
     fi
     if [[ ${#failed_vms[@]} -gt 0 ]]; then
