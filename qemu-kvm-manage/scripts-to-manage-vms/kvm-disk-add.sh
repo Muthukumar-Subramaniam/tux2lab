@@ -290,7 +290,7 @@ for ((i=1; i<=DISK_COUNT; i++)); do
 
     # Mark disk as used
     EXISTING_DISKS["$DISK_NAME"]=1
-    ((DISKS_ADDED++))
+    ((++DISKS_ADDED))
 done
 
 print_task "Starting VM \"$qemu_kvm_hostname\"..." nskip
