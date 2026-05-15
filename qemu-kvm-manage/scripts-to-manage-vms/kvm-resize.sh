@@ -13,8 +13,8 @@ fn_show_help() {
     print_cyan "Usage: tux2lab vm resize [-f] [memory <GiB>] [cpu <count>] [disk <GiB>] [-H hostname]
 
 Resources (can be combined in any order):
-  memory <GiB>         Set VM memory — power of 2 (2, 4, 8, 16...), less than host memory
-  cpu <count>          Set VM vCPUs — power of 2, min 2
+  memory <GiB>         Set VM memory — power of 2 (1, 2, 4, 8, 16...), less than host memory
+  cpu <count>          Set VM vCPUs — power of 2 (1, 2, 4, 8...)
   disk <GiB>           Set OS disk to target size — must be larger than current size,
                        multiple of 5, max increase of 100 GiB per operation
 
@@ -217,8 +217,8 @@ validate_memory_args() {
             print_error "Invalid memory size: $memory_arg. Must be numeric."
             exit 1
         fi
-        if (( memory_arg < 2 || (memory_arg & (memory_arg - 1)) != 0 )); then
-            print_error "Memory size must be a power of 2 (2, 4, 8...)."
+        if (( memory_arg < 1 || (memory_arg & (memory_arg - 1)) != 0 )); then
+            print_error "Memory size must be a power of 2 (1, 2, 4, 8...)."
             exit 1
         fi
         if (( memory_arg >= host_mem_gib )); then
@@ -241,8 +241,8 @@ validate_cpu_args() {
             print_error "Invalid vCPU count: $cpu_arg. Must be numeric."
             exit 1
         fi
-        if (( cpu_arg < 2 )); then
-            print_error "vCPU count must be at least 2."
+        if (( cpu_arg < 1 )); then
+            print_error "vCPU count must be at least 1."
             exit 1
         fi
         if ! (( (cpu_arg & (cpu_arg - 1)) == 0 )); then
@@ -317,7 +317,7 @@ resize_vm_memory() {
         # Prompt for memory size
         print_info "Memory of Host Machine: ${host_mem_gib} GiB"
         print_info "Memory of VM '${qemu_kvm_hostname}': ${current_vm_mem_gib} GiB"
-        print_info "Allowed sizes: Powers of 2 — e.g., 2, 4, 8... but less than ${host_mem_gib} GiB"
+        print_info "Allowed sizes: Powers of 2 — e.g., 1, 2, 4, 8... but less than ${host_mem_gib} GiB"
 
         while true; do
             read -rp "Enter new VM memory size (GiB): " vm_mem_gib
@@ -327,8 +327,8 @@ resize_vm_memory() {
                 continue
             fi
 
-            if (( vm_mem_gib < 2 || (vm_mem_gib & (vm_mem_gib - 1)) != 0 )); then
-                print_error "VM memory size must be a power of 2 (2, 4, 8...)"
+            if (( vm_mem_gib < 1 || (vm_mem_gib & (vm_mem_gib - 1)) != 0 )); then
+                print_error "VM memory size must be a power of 2 (1, 2, 4, 8...)"
                 continue
             fi
 
@@ -369,7 +369,7 @@ resize_vm_cpu() {
         # Prompt for CPU count
         print_info "Host logical CPUs: $host_cpu_count"
         print_info "Current vCPUs of VM '${qemu_kvm_hostname}': $current_vcpus_of_vm"
-        print_info "Allowed values: Powers of 2 — e.g., 2, 4, 8... up to ${host_cpu_count}"
+        print_info "Allowed values: Powers of 2 — e.g., 1, 2, 4, 8... up to ${host_cpu_count}"
 
         while true; do
             read -rp "Enter new vCPU count: " new_vcpus_of_vm
@@ -379,8 +379,8 @@ resize_vm_cpu() {
                 continue
             fi
 
-            if (( new_vcpus_of_vm < 2 )); then
-                print_error "vCPU count must be at least 2."
+            if (( new_vcpus_of_vm < 1 )); then
+                print_error "vCPU count must be at least 1."
                 continue
             fi
 
