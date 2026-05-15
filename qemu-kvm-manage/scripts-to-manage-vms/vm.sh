@@ -60,6 +60,13 @@ VM CONFIGURATION:
     nic-add                 Add network interface to VM
     nic-remove              Remove network interface from VM
 
+VM SNAPSHOTS:
+    snapshot-create         Create an offline snapshot of VM(s)
+    snapshot-list           List all snapshots for VM(s)
+    snapshot-info           Show detailed snapshot information
+    snapshot-delete         Delete a snapshot from VM(s)
+    snapshot-revert         Revert VM(s) to a previous snapshot
+
 OPTIONS:
     -h, --help              Show this help message
     -v, --version           Show version information
@@ -99,6 +106,9 @@ main() {
             exit 1
             ;;
         disk-add|disk-resize|disk-attach|disk-detach|disk-delete|nic-add|nic-remove)
+            script_name="kvm-${subcommand}.sh"
+            ;;
+        snapshot-create|snapshot-list|snapshot-info|snapshot-delete|snapshot-revert)
             script_name="kvm-${subcommand}.sh"
             ;;
         ipv6-route)
