@@ -287,7 +287,7 @@ fi
 # Ensure detached disks directory exists
 DETACHED_DIR="/tux2lab-data/detached-data-disks"
 sudo mkdir -p "$DETACHED_DIR"
-sudo chown "${lab_infra_admin_username}:${lab_infra_admin_username}" "$DETACHED_DIR"
+sudo chown "${lab_infra_admin_username}:$(id -gn "${lab_infra_admin_username}")" "$DETACHED_DIR"
 
 # Detach and move disks
 for disk in "${DISKS_TO_DETACH[@]}"; do
