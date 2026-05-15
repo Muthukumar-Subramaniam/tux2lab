@@ -195,3 +195,50 @@ fn_get_snapshot_size() {
     local snapshot_dir="$1"
     SNAPSHOT_SIZE_HUMAN=$(sudo du -sh "$snapshot_dir" 2>/dev/null | awk '{print $1}')
 }
+
+# Check if there's enough disk space to create a snapshot
+# Usage: fn_check_disk_space_for_snapshot disk_files_array nvram_file
+# Returns: 0 if enough space, 1 if not (with error printed)
+fn_check_disk_space_for_snapshot() {
+    local -n disk_files_check=$1
+    local nvram_file="$2"
+
+    # Calculate total size needed (in bytes)
+    local total_needed=0
+    for df in "${disk_files_check[@]}"; do
+        local file_size
+        file_size=$(sudo stat -c %s "$df" 2>/dev/null || echo "0")
+        ((total_needed += file_size))
+    done
+    if [[ -n "$nvram_file" ]] && [[ -f "$nvram_file" ]]; then
+        local nvram_size
+        nvram_size=$(sudo stat -c %s "$nvram_file" 2>/dev/null || echo "0")
+        ((total_needed += nvram_size))
+    fi
+
+    # Get available space on the filesystem where VMs are stored (in bytes)
+    local available_space
+    available_space=$(df --output=avail -B1 /tux2lab-data 2>/dev/null | tail -1 | tr -d ' ')
+
+    if [[ -z "$available_space" ]] || [[ "$available_space" -eq 0 ]]; then
+        print_error "Unable to determine available disk space on /tux2lab-data."
+        return 1
+    fi
+
+    # Require at least the needed size + 1 GiB headroom
+    local headroom=$((1024 * 1024 * 1024))
+    local required=$((total_needed + headroom))
+
+    if (( available_space < required )); then
+        local needed_human
+        local available_human
+        needed_human=$(numfmt --to=iec "$total_needed" 2>/dev/null || echo "$total_needed bytes")
+        available_human=$(numfmt --to=iec "$available_space" 2>/dev/null || echo "$available_space bytes")
+        print_error "Not enough disk space to create snapshot."
+        print_info "Required: $needed_human + 1 GiB headroom"
+        print_info "Available: $available_human"
+        return 1
+    fi
+
+    return 0
+}

@@ -226,6 +226,12 @@ for vm_name in "${validated_hosts[@]}"; do
         continue
     fi
 
+    # Check available disk space before proceeding
+    if ! fn_check_disk_space_for_snapshot VM_DISK_FILES "$VM_NVRAM_FILE"; then
+        failed_vms+=("$vm_name")
+        continue
+    fi
+
     # Create snapshot directory
     fn_get_snapshots_dir "$vm_name"
     snapshot_path="${SNAPSHOTS_DIR}/${local_snapshot_name}"
