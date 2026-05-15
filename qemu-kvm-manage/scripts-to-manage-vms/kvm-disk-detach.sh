@@ -223,7 +223,7 @@ else
         # Get disk size
         disk_path=$(sudo virsh domblklist "$qemu_kvm_hostname" | awk -v target="$disk" '$1 == target {print $2}')
         if [[ -f "$disk_path" ]]; then
-            disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
+            disk_size=$(sudo qemu-img info -U "$disk_path" | awk '/virtual size/ {print $3, $4}')
             echo "  $((i+1))) $disk ($disk_size)"
         else
             echo "  $((i+1))) $disk"
@@ -265,7 +265,7 @@ print_warning "The following disk(s) will be detached and moved to detached stor
 for disk in "${DISKS_TO_DETACH[@]}"; do
     disk_path=$(sudo virsh domblklist "$qemu_kvm_hostname" | awk -v target="$disk" '$1 == target {print $2}')
     if [[ -f "$disk_path" ]]; then
-        disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
+        disk_size=$(sudo qemu-img info -U "$disk_path" | awk '/virtual size/ {print $3, $4}')
         echo "  - $disk ($disk_size) at $disk_path"
     else
         echo "  - $disk at $disk_path"
