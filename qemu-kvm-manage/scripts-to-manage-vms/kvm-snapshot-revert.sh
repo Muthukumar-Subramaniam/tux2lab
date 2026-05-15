@@ -208,7 +208,7 @@ for vm_name in "${validated_hosts[@]}"; do
             break
         fi
 
-        if ! cp --reflink=auto "$source_file" "$target_file"; then
+        if ! sudo cp --reflink=auto "$source_file" "$target_file"; then
             print_task_fail
             print_error "Failed to restore disk: $disk_name"
             revert_failed=true
@@ -227,7 +227,7 @@ for vm_name in "${validated_hosts[@]}"; do
         nvram_target="${vm_dir}/${META_NVRAM}"
 
         if [[ -f "$nvram_source" ]]; then
-            if ! cp --reflink=auto "$nvram_source" "$nvram_target"; then
+            if ! sudo cp --reflink=auto "$nvram_source" "$nvram_target"; then
                 print_task_fail
                 print_error "Failed to restore NVRAM file."
                 failed_vms+=("$vm_name")

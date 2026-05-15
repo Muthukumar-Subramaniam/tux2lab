@@ -123,13 +123,13 @@ fn_write_snapshot_meta() {
             local basename
             basename=$(basename "$df")
             local size
-            size=$(stat -c %s "$df" 2>/dev/null || echo "0")
+            size=$(sudo stat -c %s "$df" 2>/dev/null || echo "0")
             echo "disk=${basename}:${size}"
         done
         if [[ -n "$nvram_file" ]]; then
             echo "nvram=$(basename "$nvram_file")"
         fi
-    } > "$meta_file"
+    } | sudo tee "$meta_file" > /dev/null
 }
 
 # Read snapshot metadata file
@@ -193,5 +193,5 @@ fn_list_snapshots() {
 # Sets: SNAPSHOT_SIZE_HUMAN
 fn_get_snapshot_size() {
     local snapshot_dir="$1"
-    SNAPSHOT_SIZE_HUMAN=$(du -sh "$snapshot_dir" 2>/dev/null | awk '{print $1}')
+    SNAPSHOT_SIZE_HUMAN=$(sudo du -sh "$snapshot_dir" 2>/dev/null | awk '{print $1}')
 }

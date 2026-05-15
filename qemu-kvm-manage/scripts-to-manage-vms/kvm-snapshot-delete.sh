@@ -144,11 +144,11 @@ for vm_name in "${validated_hosts[@]}"; do
 
     # Get size before deletion for reporting
     fn_get_snapshot_size "$local_snapshot_dir"
-    local freed_size="$SNAPSHOT_SIZE_HUMAN"
+    freed_size="$SNAPSHOT_SIZE_HUMAN"
 
     print_task "Deleting snapshot '$snapshot_name' from VM '$vm_name'..."
 
-    if ! rm -rf "$local_snapshot_dir"; then
+    if ! sudo rm -rf "$local_snapshot_dir"; then
         print_task_fail
         print_error "Failed to delete snapshot directory."
         failed_vms+=("$vm_name")

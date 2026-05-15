@@ -192,7 +192,7 @@ for vm_name in "${validated_hosts[@]}"; do
 
     print_task "Creating snapshot '$local_snapshot_name' for VM '$vm_name'..."
 
-    if ! mkdir -p "$snapshot_path"; then
+    if ! sudo mkdir -p "$snapshot_path"; then
         print_task_fail
         print_error "Failed to create snapshot directory."
         failed_vms+=("$vm_name")
@@ -202,10 +202,10 @@ for vm_name in "${validated_hosts[@]}"; do
     # Copy disk files
     copy_failed=false
     for disk_file in "${VM_DISK_FILES[@]}"; do
-        if ! cp --reflink=auto "$disk_file" "$snapshot_path/"; then
+        if ! sudo cp --reflink=auto "$disk_file" "$snapshot_path/"; then
             print_task_fail
             print_error "Failed to copy disk: $(basename "$disk_file")"
-            rm -rf "$snapshot_path"
+            sudo rm -rf "$snapshot_path"
             copy_failed=true
             break
         fi
@@ -218,10 +218,10 @@ for vm_name in "${validated_hosts[@]}"; do
 
     # Copy NVRAM if present
     if [[ -n "$VM_NVRAM_FILE" ]]; then
-        if ! cp --reflink=auto "$VM_NVRAM_FILE" "$snapshot_path/"; then
+        if ! sudo cp --reflink=auto "$VM_NVRAM_FILE" "$snapshot_path/"; then
             print_task_fail
             print_error "Failed to copy NVRAM file."
-            rm -rf "$snapshot_path"
+            sudo rm -rf "$snapshot_path"
             failed_vms+=("$vm_name")
             continue
         fi
