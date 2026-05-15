@@ -13,15 +13,14 @@ vm_hostname_arg=""
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm console [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm console [-H hostname]
+
 Options:
+  -H, --host           Name of the VM to access console (optional, will prompt if not given)
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to access console (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm console vm1                   # Access console of VM
+  tux2lab vm console -H vm1               # Access console of VM
   
 Note: Press Ctrl+] to exit the console.
 "
@@ -34,15 +33,23 @@ while [[ $# -gt 0 ]]; do
             fn_show_help
             exit 0
             ;;
+        -H|--host)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                print_error "'-H' requires a hostname value."
+                exit 1
+            fi
+            vm_hostname_arg="$2"
+            shift 2
+            ;;
         -*)
             print_error "No such option: $1"
             fn_show_help
             exit 1
             ;;
         *)
-            # This is the hostname argument
-            vm_hostname_arg="$1"
-            shift
+            print_error "Unexpected argument: $1"
+            fn_show_help
+            exit 1
             ;;
     esac
 done

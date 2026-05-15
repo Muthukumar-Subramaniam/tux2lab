@@ -10,7 +10,7 @@ source /tux2lab/common-utils/color-functions.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm resize [-f] [memory <GiB>] [cpu <count>] [disk <GiB>] [hostname]
+    print_cyan "Usage: tux2lab vm resize [-f] [memory <GiB>] [cpu <count>] [disk <GiB>] [-H hostname]
 
 Resources (can be combined in any order):
   memory <GiB>         Set VM memory — power of 2 (2, 4, 8, 16...), less than host memory
@@ -20,18 +20,16 @@ Resources (can be combined in any order):
 
 Options:
   -f, --force          Force power-off without prompt if VM is running
+  -H, --host           Name of the VM to resize (optional, will prompt if not given)
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to resize (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm resize vm1                              # Interactive mode
-  tux2lab vm resize -f memory 8 vm1                  # Set memory to 8 GiB
-  tux2lab vm resize -f cpu 4 vm1                     # Set vCPUs to 4
-  tux2lab vm resize -f disk 50 vm1                   # Set OS disk to 50 GiB
-  tux2lab vm resize -f memory 8 cpu 4 vm1            # Set memory and CPU together
-  tux2lab vm resize -f disk 50 memory 8 cpu 4 vm1    # Resize all three at once
+  tux2lab vm resize -H vm1                              # Interactive mode
+  tux2lab vm resize -f memory 8 -H vm1                  # Set memory to 8 GiB
+  tux2lab vm resize -f cpu 4 -H vm1                     # Set vCPUs to 4
+  tux2lab vm resize -f disk 50 -H vm1                   # Set OS disk to 50 GiB
+  tux2lab vm resize -f memory 8 cpu 4 -H vm1            # Set memory and CPU together
+  tux2lab vm resize -f disk 50 memory 8 cpu 4 -H vm1    # Resize all three at once
 "
 }
 
@@ -80,19 +78,23 @@ while [[ $# -gt 0 ]]; do
             resize_order+=(disk)
             shift 2
             ;;
+        -H|--host)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                print_error "'-H' requires a hostname value."
+                exit 1
+            fi
+            vm_hostname_arg="$2"
+            shift 2
+            ;;
         -*)
             print_error "Unknown option: $1"
             fn_show_help
             exit 1
             ;;
         *)
-            if [[ -n "$vm_hostname_arg" ]]; then
-                print_error "Unexpected argument: $1"
-                fn_show_help
-                exit 1
-            fi
-            vm_hostname_arg="$1"
-            shift
+            print_error "Unexpected argument: $1"
+            fn_show_help
+            exit 1
             ;;
     esac
 done
