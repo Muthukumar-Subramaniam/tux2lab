@@ -147,6 +147,22 @@ DISK_PATH="${golden_image_path}"
 NVRAM_PATH="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}_VARS.fd"
 VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 
+# Cleanup function for interrupted golden image build (Ctrl+C during virt-install)
+cleanup_on_interrupt() {
+    echo ""
+    print_warning "Interrupted! Cleaning up temporary golden image VM..."
+    sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
+    sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
+    sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
+    if $lab_infra_server_mode_is_host; then
+        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    else
+        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" 2>/dev/null || true
+    fi
+    exit 130
+}
+trap cleanup_on_interrupt INT TERM
+
 # Run virt-install with console attachment (don't use shared function to avoid complexity)
 if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MANAGER_DIR}/virt-install" \
     --name "${qemu_kvm_hostname}" \
@@ -173,6 +189,9 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     fi
     exit 1
 fi
+
+# Disable interrupt trap — normal cleanup path handles the rest
+trap - INT TERM
 
 print_info "VM installation of \"${qemu_kvm_hostname}\" completed."
 
