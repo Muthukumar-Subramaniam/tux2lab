@@ -107,6 +107,18 @@ remove_vm() {
         fi
     fi
     
+    # Remove libvirt storage pool (virt-install auto-creates one per VM directory)
+    if sudo virsh pool-info "$vm_name" &>/dev/null; then
+        print_task "Removing storage pool..."
+        sudo virsh pool-destroy "$vm_name" &>/dev/null || true
+        if sudo virsh pool-undefine "$vm_name" &>/dev/null; then
+            print_task_done
+        else
+            print_task_fail
+            print_warning "Could not remove storage pool."
+        fi
+    fi
+    
     # Remove from /etc/hosts (escape dots for regex)
     local escaped_vm_name="${vm_name//./\\.}"
     if grep -q "${vm_name}" "$ETC_HOSTS_FILE" 2>/dev/null; then
