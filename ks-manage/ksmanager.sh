@@ -1068,7 +1068,7 @@ mount_dir="/${lab_infra_server_hostname}/${os_distribution}/${version}"
 
 while ! mountpoint -q "${mount_dir}"; do
     print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
-    print_info "Please use 'prepare-distro-for-ksmanager' tool to prepare ${os_distribution} for PXE-boot."
+    print_info "Please use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it for PXE-boot."
     if $invoked_with_qemu_kvm; then
         print_error "Cannot proceed with unprepared OS distribution in automation mode."
         exit 1
