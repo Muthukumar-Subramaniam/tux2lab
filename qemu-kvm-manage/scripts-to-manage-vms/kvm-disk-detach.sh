@@ -10,20 +10,18 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-detach [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm disk-detach [OPTIONS]
 Options:
+  -H, --host <host>    Hostname of the VM
   -f, --force          Force power-off without prompt if VM is running
   -d, --disks <list>   Comma-separated list of disk targets to detach (e.g., vdb,vdc)
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to detach disks from (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm disk-detach vm1                     # Interactive mode - select disks
-  tux2lab vm disk-detach -f vm1                  # Force power-off if running
-  tux2lab vm disk-detach -d vdb,vdc vm1          # Detach specific disks
-  tux2lab vm disk-detach -f -d vdb,vdc vm1       # Fully automated
+  tux2lab vm disk-detach -H vm1                     # Interactive mode - select disks
+  tux2lab vm disk-detach -f -H vm1                  # Force power-off if running
+  tux2lab vm disk-detach -d vdb,vdc -H vm1          # Detach specific disks
+  tux2lab vm disk-detach -f -d vdb,vdc -H vm1       # Fully automated
 "
 }
 
@@ -50,19 +48,24 @@ while [[ $# -gt 0 ]]; do
             disks_arg="$2"
             shift 2
             ;;
+        -H|--host)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                print_error "Option -H/--host requires a value."
+                exit 1
+            fi
+            vm_hostname_arg="$2"
+            shift 2
+            ;;
         -*)
             print_error "Unknown option: $1"
             fn_show_help
             exit 1
             ;;
         *)
-            if [[ -n "$vm_hostname_arg" ]]; then
-                print_error "Multiple hostnames provided. Only one VM can be processed at a time."
-                fn_show_help
-                exit 1
-            fi
-            vm_hostname_arg="$1"
-            shift
+            print_error "Unexpected argument: $1"
+            print_info "Use -H/--host to specify the hostname."
+            fn_show_help
+            exit 1
             ;;
     esac
 done
@@ -82,28 +85,25 @@ if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
     fi
 fi
 
-# Check if VM exists in 'virsh list --all'
-if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_error "VM \"$qemu_kvm_hostname\" does not exist."
-    exit 1
-fi
+# Check if VM exists
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
+check_vm_exists "$qemu_kvm_hostname" "reimage"
 
 fn_shutdown_or_poweroff() {
     # If force flag is set, try graceful shutdown first, then force if needed
     if [[ "$force_poweroff" == true ]]; then
-        print_info "Force flag detected. Attempting graceful shutdown first..."
+        print_task "Shutting down VM (graceful then force if needed)..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
-        SHUTDOWN_VM_CONTEXT="Attempting graceful shutdown" SHUTDOWN_VM_STRICT=false shutdown_vm "$qemu_kvm_hostname"
-        
+        SHUTDOWN_VM_CONTEXT="Attempting graceful shutdown" SHUTDOWN_VM_STRICT=false shutdown_vm "$qemu_kvm_hostname" &>/dev/null
+
         # Wait for VM to shut down with timeout
-        print_info "Waiting for VM \"${qemu_kvm_hostname}\" to shut down (timeout: 30s)..."
         TIMEOUT=30
         ELAPSED=0
         while sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; do
             if (( ELAPSED >= TIMEOUT )); then
-                print_warning "Graceful shutdown timed out. Forcing power off..."
                 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
-                if ! POWEROFF_VM_CONTEXT="Forcing power off after timeout" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname"; then
+                if ! POWEROFF_VM_CONTEXT="Forcing power off after timeout" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname" &>/dev/null; then
+                    print_task_fail
                     exit 1
                 fi
                 break
@@ -111,35 +111,36 @@ fn_shutdown_or_poweroff() {
             sleep 2
             ((ELAPSED+=2))
         done
-        
+
         if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-            print_success "VM has been shut down successfully. Proceeding further."
+            print_task_done
         fi
         return 0
     fi
-    
+
     print_warning "VM \"$qemu_kvm_hostname\" is still running!"
-    print_notify "Select an option to proceed:
-	1) Try Graceful Shutdown
-	2) Force Power Off
-	q) Quit"
+    print_info "Select an option to proceed:
+  1) Try Graceful Shutdown
+  2) Force Power Off
+  q) Quit"
 
     read -rp "Enter your choice: " selected_choice
 
     case "$selected_choice" in
         1)
-            print_info "Initiating graceful shutdown..."
+            print_task "Shutting down VM gracefully..."
             source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
-            if ! SHUTDOWN_VM_CONTEXT="Initiating graceful shutdown" shutdown_vm "$qemu_kvm_hostname"; then
+            if ! SHUTDOWN_VM_CONTEXT="Initiating graceful shutdown" shutdown_vm "$qemu_kvm_hostname" &>/dev/null; then
+                print_task_fail
                 exit 1
             fi
-            
+
             # Wait for VM to shut down with timeout
-            print_info "Waiting for VM \"${qemu_kvm_hostname}\" to shut down (timeout: 60s)..."
             TIMEOUT=60
             ELAPSED=0
             while sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; do
                 if (( ELAPSED >= TIMEOUT )); then
+                    print_task_fail
                     print_warning "VM did not shut down within ${TIMEOUT}s."
                     print_info "You may want to force power off instead."
                     exit 1
@@ -147,14 +148,16 @@ fn_shutdown_or_poweroff() {
                 sleep 2
                 ((ELAPSED+=2))
             done
-            print_success "VM has been shut down successfully. Proceeding further."
+            print_task_done
             ;;
         2)
-            print_info "Forcing power off..."
+            print_task "Forcing power off VM..."
             source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
-            if ! POWEROFF_VM_CONTEXT="Forcing power off" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname"; then
+            if ! POWEROFF_VM_CONTEXT="Forcing power off" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname" &>/dev/null; then
+                print_task_fail
                 exit 1
             fi
+            print_task_done
             ;;
         q)
             print_info "Quitting without any action."
@@ -183,7 +186,7 @@ fi
 
 # Get list of attached disks (excluding vda which is OS disk)
 print_info "Scanning attached disks..."
-declare -a ATTACHED_DISKS
+ATTACHED_DISKS=()
 while IFS= read -r disk_target; do
     [[ "$disk_target" != "vda" ]] && ATTACHED_DISKS+=("$disk_target")
 done < <(sudo virsh domblklist "$qemu_kvm_hostname" --details | awk '$2 == "disk" {print $3}')
@@ -194,7 +197,7 @@ if [[ ${#ATTACHED_DISKS[@]} -eq 0 ]]; then
 fi
 
 # Get disks to detach (from argument or prompt)
-declare -a DISKS_TO_DETACH
+DISKS_TO_DETACH=()
 
 if [[ -n "$disks_arg" ]]; then
     # Parse comma-separated disk list
@@ -226,7 +229,7 @@ else
         # Get disk size
         disk_path=$(sudo virsh domblklist "$qemu_kvm_hostname" | awk -v target="$disk" '$1 == target {print $2}')
         if [[ -f "$disk_path" ]]; then
-            disk_size=$(du -h "$disk_path" | awk '{print $1}')
+            disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
             echo "  $((i+1))) $disk ($disk_size)"
         else
             echo "  $((i+1))) $disk"
@@ -268,7 +271,7 @@ print_warning "The following disk(s) will be detached and moved to detached stor
 for disk in "${DISKS_TO_DETACH[@]}"; do
     disk_path=$(sudo virsh domblklist "$qemu_kvm_hostname" | awk -v target="$disk" '$1 == target {print $2}')
     if [[ -f "$disk_path" ]]; then
-        disk_size=$(du -h "$disk_path" | awk '{print $1}')
+        disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
         echo "  - $disk ($disk_size) at $disk_path"
     else
         echo "  - $disk at $disk_path"
@@ -284,7 +287,7 @@ fi
 # Ensure detached disks directory exists
 DETACHED_DIR="/tux2lab-data/detached-data-disks"
 sudo mkdir -p "$DETACHED_DIR"
-sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$DETACHED_DIR"
+sudo chown "${lab_infra_admin_username}:${lab_infra_admin_username}" "$DETACHED_DIR"
 
 # Detach and move disks
 for disk in "${DISKS_TO_DETACH[@]}"; do
