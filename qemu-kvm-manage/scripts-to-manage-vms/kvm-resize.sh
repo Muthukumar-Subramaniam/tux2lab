@@ -418,7 +418,7 @@ resize_vm_disk() {
         target_disk_gib="$disk_arg"
     else
         # current_disk_gib may not be set if interactive mode (no validate_disk_args call)
-        if [[ -z "$current_disk_gib" ]]; then
+        if [[ -z "${current_disk_gib:-}" ]]; then
             vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
 
             if [[ ! -f "$vm_qcow2_disk_path" ]]; then
