@@ -36,7 +36,7 @@ ARGUMENTS:
     hostname                Single hostname to query (optional)
 
 BEHAVIOR:
-    - Without arguments: Shows info for ALL running VMs accessible via SSH
+    - Without arguments: Shows info for all VMs (detailed for running, state-only for powered off)
     - With hostname: Shows info for specified VM
     - With -H flag: Shows info for specified comma-separated VMs
 
@@ -108,18 +108,11 @@ elif [[ -n "$single_host" ]]; then
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$single_host" "ALLOW_SELF_REFERENCE"
     target_vms=("$qemu_kvm_hostname")
 else
-    # Get all running VMs
-    mapfile -t all_vms < <(sudo virsh list --state-running | awk 'NR>2 && $2 != "" {print $2}')
-    
-    # Filter to only those accessible via SSH
-    for vm in "${all_vms[@]}"; do
-        if nc -z -w 1 "$vm" 22 &>/dev/null; then
-            target_vms+=("$vm")
-        fi
-    done
+    # Get all VMs
+    mapfile -t target_vms < <(sudo virsh list --all | awk 'NR>2 && $2 != "" {print $2}')
     
     if [[ ${#target_vms[@]} -eq 0 ]]; then
-        print_warning "No running VMs accessible via SSH found"
+        print_warning "No VMs found"
         exit 0
     fi
 fi
