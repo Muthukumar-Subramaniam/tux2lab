@@ -93,7 +93,7 @@ fi
 
 # Check if VM exists
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
-check_vm_exists "$qemu_kvm_hostname" "nic-add"
+check_vm_exists "$qemu_kvm_hostname" "reimage"
 
 # Prompt for NIC count if not provided via -c flag
 if [[ "$nic_count_provided" == false ]]; then
