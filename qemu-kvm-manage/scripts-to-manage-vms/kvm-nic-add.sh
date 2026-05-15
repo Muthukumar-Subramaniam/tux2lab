@@ -10,22 +10,20 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm nic-add [OPTIONS] [hostname]
+    print_cyan "Usage: tux2lab vm nic-add [OPTIONS]
 Options:
+  -H, --host <name>    Name of the VM to add NICs to (will prompt if not given)
   -f, --force          Force power-off without prompt if VM is running
   -c, --count <num>    Number of NICs to add (1-10, default: 1)
   -n, --network <name> Network/bridge to attach to (default: tux2lab)
   -h, --help           Show this help message
 
-Arguments:
-  hostname             Name of the VM to add NICs to (optional, will prompt if not given)
-
 Examples:
-  tux2lab vm nic-add vm1                         # Interactive mode - add 1 NIC
-  tux2lab vm nic-add -f vm1                      # Force power-off if running
-  tux2lab vm nic-add -c 2 vm1                    # Add 2 NICs
-  tux2lab vm nic-add -n br0 vm1                  # Add NIC to specific bridge
-  tux2lab vm nic-add -f -c 3 -n tux2lab vm2       # Fully automated
+  tux2lab vm nic-add -H vm1                      # Interactive mode - add 1 NIC
+  tux2lab vm nic-add -f -H vm1                   # Force power-off if running
+  tux2lab vm nic-add -c 2 -H vm1                 # Add 2 NICs
+  tux2lab vm nic-add -n br0 -H vm1               # Add NIC to specific bridge
+  tux2lab vm nic-add -f -c 3 -n tux2lab -H vm2   # Fully automated
 "
 }
 
@@ -45,6 +43,14 @@ while [[ $# -gt 0 ]]; do
         -f|--force)
             force_poweroff=true
             shift
+            ;;
+        -H|--host)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                print_error "Option -H/--host requires a value."
+                exit 1
+            fi
+            vm_hostname_arg="$2"
+            shift 2
             ;;
         -c|--count)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
@@ -69,13 +75,10 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            if [[ -n "$vm_hostname_arg" ]]; then
-                print_error "Multiple hostnames provided. Only one VM can be processed at a time."
-                fn_show_help
-                exit 1
-            fi
-            vm_hostname_arg="$1"
-            shift
+            print_error "Unexpected argument: $1"
+            print_info "Use -H/--host to specify the hostname."
+            fn_show_help
+            exit 1
             ;;
     esac
 done
@@ -89,10 +92,8 @@ if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
 fi
 
 # Check if VM exists
-if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_error "VM \"$qemu_kvm_hostname\" does not exist."
-    exit 1
-fi
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
+check_vm_exists "$qemu_kvm_hostname" "nic-add"
 
 # Prompt for NIC count if not provided via -c flag
 if [[ "$nic_count_provided" == false ]]; then
