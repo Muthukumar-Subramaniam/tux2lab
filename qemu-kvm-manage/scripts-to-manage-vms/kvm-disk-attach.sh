@@ -74,7 +74,8 @@ done
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
 # Check if VM exists
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh "reimage" "$qemu_kvm_hostname"
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
+check_vm_exists "$qemu_kvm_hostname" "reimage"
 
 fn_shutdown_or_poweroff() {
     # If force flag is set, try graceful shutdown first, then force if needed
