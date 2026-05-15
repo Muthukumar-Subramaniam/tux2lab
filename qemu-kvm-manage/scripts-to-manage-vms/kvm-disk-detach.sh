@@ -170,12 +170,6 @@ fn_shutdown_or_poweroff() {
     esac
 }
 
-if ! sudo virsh list  | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
-else
-    fn_shutdown_or_poweroff
-fi
-
 VM_DIR="/tux2lab-data/vms/${qemu_kvm_hostname}"
 
 # Verify VM directory exists
@@ -282,6 +276,13 @@ read -rp "Type 'yes' to confirm: " confirm
 if [[ "$confirm" != "yes" ]]; then
     print_info "Operation cancelled."
     exit 0
+fi
+
+# Shut down VM if running (only after confirming there's work to do)
+if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
+    print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
+else
+    fn_shutdown_or_poweroff
 fi
 
 # Ensure detached disks directory exists
