@@ -1079,7 +1079,12 @@ done
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
     os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/${lab_infra_server_hostname}/${os_distribution}/${version}/.disk/info")
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
-    os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/${lab_infra_server_hostname}/${os_distribution}/${version}/.treeinfo")
+    if [[ -f "/${lab_infra_server_hostname}/${os_distribution}/${version}/.treeinfo" ]]; then
+        os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/${lab_infra_server_hostname}/${os_distribution}/${version}/.treeinfo")
+    else
+        # Leap 16+ offline installer may not have .treeinfo
+        os_name_and_version="openSUSE Leap ${version}"
+    fi
     # Extract just the version number (e.g., "15.6" from "openSUSE Leap 15.6")
     opensuse_version_number=$(printf '%s\n' "$os_name_and_version" | grep -oP '[0-9]+\.[0-9]+' | head -n 1 || true)
 else
@@ -1117,10 +1122,20 @@ fi
 
 if ! $invoked_with_golden_image; then
     if [[ "${os_distribution}" == "opensuse-leap" ]]; then
-        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-autoinst.xml" "${host_kickstart_dir}/${os_distribution}-${version}-autoinst.xml"; then
-            print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
-            fn_release_host_lock
-            exit 1
+        # Leap 16+ uses Agama JSON profile; 15.x uses AutoYaST XML
+        local_major_version="${version%%.*}"
+        if [[ "${local_major_version}" -ge 16 ]]; then
+            if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"; then
+                print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+                fn_release_host_lock
+                exit 1
+            fi
+        else
+            if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-autoinst.xml" "${host_kickstart_dir}/${os_distribution}-${version}-autoinst.xml"; then
+                print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+                fn_release_host_lock
+                exit 1
+            fi
         fi
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
         if ! rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
@@ -1281,7 +1296,15 @@ if ! $invoked_with_golden_image; then
     mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
 
     if [[ -z "${redhat_based_distro_name}" ]]; then
-        if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/ipxe-template-${os_distribution}.ipxe"  "${mac_based_ipxe_cfg_file}"; then
+        # For openSUSE Leap 16+, use the Agama-specific iPXE template
+        local_ipxe_template="ipxe-template-${os_distribution}.ipxe"
+        if [[ "${os_distribution}" == "opensuse-leap" ]]; then
+            local_major_version="${version%%.*}"
+            if [[ "${local_major_version}" -ge 16 ]]; then
+                local_ipxe_template="ipxe-template-opensuse-leap-16.ipxe"
+            fi
+        fi
+        if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/${local_ipxe_template}"  "${mac_based_ipxe_cfg_file}"; then
             print_error "Failed to copy iPXE template for ${os_distribution}"
             fn_release_host_lock
             exit 1

@@ -48,11 +48,19 @@ network:
 EOF
 	chmod 600 /etc/netplan/50-golden-boot-dhcp.yaml
 elif grep -qi "suse" /etc/os-release; then
-cat << EOF > /etc/sysconfig/network/ifcfg-eth0
+if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
+	# Leap 16+ uses NetworkManager
+	nmcli connection delete eth0 2>/dev/null || true
+	nmcli connection add type ethernet con-name eth0 ifname eth0 \
+		ipv4.method auto connection.autoconnect yes
+else
+	# Leap 15.x uses wicked
+	cat << EOF > /etc/sysconfig/network/ifcfg-eth0
 BOOTPROTO='dhcp'
 STARTMODE='auto'
 ZONE='public'
 EOF
+fi
 fi
 
 # 7. Remove systemd-networkd configs

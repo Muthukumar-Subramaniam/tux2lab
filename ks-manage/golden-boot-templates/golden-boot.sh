@@ -166,7 +166,17 @@ case "${DISTRO_FAMILY}" in
 		;;
 	
 	opensuse)
-		log "Performing OpenSUSE network cleanup (minimal - using systemd-networkd)"
+		log "Performing OpenSUSE network cleanup"
+		# Leap 16+ uses NetworkManager; 15.x uses wicked
+		if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
+			log "  NetworkManager detected (Leap 16+) - removing existing connections"
+			nmcli -t -f UUID,DEVICE connection show | while IFS=: read -r uuid dev; do
+				[[ "${dev}" == "lo" ]] && continue
+				nmcli connection delete uuid "${uuid}" 2>/dev/null || true
+			done
+		else
+			log "  Wicked detected (Leap 15.x) - minimal cleanup"
+		fi
 		;;
 esac
 
@@ -314,7 +324,7 @@ EOF
 		;;
 	
 	opensuse)
-		log "Configuring network using systemd-networkd (OpenSUSE)"
+		log "Configuring network for OpenSUSE"
 		log "Creating network configuration for eth0"
 		log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
 		log "  IPv4 Gateway: ${IPv4_GATEWAY}"
@@ -323,30 +333,53 @@ EOF
 		fi
 		log "  DNS: ${IPv4_DNS_SERVER}"
 		
-		if [ "$IPV6_ENABLED" = true ]; then
-			cat << EOF > /etc/sysconfig/network/ifcfg-eth0
+		if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
+			# Leap 16+ uses NetworkManager
+			log "Using NetworkManager (Leap 16+)"
+			nmcli connection add type ethernet con-name eth0 ifname eth0 \
+				ipv4.method manual \
+				ipv4.addresses "${IPv4_ADDRESS}/${IPv4_CIDR}" \
+				ipv4.gateway "${IPv4_GATEWAY}" \
+				ipv4.dns "${IPv4_DNS_SERVER}" \
+				connection.autoconnect yes
+			if [ "$IPV6_ENABLED" = true ]; then
+				nmcli connection modify eth0 \
+					ipv6.method manual \
+					ipv6.addresses "${IPv6_ADDRESS}/${IPv6_PREFIX}" \
+					ipv6.dns "${IPv6_DNS_SERVER}"
+			fi
+			log "Activating NetworkManager connection"
+			if ! nmcli connection up eth0; then
+				error_exit "Failed to activate NetworkManager connection"
+			fi
+		else
+			# Leap 15.x uses wicked
+			log "Using wicked (Leap 15.x)"
+			if [ "$IPV6_ENABLED" = true ]; then
+				cat << EOF > /etc/sysconfig/network/ifcfg-eth0
 IPADDR='${IPv4_ADDRESS}/${IPv4_CIDR}'
 IPADDR_0='${IPv6_ADDRESS}/${IPv6_PREFIX}'
 BOOTPROTO='static'
 STARTMODE='auto'
 ZONE=public
 EOF
-		else
-			cat << EOF > /etc/sysconfig/network/ifcfg-eth0
+			else
+				cat << EOF > /etc/sysconfig/network/ifcfg-eth0
 IPADDR='${IPv4_ADDRESS}/${IPv4_CIDR}'
 BOOTPROTO='static'
 STARTMODE='auto'
 ZONE=public
 EOF
-		fi
-		
-		cat << EOF > /etc/sysconfig/network/ifroute-eth0
+			fi
+			
+			cat << EOF > /etc/sysconfig/network/ifroute-eth0
 default ${IPv4_GATEWAY} - eth0
 EOF
-		
-		log "Restarting network service to apply configuration"
-		if ! systemctl restart network; then
-			error_exit "Failed to restart network service"
+			
+			log "Restarting network service to apply configuration"
+			if ! systemctl restart network; then
+				error_exit "Failed to restart network service"
+			fi
 		fi
 		;;
 esac
