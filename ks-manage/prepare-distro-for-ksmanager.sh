@@ -498,6 +498,12 @@ fn_cleanup_distro() {
         exit 0
     fi
 
+    # Identify loop device before unmounting (needed for cleanup after lazy unmount)
+    local loop_dev=""
+    if [[ -f "$iso_path" ]]; then
+        loop_dev=$(losetup -j "$iso_path" 2>/dev/null | cut -d: -f1)
+    fi
+
     # Unmount if mounted (lazy unmount handles busy mounts from autofs/NFS clients)
     if [[ -d "$mount_dir" ]] && mountpoint -q "$mount_dir"; then
         print_task "Unmounting ${mount_dir}..."
@@ -508,6 +514,13 @@ fn_cleanup_distro() {
             print_error "Failed to unmount ${mount_dir}. Please check if it's in use."
             exit 1
         fi
+    fi
+
+    # Detach loop device to release ISO blocks (lazy unmount leaves loop active)
+    if [[ -n "$loop_dev" ]] && [[ -b "$loop_dev" ]]; then
+        print_task "Detaching loop device ${loop_dev}..."
+        sudo losetup -d "$loop_dev" 2>/dev/null
+        print_task_done
     fi
 
     # Remove mount directory
