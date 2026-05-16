@@ -519,8 +519,12 @@ fn_cleanup_distro() {
     # Detach loop device to release ISO blocks (lazy unmount leaves loop active)
     if [[ -n "$loop_dev" ]] && [[ -b "$loop_dev" ]]; then
         print_task "Detaching loop device ${loop_dev}..."
-        sudo losetup -d "$loop_dev" 2>/dev/null
-        print_task_done
+        if sudo losetup -d "$loop_dev" 2>/dev/null; then
+            print_task_done
+        else
+            print_task_skip
+            print_warning "Loop device busy — space will be reclaimed after all references close."
+        fi
     fi
 
     # Remove mount directory
