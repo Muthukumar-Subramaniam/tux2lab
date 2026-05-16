@@ -37,7 +37,16 @@ if grep -qi "rhel" /etc/os-release; then
 	rm -f /etc/NetworkManager/system-connections/* 2>>"$LOG"
 elif grep -qi "debian" /etc/os-release; then
 	rm -f /etc/netplan/* 2>>"$LOG"
-	mv /etc/netplan/old/*-cloud-init.yaml /etc/netplan/ 2>>"$LOG"
+	cat << EOF > /etc/netplan/50-golden-boot-dhcp.yaml
+network:
+    version: 2
+    ethernets:
+        golden-boot-dhcp:
+            match:
+                name: "e*"
+            dhcp4: true
+EOF
+	chmod 600 /etc/netplan/50-golden-boot-dhcp.yaml
 elif grep -qi "suse" /etc/os-release; then
 cat << EOF > /etc/sysconfig/network/ifcfg-eth0
 BOOTPROTO='dhcp'
