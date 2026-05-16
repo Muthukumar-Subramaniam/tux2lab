@@ -29,7 +29,7 @@ Options:
   -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-  -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
+  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
   -f, --force          Skip confirmation prompt
   -h, --help           Show this help message
 
@@ -38,9 +38,9 @@ Examples:
   tux2lab vm reimage-golden -H vm1 --console                         # Reimage and attach console
   tux2lab vm reimage-golden -H vm1 --clean-install                   # Reimage with default specs
   tux2lab vm reimage-golden -H vm1 --distro almalinux                # Reimage with AlmaLinux (will prompt for version)
-  tux2lab vm reimage-golden -H vm1 -d ubuntu-lts -v 22.04            # Reimage with Ubuntu 22.04
+  tux2lab vm reimage-golden -H vm1 -d ubuntu-lts -v 26.04            # Reimage with Ubuntu 26.04
   tux2lab vm reimage-golden -f -H vm1                                # Reimage without confirmation
-  tux2lab vm reimage-golden -H vm1,vm2,vm3 -d ubuntu-lts -v 24.04   # Reimage multiple with Ubuntu 24.04
+  tux2lab vm reimage-golden -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04   # Reimage multiple with Ubuntu 26.04
   tux2lab vm reimage-golden -H vm1,vm2,vm3 --clean-install           # Reimage multiple with defaults
 "
 }

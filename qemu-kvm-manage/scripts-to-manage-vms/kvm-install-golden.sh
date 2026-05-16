@@ -24,7 +24,7 @@ Options:
   -c, --console        Attach console during installation (single VM only)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-  -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
+  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
   -h, --help           Show this help message
 
 Examples:
@@ -33,7 +33,7 @@ Examples:
   tux2lab vm install-golden -H vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
   tux2lab vm install-golden -H vm1 -d rocky -v 9                # Install with Rocky Linux 9
   tux2lab vm install-golden -H vm1,vm2,vm3                      # Install multiple VMs
-  tux2lab vm install-golden -H vm1,vm2,vm3 -d ubuntu-lts -v 24.04  # Install multiple with Ubuntu 24.04
+  tux2lab vm install-golden -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04  # Install multiple with Ubuntu 26.04
 "
 }
 

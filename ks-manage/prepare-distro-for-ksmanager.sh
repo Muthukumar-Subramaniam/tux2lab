@@ -65,7 +65,7 @@ Supported distros:
     almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap
 
 Version:
-    The actual version number, e.g. 9, 10, 22.04, 24.04, 15.5, 15.6"
+    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 15.5, 15.6"
 }
 
 # ====== HELPER FUNCTIONS ======

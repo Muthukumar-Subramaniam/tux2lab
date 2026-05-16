@@ -22,14 +22,14 @@ Description:
 Options:
     -d, --distro         Specify OS distribution
                                             (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-    -v, --version        Specify OS version number (e.g., 10, 9, 24.04, 15.6)
+    -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
     -h, --help           Show this help message
 
 Examples:
     tux2lab golden-image build                             # Build golden image (will prompt for distro/version)
     tux2lab golden-image build -d almalinux                # Build AlmaLinux golden image (will prompt for version)
     tux2lab golden-image build -d rocky -v 9               # Build Rocky Linux 9 golden image
-    tux2lab golden-image build -d ubuntu-lts -v 24.04      # Build Ubuntu LTS 24.04 golden image
+    tux2lab golden-image build -d ubuntu-lts -v 26.04      # Build Ubuntu LTS 26.04 golden image
 "
 }
 
@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--version)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "--version/-v requires a version number (e.g., 10, 9, 24.04, 15.6)."
+                print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 15.6)."
                 fn_show_help
                 exit 1
             fi

@@ -12,7 +12,7 @@
 #   CLEAN_INSTALL   - "yes" or "no" (if supported)
 #   FORCE_REIMAGE   - "true" or "false" (if supported)
 #   OS_DISTRO       - OS distribution name (if specified)
-#   VERSION_TYPE    - OS version number (e.g., 10, 9, 24.04, 15.6)
+#   VERSION_TYPE    - OS version number (e.g., 10, 9, 26.04, 15.6)
 #   HOSTNAMES       - Array of validated hostnames
 #   TOTAL_VMS       - Number of VMs to process
 #
@@ -94,7 +94,7 @@ parse_vm_command_args() {
                     exit 1
                 fi
                 if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                    print_error "--version/-v requires a version number (e.g., 10, 9, 24.04, 15.6)."
+                    print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 15.6)."
                     fn_show_help
                     exit 1
                 fi

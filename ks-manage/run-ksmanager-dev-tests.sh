@@ -217,7 +217,7 @@ declare -A DISTRO_AVAILABLE_VERSIONS=(
 	[oraclelinux]="10 9"
 	[centos-stream]="10 9"
 	[rhel]="10 9"
-	[ubuntu-lts]="24.04 22.04"
+	[ubuntu-lts]="26.04 24.04 22.04"
 	[opensuse-leap]="15.6 15.5"
 )
 declare -A DISTRO_DISPLAY_NAMES=(
