@@ -1,0 +1,172 @@
+#cloud-config
+##After installation autoinstall steps are stored in the system under /var/log/installer/autoinstall-user-data
+autoinstall:
+  version: 1
+
+  apt:
+    disable_suites: [security, updates]
+    conf: |
+      APT::Periodic::Enable "0";
+      Unattended-Upgrade::Automatic-Reboot "false";
+
+  early-commands:
+    - echo "ttyS0" >> /etc/securetty
+    - systemctl start serial-getty@ttyS0.service
+
+  source:
+   id: ubuntu-server-minimal
+
+  identity:
+    hostname: get_hostname.get_ipv4_domain
+    password: "get_shadow_password_super_mgmt_user"
+    username: get_mgmt_super_user
+
+  user-data:
+    timezone: UTC
+    chpasswd:
+      expire: false
+      list:
+        - root:get_shadow_password_super_mgmt_user
+    runcmd:
+      - "echo 'Types: deb' > /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'URIs: http://archive.ubuntu.com/ubuntu/' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Suites: resolute resolute-updates resolute-backports' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Components: main restricted universe multiverse' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo '' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Types: deb' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'URIs: http://security.ubuntu.com/ubuntu/' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Suites: resolute-security' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Components: main restricted universe multiverse' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - "echo 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' >> /etc/apt/sources.list.d/ubuntu.sources"
+      - apt-get update
+      - apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux net-tools sysstat zip tcpdump traceroute wget tar inetutils-ping dnsutils rsync netcat-openbsd nmap lsof autofs
+      - apt-get remove -y lvm2 && apt-get autoremove -y 
+      - /usr/bin/echo -e "HISTSIZE=-1\nHISTFILESIZE=-1" | tee -a /home/get_mgmt_super_user/.bashrc /root/.bashrc
+      - var_PS1_variable_get_mgmt_super_user=$(curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-normal-user)
+      - echo "${var_PS1_variable_get_mgmt_super_user}" >> /home/get_mgmt_super_user/.bashrc
+      - var_PS1_variable_root=$(curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-root-user)
+      - echo "${var_PS1_variable_root}" >> /root/.bashrc
+      - echo "get_mgmt_super_user ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/get_mgmt_super_user
+      - wget -P /usr/local/share/ca-certificates/ http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt && update-ca-certificates || true
+      - mkdir -p /home/get_mgmt_super_user/.ssh /root/.ssh
+      - chmod 0700 /home/get_mgmt_super_user/.ssh /root/.ssh
+      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/authorized_keys -o /home/get_mgmt_super_user/.ssh/authorized_keys && cp -p /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys
+      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa.pub -o /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub && cp -p /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
+      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa -o /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa && cp -p /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
+      - chmod 0600 /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
+      - chmod 0644 /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
+      - chown -R get_mgmt_super_user:get_mgmt_super_user /home/get_mgmt_super_user/.ssh
+      - touch /etc/cloud/cloud-init.disabled
+      - if ls /etc/netplan/*cloud* &>/dev/null;then mv /etc/netplan/*cloud* /etc/netplan/old/;fi
+      - cp -p /etc/chrony/chrony.conf /etc/chrony/chrony.conf_bkp_orig
+      - sed -i 's/^pool/#pool/g' /etc/chrony/chrony.conf
+      - echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
+      - wget -O /etc/motd http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/motd.txt
+      - get_golden_image_creation_not_requested || wget -O /etc/systemd/system/golden-image-setup.service http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.service
+      - get_golden_image_creation_not_requested || wget -O /root/golden-image-setup.sh http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.sh
+      - get_golden_image_creation_not_requested || ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
+      - get_golden_image_creation_not_requested || wget -O /etc/systemd/system/golden-boot.service http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.service
+      - get_golden_image_creation_not_requested || wget -O /root/golden-boot.sh http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.sh
+      - get_golden_image_creation_not_requested || ln -s /etc/systemd/system/golden-boot.service /etc/systemd/system/multi-user.target.wants/golden-boot.service
+      - mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/tux2lab_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-tux2lab.conf
+      - local_lab_info=$(echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
+      - ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
+      - mkdir /tux2lab /lab-share /lab-web-share
+      - sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
+      - echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
+      - echo '/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab' > /etc/auto.master.d/auto-${local_lab_info}
+      - echo '/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/get_lab_infra_server_hostname' >> /etc/auto.master.d/auto-${local_lab_info}
+      - echo '/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share' >> /etc/auto.master.d/auto-${local_lab_info}
+      - kexec -l /boot/vmlinuz --initrd=/boot/initrd.img --command-line="$(cat /proc/cmdline)" && systemctl kexec
+
+  keyboard:
+    layout: us
+    toggle: null
+    variant: ''
+
+  locale: en_US.UTF-8
+
+  ssh:
+    allow-pw: true
+    authorized-keys: []
+    install-server: true
+
+  storage:
+    config:
+# Configure Disk
+      - ptable: gpt
+        path: /dev/get_disk_type_for_the_vm
+        wipe: superblock-recursive
+        preserve: false
+        name: ''
+        grub_device: false
+        id: disk-get_disk_type_for_the_vm
+        type: disk
+# EFI partition
+      - device: disk-get_disk_type_for_the_vm
+        size: 134217728
+        wipe: superblock
+        flag: boot
+        number: 1
+        preserve: false
+        grub_device: true
+        id: partition-0
+        type: partition
+      - fstype: fat32
+        volume: partition-0
+        preserve: false
+        id: format-0
+        type: format
+      - path: /boot/efi
+        device: format-0
+        id: mount-0
+        type: mount
+# /boot partition
+      - device: disk-get_disk_type_for_the_vm
+        size: 536870912
+        wipe: superblock
+        number: 2
+        preserve: false
+        id: partition-1
+        type: partition
+      - fstype: xfs
+        volume: partition-1
+        preserve: false
+        id: format-1
+        type: format
+      - path: /boot
+        device: format-1
+        id: mount-1
+        type: mount
+# / (root) partition
+      - device: disk-get_disk_type_for_the_vm
+        size: -1
+        wipe: superblock
+        number: 3
+        preserve: false
+        id: partition-2
+        type: partition
+      - fstype: xfs
+        volume: partition-2
+        preserve: false
+        id: format-2
+        type: format
+      - path: /
+        device: format-2
+        id: mount-2
+        type: mount
+
+  late-commands:
+    - mkdir -p /target/etc/systemd/network
+    - V_count=0;for v_interface in $(ls /sys/class/net | grep -v lo);do /target/usr/bin/echo -e "[Match]\nMACAddress=$(ip link | grep $v_interface -A 1 | grep link/ether | cut -d " " -f 6)\n\n[Link]\nName=eth$V_count" >/target/etc/systemd/network/7$V_count-eth$V_count.link;V_count=$((V_count+1));done
+    - mkdir -p /target/etc/netplan/old
+    - if ls /target/etc/netplan/*.yaml;then mv /target/etc/netplan/*.yaml /target/etc/netplan/old;fi
+    - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/ubuntu-lts-get_version-ks/eth0.yaml -o /target/etc/netplan/eth0.yaml
+    - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/ubuntu-lts-get_version-ks/auto-create-int.yaml -o /target/etc/netplan/auto-create-int.yaml
+    - V_count=1;for v_interface in $(ls /target/etc/systemd/network/ | grep -v eth0);do sed "s/eth-get_mgmt_super_user/eth$V_count/g" /target/etc/netplan/auto-create-int.yaml >/target/etc/netplan/eth$V_count.yaml;V_count=$((V_count+1));done
+    - chmod 600 /target/etc/netplan/eth*.yaml
+    - rm -rf /target/etc/netplan/auto-create-int.yaml
+    - /target/usr/bin/sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="console=ttyS0,115200n8 nomodeset"/' /target/etc/default/grub
+    - curtin in-target --target=/target -- update-grub
+    - date '+%Y-%m-%d %H:%M:%S %Z' > /target/etc/bigbang
