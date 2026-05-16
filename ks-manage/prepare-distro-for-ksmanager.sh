@@ -504,19 +504,37 @@ fn_cleanup_distro() {
         loop_dev=$(losetup -j "$iso_path" 2>/dev/null | cut -d: -f1)
     fi
 
-    # Unmount if mounted (lazy unmount handles busy mounts from autofs/NFS clients)
+    # Unmount if mounted
     if [[ -d "$mount_dir" ]] && mountpoint -q "$mount_dir"; then
         print_task "Unmounting ${mount_dir}..."
-        if sudo umount -l "$mount_dir"; then
+        if sudo umount "$mount_dir" 2>/dev/null; then
             print_task_done
         else
-            print_task_fail
-            print_error "Failed to unmount ${mount_dir}. Please check if it's in use."
-            exit 1
+            # Mount busy — flush NFS export cache to release kernel nfsd references
+            print_task_skip
+            print_warning "Mount busy. Flushing NFS export cache and retrying..."
+            sudo exportfs -f 2>/dev/null || true
+            sleep 1
+            print_task "Unmounting ${mount_dir} (retry after NFS flush)..."
+            if sudo umount "$mount_dir" 2>/dev/null; then
+                print_task_done
+            else
+                # Last resort — lazy unmount detaches from namespace
+                print_task_skip
+                print_warning "Still busy. Falling back to lazy unmount..."
+                print_task "Unmounting ${mount_dir} (lazy)..."
+                if sudo umount -l "$mount_dir"; then
+                    print_task_done
+                else
+                    print_task_fail
+                    print_error "Failed to unmount ${mount_dir}. Please check if it's in use."
+                    exit 1
+                fi
+            fi
         fi
     fi
 
-    # Detach loop device to release ISO blocks (lazy unmount leaves loop active)
+    # Detach loop device to release ISO blocks
     if [[ -n "$loop_dev" ]] && [[ -b "$loop_dev" ]]; then
         print_task "Detaching loop device ${loop_dev}..."
         if sudo losetup -d "$loop_dev" 2>/dev/null; then
