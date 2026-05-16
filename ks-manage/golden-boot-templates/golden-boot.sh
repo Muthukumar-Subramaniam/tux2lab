@@ -160,9 +160,9 @@ case "${DISTRO_FAMILY}" in
 		log "Creating netplan configuration directory"
 		mkdir -p /etc/netplan
 		
-		log "Backing up old cloud-init netplan configurations"
+		log "Backing up existing netplan configurations"
 		mkdir -p /etc/netplan/old
-		mv /etc/netplan/*-cloud-init.yaml /etc/netplan/old/ 2>/dev/null || log "No cloud-init configs to backup"
+		mv /etc/netplan/*.yaml /etc/netplan/old/ 2>/dev/null || log "No existing netplan configs to backup"
 		;;
 	
 	opensuse)
