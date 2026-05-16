@@ -564,6 +564,8 @@ fn_cleanup_distro() {
     print_task_done
 
     print_success "Cleanup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+    print_info "The local repo for this distro no longer exists. Any golden image built from it cannot be used to provision new VMs."
+    print_info "To remove the golden image, run: tux2lab golden-image cleanup -f -d ${distro} -v ${version}"
 }
 
 # ====== ARG PARSING ======
