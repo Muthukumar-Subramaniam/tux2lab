@@ -267,6 +267,16 @@ tux2lab vm nic-add -H <hostname>     Add a network interface
 tux2lab vm nic-remove -H <hostname>  Remove a network interface
 ```
 
+### VM Snapshots
+
+```
+tux2lab vm snapshot-create -H <hostname>  Create a snapshot
+tux2lab vm snapshot-list -H <hostname>    List snapshots
+tux2lab vm snapshot-info -H <hostname>    Show snapshot details
+tux2lab vm snapshot-revert -H <hostname>  Revert to a snapshot
+tux2lab vm snapshot-delete -H <hostname>  Delete a snapshot
+```
+
 ### Golden Image Management
 
 ```
@@ -287,7 +297,10 @@ tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab distro list               List distributions and setup status
 tux2lab distro setup              Prepare a distro for PXE provisioning
 tux2lab distro cleanup            Remove a distro's PXE setup
-tux2lab ipv6-route [action]       Manage IPv6 routes (enable/disable/auto/status)
+tux2lab ipv6-route enable         Add IPv6 route to lab network
+tux2lab ipv6-route disable        Remove IPv6 route
+tux2lab ipv6-route auto           Configure route to persist across reboots
+tux2lab ipv6-route status         Show current IPv6 route status
 tux2lab version                   Show version information
 ```
 
