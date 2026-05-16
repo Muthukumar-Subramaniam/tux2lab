@@ -12,7 +12,7 @@ autoinstall:
   early-commands:
     - echo "ttyS0" >> /etc/securetty
     - systemctl start serial-getty@ttyS0.service
-    - systemctl disable --now systemd-networkd-wait-online.service
+    - systemctl mask --now systemd-networkd-wait-online.service
 
   source:
    id: ubuntu-server-minimal
@@ -170,5 +170,5 @@ autoinstall:
     - rm -rf /target/etc/netplan/auto-create-int.yaml
     - /target/usr/bin/sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="console=ttyS0,115200n8 nomodeset"/' /target/etc/default/grub
     - curtin in-target --target=/target -- update-grub
-    - curtin in-target --target=/target -- systemctl disable systemd-networkd-wait-online.service
+    - ln -sf /dev/null /target/etc/systemd/system/systemd-networkd-wait-online.service
     - date '+%Y-%m-%d %H:%M:%S %Z' > /target/etc/bigbang
