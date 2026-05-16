@@ -16,7 +16,22 @@
         "search": "/dev/get_disk_type_for_the_vm",
         "ptableType": "gpt",
         "partitions": [
-          { "generate": "default" }
+          {
+            "id": "esp",
+            "size": "512 MiB",
+            "filesystem": {
+              "type": "vfat",
+              "path": "/boot/efi"
+            }
+          },
+          {
+            "id": "linux",
+            "size": { "min": "10 GiB" },
+            "filesystem": {
+              "type": "xfs",
+              "path": "/"
+            }
+          }
         ]
       }
     ]
