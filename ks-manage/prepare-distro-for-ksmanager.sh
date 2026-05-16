@@ -498,10 +498,10 @@ fn_cleanup_distro() {
         exit 0
     fi
 
-    # Unmount if mounted
+    # Unmount if mounted (lazy unmount handles busy mounts from autofs/NFS clients)
     if [[ -d "$mount_dir" ]] && mountpoint -q "$mount_dir"; then
         print_task "Unmounting ${mount_dir}..."
-        if sudo umount "$mount_dir"; then
+        if sudo umount -l "$mount_dir"; then
             print_task_done
         else
             print_task_fail
