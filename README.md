@@ -71,7 +71,7 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 |---|---|---|---|
 | Red Hat-based | AlmaLinux, Rocky, Oracle Linux, RHEL, CentOS Stream | 10, 9, 8 | Kickstart |
 | Debian-based | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
-| SUSE-based | openSUSE Leap | 15.6, 15.5 | AutoYaST |
+| SUSE-based | openSUSE Leap | 16.0, 15.6, 15.5 | Agama (16.0), AutoYaST (15.x) |
 
 > **VM mode:** The distro used to build the infra server is available for guest provisioning immediately.
 > **Host mode:** No distros are pre-configured — set up your first distro after deployment.
@@ -303,7 +303,7 @@ These tools run on the infrastructure server and power the provisioning pipeline
 | Tool | Purpose |
 |---|---|
 | **dnsbinder** | Manages BIND DNS zone records — automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
-| **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
+| **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
 | **prepare-distro-for-ksmanager** | Downloads ISOs, mounts them, and registers distributions with ksmanager for PXE provisioning |
 
 ---
