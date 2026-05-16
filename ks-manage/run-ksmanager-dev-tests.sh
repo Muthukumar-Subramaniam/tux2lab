@@ -212,11 +212,11 @@ EOF
 	cat > "${SANDBOX_HUB}/ks-manage/distro-versions.conf" <<'EOF'
 #!/usr/bin/env bash
 declare -A DISTRO_AVAILABLE_VERSIONS=(
-	[almalinux]="10 9"
-	[rocky]="10 9"
-	[oraclelinux]="10 9"
-	[centos-stream]="10 9"
-	[rhel]="10 9"
+	[almalinux]="10 9 8"
+	[rocky]="10 9 8"
+	[oraclelinux]="10 9 8"
+	[centos-stream]="10 9 8"
+	[rhel]="10 9 8"
 	[ubuntu-lts]="26.04 24.04 22.04"
 	[opensuse-leap]="15.6 15.5"
 )
