@@ -2,7 +2,7 @@
   "Dhcp6": {
     "control-socket": {
       "socket-type": "unix",
-      "socket-name": "/run/kea/kea6-ctrl-socket"
+      "socket-name": "/var/run/kea/kea6-ctrl-socket"
     },
     "interfaces-config": {
       "interfaces": [ "{{ ansible_facts.env.mgmt_interface_name }}" ]
