@@ -193,15 +193,18 @@ if [[ -n "$all_vms" ]]; then
     while IFS= read -r vm_name; do
         [[ -z "$vm_name" ]] && continue
         print_task "Undefining VM \"${vm_name}\"..."
-        if sudo virsh undefine "$vm_name" --remove-all-storage --nvram >/dev/null 2>&1; then
-            print_task_done
-        elif sudo virsh undefine "$vm_name" --nvram >/dev/null 2>&1; then
+        if sudo virsh undefine "$vm_name" --nvram >/dev/null 2>&1; then
             print_task_done
         elif sudo virsh undefine "$vm_name" >/dev/null 2>&1; then
             print_task_done
         else
             print_task_fail
             print_warning "Could not undefine VM \"${vm_name}\""
+        fi
+
+        # Remove VM disk directory
+        if [[ -d "/tux2lab-data/vms/${vm_name}" ]]; then
+            sudo rm -rf "/tux2lab-data/vms/${vm_name}"
         fi
 
         # Remove storage pool if it exists

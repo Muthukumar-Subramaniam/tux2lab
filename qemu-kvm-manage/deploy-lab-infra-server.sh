@@ -95,7 +95,9 @@ Re-running this script will OVERWRITE your existing setup.
         print_yellow "If you want to redeploy from scratch, you must:
     1. Backup any important data from your lab
     2. Manually remove the existing deployment:
-        • Delete VM: sudo virsh undefine ${lab_infra_server_hostname:-tux2lab-infra-server} --remove-all-storage
+        • Delete VM: sudo virsh destroy ${lab_infra_server_hostname:-tux2lab-infra-server}
+                     sudo virsh undefine ${lab_infra_server_hostname:-tux2lab-infra-server} --nvram
+                     sudo rm -rf /tux2lab-data/vms/${lab_infra_server_hostname:-tux2lab-infra-server}
         • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
     3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
     4. Remove SSH keys: rm -f ~/.ssh/tux2lab_id_rsa*"
@@ -677,7 +679,7 @@ deploy_lab_infra_server_vm() {
     # Check if VM already exists in virsh
     if sudo virsh list --all | grep -qw "${lab_infra_server_hostname}"; then
         print_error "Lab Infra VM '${lab_infra_server_hostname}' already exists in libvirt!"
-        print_info "To remove it, run: sudo virsh undefine ${lab_infra_server_hostname} --remove-all-storage"
+        print_info "To remove it, run: sudo virsh destroy ${lab_infra_server_hostname} && sudo virsh undefine ${lab_infra_server_hostname} --nvram && sudo rm -rf ${VM_DIR}"
         exit 1
     fi
 
