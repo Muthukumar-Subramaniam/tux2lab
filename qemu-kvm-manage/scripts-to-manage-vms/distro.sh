@@ -38,6 +38,11 @@ run_on_infra_server() {
     if $lab_infra_server_mode_is_host; then
         "${PREPARE_SCRIPT}" "$@"
     else
+        if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o ConnectTimeout=5 "${lab_infra_admin_username}@${lab_infra_server_hostname}" true 2>/dev/null; then
+            print_error "Cannot reach the lab infra server (${lab_infra_server_hostname})."
+            exit 1
+        fi
         ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t \
             "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
             "${PREPARE_SCRIPT}" "$@"
@@ -68,6 +73,11 @@ case "$subcommand" in
         if $lab_infra_server_mode_is_host; then
             GOLDEN_IMAGES_ON_HOST="$golden_images" "${PREPARE_SCRIPT}" --list
         else
+            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=5 "${lab_infra_admin_username}@${lab_infra_server_hostname}" true 2>/dev/null; then
+                print_error "Cannot reach the lab infra server (${lab_infra_server_hostname})."
+                exit 1
+            fi
             ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t \
                 "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
                 "GOLDEN_IMAGES_ON_HOST='${golden_images}' ${PREPARE_SCRIPT} --list"
