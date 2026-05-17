@@ -42,6 +42,7 @@ PRESERVED (default mode):
     - Lab environment configuration (/tux2lab-data/lab_environment_vars)
     - SSH keys
     - Downloaded ISO files
+    - Golden images
     - Network bridge definitions
 
 PRESERVED (--clean-state mode):
@@ -116,6 +117,7 @@ print_warning "  • The lab infrastructure server (${lab_infra_server_hostname}
 if $clean_state; then
     print_warning "  • Saved lab configuration (environment file)"
     print_warning "  • SSH keys for lab access"
+    print_warning "  • All golden images"
 fi
 
 echo
@@ -299,6 +301,10 @@ fi
 if $clean_state; then
     print_task "Wiping saved lab configuration..."
     rm -f "$LAB_ENV_VARS_FILE"
+    print_task_done
+
+    print_task "Removing golden images..."
+    sudo rm -rf /tux2lab-data/golden-images-disk-store
     print_task_done
 
     print_task "Removing SSH artifacts..."
