@@ -18,6 +18,14 @@ if [[ -z "${INFRA_SERVER_VERSION:-}" ]]; then
     exit 1
 fi
 
+# Internal flag: --rebuild is used by 'tux2lab rebuild-lab' to redeploy
+# using the existing environment file without interactive prompts.
+REBUILD_MODE=false
+if [[ "${1:-}" == "--rebuild" ]]; then
+    REBUILD_MODE=true
+    shift
+fi
+
 # Check if lab environment is already deployed
 check_existing_lab_deployment() {
     local LAB_ENV_FILE="/tux2lab-data/lab_environment_vars"
@@ -482,6 +490,135 @@ EOF
 }
 
 #-------------------------------------------------------------
+# Non-interactive config restore for rebuild mode
+#-------------------------------------------------------------
+prepare_lab_infra_config_for_rebuild() {
+    print_info "Rebuilding lab using existing configuration..."
+
+    LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
+    if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
+        print_error "Lab environment file not found at $LAB_ENV_VARS_FILE"
+        print_info "Cannot rebuild without existing configuration."
+        print_info "Run 'tux2lab deploy-lab' to create a new lab from scratch."
+        exit 1
+    fi
+
+    source "$LAB_ENV_VARS_FILE"
+
+    # Pre-flight environment checks
+    local vendored_virt_manager_dir="/tux2lab/vendor/virt-manager"
+    if [[ ! -d "${vendored_virt_manager_dir}/virtinst" || ! -f "${vendored_virt_manager_dir}/virt-install" ]]; then
+        print_error "Vendored virt-manager files not found at ${vendored_virt_manager_dir}!"
+        exit 1
+    fi
+    if [[ ! -d /tux2lab-data ]]; then
+        print_error "Directory /tux2lab-data does not exist."
+        exit 1
+    fi
+
+    # Derive shortname from hostname
+    lab_infra_server_shortname="${lab_infra_server_hostname%%.*}"
+
+    print_info "Rebuild configuration:
+✓ Hostname            : \033[1m${lab_infra_server_hostname}\033[0m
+✓ Domain              : \033[1m${lab_infra_domain_name}\033[0m
+✓ Admin User          : \033[1m${lab_infra_admin_username}\033[0m
+✓ Mode                : \033[1m$(if ${lab_infra_server_mode_is_host:-false}; then echo HOST; else echo VM; fi)\033[0m
+✓ IPv4 Address        : \033[1m${lab_infra_server_ipv4_address}\033[0m
+✓ IPv6 Address        : \033[1m${lab_infra_server_ipv6_address}\033[0m"
+
+    # Ensure SSH keys exist on disk
+    SSH_DIR="$HOME/.ssh"
+    SSH_PRIVATE_KEY_FILE="$SSH_DIR/tux2lab_id_rsa"
+    SSH_PUB_KEY_FILE="$SSH_DIR/tux2lab_id_rsa.pub"
+
+    if [[ ! -d "$SSH_DIR" ]]; then
+        mkdir -p "$SSH_DIR"
+        chmod 700 "$SSH_DIR"
+    fi
+
+    if [[ ! -f "$SSH_PUB_KEY_FILE" || ! -f "$SSH_PRIVATE_KEY_FILE" ]]; then
+        print_info "SSH keys not found on disk. Restoring from environment file..."
+        echo "$lab_infra_ssh_private_key" > "$SSH_PRIVATE_KEY_FILE"
+        chmod 600 "$SSH_PRIVATE_KEY_FILE"
+        echo "$lab_infra_ssh_public_key" > "$SSH_PUB_KEY_FILE"
+        chmod 644 "$SSH_PUB_KEY_FILE"
+        print_success "SSH keys restored."
+    fi
+
+    # Ensure public key is in authorized_keys
+    AUTHORIZED_KEYS_FILE="$SSH_DIR/authorized_keys"
+    touch "$AUTHORIZED_KEYS_FILE"
+    chmod 600 "$AUTHORIZED_KEYS_FILE"
+    if ! grep -qF "$lab_infra_ssh_public_key" "$AUTHORIZED_KEYS_FILE"; then
+        echo "$lab_infra_ssh_public_key" >> "$AUTHORIZED_KEYS_FILE"
+    fi
+
+    # Compute subnets_to_allow_ssh_pub_access
+    IFS='.' read -r lab_infra_ipv4_octet1 lab_infra_ipv4_octet2 lab_infra_ipv4_octet3 lab_infra_ipv4_octet4 <<< "$lab_infra_server_ipv4_address"
+    IFS='.' read -r lab_infra_mask_octet1 lab_infra_mask_octet2 lab_infra_mask_octet3 lab_infra_mask_octet4 <<< "$lab_infra_server_ipv4_netmask"
+    subnet_span=$((255 - lab_infra_mask_octet3))
+    starting_subnet_octet=$((lab_infra_ipv4_octet3 & lab_infra_mask_octet3))
+    ending_subnet_octet=$((starting_subnet_octet | subnet_span))
+    subnets_to_allow_ssh_pub_access=""
+    for subnet_octet in $(seq "$starting_subnet_octet" "$ending_subnet_octet"); do
+        subnets_to_allow_ssh_pub_access+=" ${lab_infra_ipv4_octet1}.${lab_infra_ipv4_octet2}.$subnet_octet.*"
+    done
+    subnets_to_allow_ssh_pub_access="${subnets_to_allow_ssh_pub_access# }"
+
+    # Update SSH config
+    print_task "Updating SSH config for ${lab_infra_domain_name}"
+    sudo mkdir -p /etc/ssh/ssh_config.d
+    SSH_CUSTOM_CONFIG_FILE="/etc/ssh/ssh_config.d/999-tux2lab.conf"
+    sudo tee "$SSH_CUSTOM_CONFIG_FILE" &>/dev/null <<EOF
+Host *.${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${subnets_to_allow_ssh_pub_access}
+        IdentityFile ~/.ssh/tux2lab_id_rsa
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+        LogLevel QUIET
+EOF
+
+    USER_SSH_DIR="${HOME}/.ssh"
+    USER_SSH_CONFIG_CUSTOM="${USER_SSH_DIR}/config.custom"
+    if [[ -f "$USER_SSH_CONFIG_CUSTOM" ]]; then
+        sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$USER_SSH_CONFIG_CUSTOM"
+    fi
+    cat >> "$USER_SSH_CONFIG_CUSTOM" <<EOF
+# KVM Lab SSH Config - Start
+Host *.${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${subnets_to_allow_ssh_pub_access}
+        IdentityFile ~/.ssh/tux2lab_id_rsa
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+        LogLevel QUIET
+# KVM Lab SSH Config - End
+EOF
+
+    USER_SSH_CONFIG="${USER_SSH_DIR}/config"
+    if [[ ! -f "$USER_SSH_CONFIG" ]] || ! grep -q "Include.*config.custom" "$USER_SSH_CONFIG"; then
+        if [[ -f "$USER_SSH_CONFIG" && -s "$USER_SSH_CONFIG" ]]; then
+            sed -i '1i # Include any user specified SSH configuration\nInclude ~/.ssh/config.custom\n' "$USER_SSH_CONFIG"
+        else
+            cat > "$USER_SSH_CONFIG" << 'EOF'
+# Include any user specified SSH configuration
+Include ~/.ssh/config.custom
+EOF
+        fi
+    fi
+    print_task_done
+
+    # Update /etc/hosts
+    print_task "Updating /etc/hosts for ${lab_infra_server_hostname}"
+    local escaped_hostname
+    escaped_hostname=$(printf '%s' "${lab_infra_server_hostname}" | sed 's/\./\\./g')
+    sudo sed -i.bak "/${escaped_hostname}/d" /etc/hosts
+    echo "${lab_infra_server_ipv4_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts &>/dev/null
+    echo "${lab_infra_server_ipv6_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts &>/dev/null
+    print_task_done
+
+    print_success "Lab configuration restored from existing environment file."
+}
+
+#-------------------------------------------------------------
 # Deployment mode functions
 #-------------------------------------------------------------
 validate_infra_server_iso() {
@@ -522,7 +659,11 @@ validate_infra_server_iso() {
 }
 
 deploy_lab_infra_server_vm() {
-    prepare_lab_infra_config
+    if $REBUILD_MODE; then
+        prepare_lab_infra_config_for_rebuild
+    else
+        prepare_lab_infra_config
+    fi
     validate_infra_server_iso
     print_info "Starting deployment of lab infra server on a dedicated VM..."
 
@@ -698,7 +839,11 @@ EOF
 }
 
 deploy_lab_infra_server_host() {
-    prepare_lab_infra_config
+    if $REBUILD_MODE; then
+        prepare_lab_infra_config_for_rebuild
+    else
+        prepare_lab_infra_config
+    fi
     print_info "Starting deployment of lab infra server directly on the KVM host..."
 
     # Check if critical services are already running (indicates existing deployment)
@@ -1024,6 +1169,27 @@ EOF
 #-------------------------------------------------------------
 # Main execution starts here
 #-------------------------------------------------------------
+
+if $REBUILD_MODE; then
+    # Rebuild mode: source existing env file to determine deployment mode,
+    # then call the appropriate deploy function (which uses non-interactive config).
+    LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
+    if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
+        print_error "Lab environment file not found. Cannot rebuild."
+        print_info "Run 'tux2lab deploy-lab' to create a new lab from scratch."
+        exit 1
+    fi
+    source "$LAB_ENV_VARS_FILE"
+
+    if ${lab_infra_server_mode_is_host:-false}; then
+        print_info "Rebuilding Lab Infra Server in HOST mode..."
+        deploy_lab_infra_server_host
+    else
+        print_info "Rebuilding Lab Infra Server in VM mode..."
+        deploy_lab_infra_server_vm
+    fi
+    exit 0
+fi
 
 # CRITICAL: Check for existing deployment before proceeding
 check_existing_lab_deployment

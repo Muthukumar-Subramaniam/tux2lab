@@ -135,7 +135,7 @@ fn_verify_iso() {
 }
 
 # --- Parse arguments ---
-distro="${DEFAULT_DISTRO}"
+distro=""
 readonly version="${INFRA_SERVER_VERSION}"
 
 while [[ $# -gt 0 ]]; do
@@ -156,11 +156,58 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- Prompt for distro if not provided on command line ---
+if [[ -z "$distro" ]]; then
+    print_cyan "
+Available RHEL-based distros for the infra server (version ${version}):
+
+  1) almalinux       - AlmaLinux
+  2) rocky           - Rocky Linux
+  3) oraclelinux     - Oracle Linux
+  4) centos-stream   - CentOS Stream
+  5) rhel            - Red Hat Enterprise Linux
+
+Note: This applies only to the infra server ISO.
+Guest VMs also support Debian-based (Ubuntu) and SUSE-based (openSUSE) via 'tux2lab distro'.
+"
+    read -rp "Select distro [1-5] [ default: AlmaLinux ${version} ]: " distro_input
+    case "${distro_input}" in
+        1|"") distro="almalinux" ;;
+        2)    distro="rocky" ;;
+        3)    distro="oraclelinux" ;;
+        4)    distro="centos-stream" ;;
+        5)    distro="rhel" ;;
+        *)
+            # Allow typing the distro name directly
+            distro="${distro_input}"
+            ;;
+    esac
+fi
+
 # --- Validate distro ---
 if ! fn_is_rhel_based "$distro"; then
     print_error "Unsupported distro: ${distro}"
     print_info "Only RHEL-based distros are supported for the infra server: ${RHEL_BASED_DISTROS[*]}"
     exit 1
+fi
+
+# --- Guard rail: warn if lab is already deployed ---
+if [[ -f "/tux2lab-data/lab_environment_vars" ]]; then
+    current_distro=""
+    if [[ -f "$INFRA_DISTRO_MARKER" ]]; then
+        current_distro=$(cat "$INFRA_DISTRO_MARKER")
+    fi
+    print_warning "A lab is already deployed."
+    if [[ -n "$current_distro" && "$current_distro" != "$distro" ]]; then
+        print_warning "Current infra server distro: ${current_distro}"
+        print_warning "You are downloading: ${distro}"
+        print_warning "Changing the ISO distro will affect the next rebuild/redeploy."
+    fi
+    read -rp "Continue downloading? [yes/NO]: " continue_choice
+    if [[ "${continue_choice}" != "yes" ]]; then
+        print_info "Download cancelled."
+        exit 0
+    fi
 fi
 
 # --- Resolve config from distro-versions.conf ---

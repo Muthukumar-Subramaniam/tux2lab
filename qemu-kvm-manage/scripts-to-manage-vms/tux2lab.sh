@@ -33,22 +33,29 @@ show_usage() {
     print_cyan "USAGE:
     tux2lab <command> [options] [arguments]
 
-COMMANDS:
-    vm          Manage KVM virtual machines
-    golden-image Manage golden image disks for OS provisioning
-    distro      Manage OS distributions for PXE provisioning
-    start       Start the lab infrastructure
-    stop        Stop the lab infrastructure
-    enable      Enable lab infrastructure auto-start on boot
-    disable     Disable lab infrastructure auto-start on boot
-    health      Check lab infrastructure health
-    dns         Manage DNS records for lab infrastructure
-    ipv6-route  Manage IPv6 default routes on lab VMs
+VM MANAGEMENT:
+    vm               Manage KVM virtual machines
+    golden-image     Manage golden image disks for OS provisioning
+    distro           Manage OS distributions for PXE provisioning
+    dns              Manage DNS records for lab infrastructure
+    ipv6-route       Manage IPv6 default routes on lab VMs
+
+LAB OPERATIONS:
+    start            Start the lab infrastructure
+    stop             Stop the lab infrastructure
+    enable           Enable lab infrastructure auto-start on boot
+    disable          Disable lab infrastructure auto-start on boot
+    health           Check lab infrastructure health
+
+LAB LIFECYCLE:
+    deploy-lab       Deploy a new lab infrastructure server
+    destroy-lab      Permanently destroy the entire lab environment
+    rebuild-lab      Tear down and redeploy lab using existing config
+    download-infra-iso  Download and verify infra server ISO
 
 OPTIONS:
-    -h, --help              Show this help message
-    -v, --version           Show version information
-
+    -h, --help       Show this help message
+    -v, --version    Show version information
 
 Use 'tux2lab <command> --help' for more information about a specific command."
 }
@@ -98,6 +105,18 @@ main() {
             ;;
         dns)
             exec "$SCRIPT_DIR/dns.sh" "$@"
+            ;;
+        deploy-lab)
+            exec "$SCRIPT_DIR/deploy-lab.sh" "$@"
+            ;;
+        destroy-lab)
+            exec "$SCRIPT_DIR/destroy-lab.sh" "$@"
+            ;;
+        rebuild-lab)
+            exec "$SCRIPT_DIR/rebuild-lab.sh" "$@"
+            ;;
+        download-infra-iso)
+            exec "$SCRIPT_DIR/download-infra-iso.sh" "$@"
             ;;
         ipv6-route)
             exec "$SCRIPT_DIR/ipv6-route.sh" "$@"
