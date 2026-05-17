@@ -41,17 +41,96 @@ Examples:
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/parse-vm-command-args.sh
 parse_vm_command_args "$@"
 
-# Validate: if --version is specified without --distro, warn user
-if [[ -n "$VERSION_TYPE" && -z "$OS_DISTRO" ]]; then
-    print_warning "The --version option is specified without --distro."
-    print_info "The version will be applied if OS is auto-detected from hostname pattern."
-    print_info "If auto-detection fails, you'll be prompted to select OS distribution interactively."
-    echo ""
-fi
-
 # Save command-line distro and version if specified
 CMDLINE_OS_DISTRO="$OS_DISTRO"
 CMDLINE_VERSION_TYPE="$VERSION_TYPE"
+
+# If no distro/version specified on cmdline, select from available golden images
+if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
+    source /tux2lab/ks-manage/distro-versions.conf
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
+
+    # Discover available golden images
+    declare -a GOLDEN_IMAGES_AVAILABLE=()
+    if [[ -d /tux2lab-data/golden-images-disk-store ]]; then
+        for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do
+            [[ -f "$f" ]] || continue
+            base=$(basename "$f" .qcow2)
+            # Strip the -golden-image.{domain} suffix
+            prefix="${base%%-golden-image.*}"
+            # Match against known distros to extract distro + version
+            for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
+                if [[ "$prefix" == "${known_distro}-"* ]]; then
+                    ver="${prefix#${known_distro}-}"
+                    ver="${ver//-/.}"
+                    GOLDEN_IMAGES_AVAILABLE+=("${known_distro}:${ver}")
+                    break
+                fi
+            done
+        done
+    fi
+
+    if [[ ${#GOLDEN_IMAGES_AVAILABLE[@]} -eq 0 ]]; then
+        print_error "No golden images found in /tux2lab-data/golden-images-disk-store/"
+        print_info "Build one first: tux2lab golden-image build"
+        exit 1
+    fi
+
+    # If distro specified but not version, filter to that distro
+    if [[ -n "$CMDLINE_OS_DISTRO" && -z "$CMDLINE_VERSION_TYPE" ]]; then
+        normalize_os_distro "$CMDLINE_OS_DISTRO" || { print_error "Invalid distro: $CMDLINE_OS_DISTRO"; exit 1; }
+        local_filter_distro="$NORMALIZED_OS_DISTRO"
+        declare -a FILTERED_IMAGES=()
+        for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+            if [[ "${entry%%:*}" == "$local_filter_distro" ]]; then
+                FILTERED_IMAGES+=("$entry")
+            fi
+        done
+        if [[ ${#FILTERED_IMAGES[@]} -eq 0 ]]; then
+            print_error "No golden images found for '${CMDLINE_OS_DISTRO}'"
+            print_info "Available golden images:"
+            for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                echo "  - ${entry%%:*} (${entry#*:})"
+            done
+            exit 1
+        fi
+        GOLDEN_IMAGES_AVAILABLE=("${FILTERED_IMAGES[@]}")
+    fi
+
+    # If only one golden image available, auto-select it
+    if [[ ${#GOLDEN_IMAGES_AVAILABLE[@]} -eq 1 ]]; then
+        CMDLINE_OS_DISTRO="${GOLDEN_IMAGES_AVAILABLE[0]%%:*}"
+        CMDLINE_VERSION_TYPE="${GOLDEN_IMAGES_AVAILABLE[0]#*:}"
+        print_info "Using golden image: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
+    else
+        # Present interactive menu
+        echo "Select golden image to deploy:"
+        idx=1
+        for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+            gi_distro="${entry%%:*}"
+            gi_version="${entry#*:}"
+            printf "  %d)  %-30s (version %s)\n" "$idx" "${DISTRO_DISPLAY_NAMES[$gi_distro]}" "$gi_version"
+            idx=$((idx + 1))
+        done
+        printf "  q)  Quit\n"
+
+        while true; do
+            read -rp "Enter option number: " gi_choice
+            if [[ "$gi_choice" == "q" || "$gi_choice" == "Q" ]]; then
+                print_info "Installation cancelled."
+                exit 0
+            fi
+            if [[ "$gi_choice" =~ ^[0-9]+$ ]] && (( gi_choice >= 1 && gi_choice <= ${#GOLDEN_IMAGES_AVAILABLE[@]} )); then
+                selected="${GOLDEN_IMAGES_AVAILABLE[$((gi_choice - 1))]}"
+                CMDLINE_OS_DISTRO="${selected%%:*}"
+                CMDLINE_VERSION_TYPE="${selected#*:}"
+                break
+            fi
+            print_warning "Invalid choice. Please enter a number between 1 and ${#GOLDEN_IMAGES_AVAILABLE[@]}, or 'q' to quit."
+        done
+        print_info "Selected: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
+    fi
+fi
 
 # Main installation loop
 CURRENT_VM=0
@@ -62,7 +141,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Reset OS_DISTRO and VERSION_TYPE to command-line values for each VM
     OS_DISTRO="$CMDLINE_OS_DISTRO"
     VERSION_TYPE="$CMDLINE_VERSION_TYPE"
-    NORMALIZED_DISTRO=""
     
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-multi-vm-progress.sh
     show_multi_vm_progress "$qemu_kvm_hostname"
@@ -72,44 +150,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     if ! check_vm_exists "$qemu_kvm_hostname" "install"; then
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
-    fi
-
-    # Check if golden image exists for specified distro and version
-    if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
-        # Normalize OS distro name first for golden image check
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
-        if ! normalize_os_distro "${OS_DISTRO}"; then
-            print_error "Invalid OS distribution: $OS_DISTRO"
-            FAILED_VMS+=("$qemu_kvm_hostname")
-            continue
-        fi
-        NORMALIZED_DISTRO="$NORMALIZED_OS_DISTRO"
-        
-        # Golden images follow pattern: {distro}-{version}-golden-image.{domain}.qcow2
-        golden_image_pattern="${NORMALIZED_DISTRO}-${VERSION_TYPE//\./-}-golden-image.*.qcow2"
-        if ! ls /tux2lab-data/golden-images-disk-store/${golden_image_pattern} &>/dev/null; then
-            print_error "Golden image not found for '${OS_DISTRO}' (${VERSION_TYPE})"
-            print_info "Available golden images:"
-            source /tux2lab/ks-manage/distro-versions.conf
-            if ls /tux2lab-data/golden-images-disk-store/*.qcow2 &>/dev/null; then
-                for f in /tux2lab-data/golden-images-disk-store/*.qcow2; do
-                    base=$(basename "$f" .qcow2)
-                    prefix="${base%%-golden-image.*}"
-                    for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
-                        if [[ "$prefix" == "${known_distro}-"* ]]; then
-                            ver="${prefix#${known_distro}-}"
-                            echo "  - ${known_distro} (${ver//-/.})"
-                            break
-                        fi
-                    done
-                done | sort -u
-            else
-                echo "  (none)"
-            fi
-            print_info "Use 'tux2lab golden-image build --distro ${OS_DISTRO} --version ${VERSION_TYPE}' to create it"
-            FAILED_VMS+=("$qemu_kvm_hostname")
-            continue
-        fi
     fi
 
     # Run ksmanager and extract VM details
@@ -125,28 +165,21 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     print_info "Creating first boot environment for '${qemu_kvm_hostname}' using ksmanager..."
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-    ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC}"
-    [[ -n "$OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $OS_DISTRO"
-    [[ -n "$VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $VERSION_TYPE"
+    ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
 
-    # Use the normalized distro from earlier validation, not the extracted OS name from ksmanager
-    if [[ -n "$NORMALIZED_DISTRO" ]]; then
-        OS_DISTRO="$NORMALIZED_DISTRO"
-    else
-        # If no --distro was specified, normalize the extracted OS name from ksmanager output
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
-        if ! normalize_os_distro "${OS_DISTRO}"; then
-            print_error "Failed to normalize OS distro for \"$qemu_kvm_hostname\"."
-            FAILED_VMS+=("$qemu_kvm_hostname")
-            continue
-        fi
-        OS_DISTRO="$NORMALIZED_OS_DISTRO"
+    # Normalize OS distro name for golden image lookup
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
+    if ! normalize_os_distro "${OS_DISTRO}"; then
+        print_error "Failed to normalize OS distro for \"$qemu_kvm_hostname\"."
+        FAILED_VMS+=("$qemu_kvm_hostname")
+        continue
     fi
+    OS_DISTRO="$NORMALIZED_OS_DISTRO"
 
     # Create VM directory
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-directory.sh
@@ -158,12 +191,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Update /etc/hosts
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
     if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
-        FAILED_VMS+=("$qemu_kvm_hostname")
-        continue
-    fi
-
-    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-golden-image-exists.sh
-    if ! validate_golden_image_exists "$qemu_kvm_hostname" "${OS_DISTRO}" "${VERSION_TYPE}"; then
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
