@@ -105,6 +105,15 @@ fn_extract_expected_hash() {
         # Fallback: "hash  filename" format
         expected_hash=$(grep "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
     fi
+    # Fallback for 'latest' symlinks: mirrors list the real dated filename
+    # e.g., URL has "CentOS-Stream-10-latest-x86_64-dvd1.iso" but checksum has "CentOS-Stream-10-20260513.0-x86_64-dvd1.iso"
+    if [[ -z "$expected_hash" && "$iso_name" == *"latest"* ]]; then
+        local pattern="${iso_name//latest/[0-9][^ )]*}"
+        expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -E "$pattern" | awk -F'= ' '{print $2}' | tr -d '[:space:]' | head -1) || true
+        if [[ -z "$expected_hash" ]]; then
+            expected_hash=$(grep -E "$pattern" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
+        fi
+    fi
     if [[ -z "$expected_hash" ]]; then
         print_error "Could not find SHA256 checksum for ${iso_name} in CHECKSUM file."
         print_info "The CHECKSUM file format may have changed. Please verify manually."
