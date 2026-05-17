@@ -72,11 +72,11 @@ autoinstall:
       - mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/tux2lab_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-tux2lab.conf
       - local_lab_info=$(echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
       - ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
-      - mkdir /tux2lab /lab-share /lab-web-share
+      - mkdir /tux2lab /lab-share /tux2lab-data
       - sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
       - echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
       - echo '/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab' > /etc/auto.master.d/auto-${local_lab_info}
-      - echo '/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data' >> /etc/auto.master.d/auto-${local_lab_info}
+      - echo '/tux2lab-data -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data' >> /etc/auto.master.d/auto-${local_lab_info}
       - echo '/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share' >> /etc/auto.master.d/auto-${local_lab_info}
       - kexec -l /boot/vmlinuz --initrd=/boot/initrd.img --command-line="$(cat /proc/cmdline)" && systemctl kexec
 
