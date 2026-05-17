@@ -17,15 +17,15 @@ SANDBOX_HUB="${TEST_ROOT}/tux2lab"
 RUN_ID=$(basename "${TEST_ROOT}")
 TMP_INFRA_HOST="tmp/${RUN_ID}"
 LAB_ROOT="/${TMP_INFRA_HOST}"
-KSMANAGER_HUB_DIR="${LAB_ROOT}/ksmanager-hub"
-IPXE_DIR="${LAB_ROOT}/ipxe"
+KSMANAGER_HUB_DIR="${LAB_ROOT}/tux2lab-data/ksmanager-hub"
+IPXE_DIR="${LAB_ROOT}/tux2lab-data/ipxe"
 
 PASS_COUNT=0
 FAIL_COUNT=0
 
 cleanup() {
 	rm -rf "${TEST_ROOT}"
-	rm -rf "${KSMANAGER_HUB_DIR}" "${IPXE_DIR}" "${LAB_ROOT}/almalinux/10"
+	rm -rf "${LAB_ROOT}/tux2lab-data" "${LAB_ROOT}/almalinux/10"
 }
 trap cleanup EXIT
 
@@ -192,6 +192,7 @@ setup_sandbox() {
 	mkdir -p "${SANDBOX_HUB}/ks-manage/ipxe-templates"
 	mkdir -p "${SANDBOX_HUB}/ks-manage/addons-for-kickstarts"
 	mkdir -p "${SANDBOX_HUB}/ks-manage/golden-boot-templates"
+	mkdir -p "${SANDBOX_HUB}/ks-manage/post-install-templates"
 	mkdir -p "${SANDBOX_HUB}/named-manage"
 	mkdir -p "${TEST_ROOT}/etc"
 
@@ -268,6 +269,12 @@ EOF
 
 	cat > "${SANDBOX_HUB}/ks-manage/golden-boot-templates/network-config-for-mac-address" <<'EOF'
 HOST=get_hostname
+EOF
+
+	cat > "${SANDBOX_HUB}/ks-manage/post-install-templates/post-install-redhat.sh.template" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "post-install for get_hostname.get_ipv4_domain"
 EOF
 
 	cat > "${SANDBOX_HUB}/named-manage/dnsbinder.sh" <<'EOF'

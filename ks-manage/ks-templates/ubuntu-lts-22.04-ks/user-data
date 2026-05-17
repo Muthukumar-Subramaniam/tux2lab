@@ -29,56 +29,9 @@ autoinstall:
       list:
         - root:get_shadow_password_super_mgmt_user
     runcmd:
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy main restricted' > /etc/apt/sources.list
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted' >> /etc/apt/sources.list
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy universe' >> /etc/apt/sources.list
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy-updates universe' >> /etc/apt/sources.list
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy multiverse' >> /etc/apt/sources.list
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy-updates multiverse' >> /etc/apt/sources.list
-      - echo 'deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse' >> /etc/apt/sources.list
-      - echo 'deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted' >> /etc/apt/sources.list
-      - echo 'deb http://security.ubuntu.com/ubuntu/ jammy-security universe' >> /etc/apt/sources.list
-      - echo 'deb http://security.ubuntu.com/ubuntu/ jammy-security multiverse' >> /etc/apt/sources.list
-      - apt-get update
-      - DEBIAN_FRONTEND=noninteractive apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux net-tools sysstat zip tcpdump traceroute wget tar inetutils-ping dnsutils rsync netcat-openbsd nmap lsof autofs
-      - apt-get remove -y lvm2 && apt-get autoremove -y 
-      - /usr/bin/echo -e "HISTSIZE=-1\nHISTFILESIZE=-1" | tee -a /home/get_mgmt_super_user/.bashrc /root/.bashrc
-      - var_PS1_variable_get_mgmt_super_user=$(curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-normal-user)
-      - echo "${var_PS1_variable_get_mgmt_super_user}" >> /home/get_mgmt_super_user/.bashrc
-      - var_PS1_variable_root=$(curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-root-user)
-      - echo "${var_PS1_variable_root}" >> /root/.bashrc
-      - echo "get_mgmt_super_user ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/get_mgmt_super_user
-      - wget -P /usr/local/share/ca-certificates/ http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt && update-ca-certificates || true
-      - mkdir -p /home/get_mgmt_super_user/.ssh /root/.ssh
-      - chmod 0700 /home/get_mgmt_super_user/.ssh /root/.ssh
-      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/authorized_keys -o /home/get_mgmt_super_user/.ssh/authorized_keys && cp -p /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys
-      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa.pub -o /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub && cp -p /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
-      - curl -fsSL http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa -o /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa && cp -p /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
-      - chmod 0600 /home/get_mgmt_super_user/.ssh/authorized_keys /root/.ssh/authorized_keys /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
-      - chmod 0644 /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
-      - chown -R get_mgmt_super_user:get_mgmt_super_user /home/get_mgmt_super_user/.ssh
-      - touch /etc/cloud/cloud-init.disabled
-      - if ls /etc/netplan/*cloud* &>/dev/null;then mv /etc/netplan/*cloud* /etc/netplan/old/;fi
-      - cp -p /etc/chrony/chrony.conf /etc/chrony/chrony.conf_bkp_orig
-      - sed -i 's/^pool/#pool/g' /etc/chrony/chrony.conf
-      - echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
-      - wget -O /etc/motd http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/motd.txt
-      - get_golden_image_creation_not_requested || wget -O /etc/systemd/system/golden-image-setup.service http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.service
-      - get_golden_image_creation_not_requested || wget -O /root/golden-image-setup.sh http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.sh
-      - get_golden_image_creation_not_requested || ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
-      - get_golden_image_creation_not_requested || wget -O /etc/systemd/system/golden-boot.service http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.service
-      - get_golden_image_creation_not_requested || wget -O /root/golden-boot.sh http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.sh
-      - get_golden_image_creation_not_requested || ln -s /etc/systemd/system/golden-boot.service /etc/systemd/system/multi-user.target.wants/golden-boot.service
-      - mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/tux2lab_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-tux2lab.conf
-      - local_lab_info=$(echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
-      - ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
-      - mkdir /tux2lab /lab-share /tux2lab-data
-      - sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
-      - echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
-      - echo '/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab' > /etc/auto.master.d/auto-${local_lab_info}
-      - echo '/tux2lab-data -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data' >> /etc/auto.master.d/auto-${local_lab_info}
-      - echo '/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share' >> /etc/auto.master.d/auto-${local_lab_info}
-      - kexec -l /boot/vmlinuz --initrd=/boot/initrd.img --command-line="$(cat /proc/cmdline)" && systemctl kexec
+      - curl -sf http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/post-install.sh -o /root/tux2lab-post-install.sh
+      - chmod 700 /root/tux2lab-post-install.sh
+      - /root/tux2lab-post-install.sh
 
   keyboard:
     layout: us

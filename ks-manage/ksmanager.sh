@@ -1078,6 +1078,13 @@ done
 
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
     os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.disk/info")
+    # Map Ubuntu version to codename for APT sources
+    case "${version}" in
+        22.04) ubuntu_codename="jammy" ;;
+        24.04) ubuntu_codename="noble" ;;
+        26.04) ubuntu_codename="resolute" ;;
+        *)     ubuntu_codename="" ;;
+    esac
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     if [[ -f "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo" ]]; then
         os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo")
@@ -1205,6 +1212,68 @@ if $invoked_with_golden_image; then
     fi
 fi
 
+fn_generate_post_install_script() {
+    local post_install_template=""
+    local post_install_target="${host_kickstart_dir}/post-install.sh"
+    local addons_dir="${ksmanager_hub_dir}/addons-for-kickstarts"
+
+    # Select the appropriate template based on distro family
+    if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-ubuntu.sh.template"
+    elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-opensuse.sh.template"
+    else
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-redhat.sh.template"
+    fi
+
+    if [[ ! -f "${post_install_template}" ]]; then
+        print_error "Post-install template not found: ${post_install_template}"
+        return 1
+    fi
+
+    cp -f "${post_install_template}" "${post_install_target}"
+
+    # Expand EMBED_CONTENT markers with actual file contents
+    fn_embed_file_content() {
+        local target_file="$1"
+        local marker="$2"
+        local source_file="$3"
+        local tmp_file="${target_file}.tmp_embed.$$"
+
+        if [[ ! -f "${source_file}" ]]; then
+            print_warning "Embed source not found: ${source_file} — skipping marker ${marker}"
+            return 0
+        fi
+
+        awk -v marker="EMBED_CONTENT:${marker}" -v source="${source_file}" '
+        $0 == marker {
+            while ((getline line < source) > 0) print line
+            close(source)
+            next
+        }
+        { print }
+        ' "${target_file}" > "${tmp_file}" && mv "${tmp_file}" "${target_file}"
+    }
+
+    fn_embed_file_content "${post_install_target}" "authorized_keys" "${addons_dir}/authorized_keys"
+    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa.pub" "${addons_dir}/tux2lab_id_rsa.pub"
+    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa" "${addons_dir}/tux2lab_id_rsa"
+    fn_embed_file_content "${post_install_target}" "PS1-env-variable-normal-user" "${addons_dir}/PS1-env-variable-normal-user"
+    fn_embed_file_content "${post_install_target}" "PS1-env-variable-root-user" "${addons_dir}/PS1-env-variable-root-user"
+    fn_embed_file_content "${post_install_target}" "motd.txt" "${addons_dir}/motd.txt"
+    fn_embed_file_content "${post_install_target}" "ca-cert" "${addons_dir}/ca-certs/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+    fn_embed_file_content "${post_install_target}" "golden-image-setup.service" "${addons_dir}/golden-image-setup.service"
+    fn_embed_file_content "${post_install_target}" "golden-image-setup.sh" "${addons_dir}/golden-image-setup.sh"
+    fn_embed_file_content "${post_install_target}" "golden-boot.service" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service"
+    fn_embed_file_content "${post_install_target}" "golden-boot.sh" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.sh"
+
+    chmod 644 "${post_install_target}"
+}
+
+if ! $invoked_with_golden_image; then
+    fn_generate_post_install_script
+fi
+
 fn_set_environment() {
     local input_dir_or_file="${1}"
     local working_file=
@@ -1267,6 +1336,7 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_redhat_based_distro_name" "${redhat_based_distro_name}"
         fn_replace_token_in_file "${working_file}" "get_version" "${version}"
         fn_replace_token_in_file "${working_file}" "get_opensuse_version_number" "${opensuse_version_number}"
+        fn_replace_token_in_file "${working_file}" "get_ubuntu_codename" "${ubuntu_codename:-}"
         fn_replace_token_in_file "${working_file}" "get_subnets_to_allow_ssh_pub_access" "${subnets_to_allow_ssh_pub_access}"
 
         awk -v val="$shadow_password_super_mgmt_user" '

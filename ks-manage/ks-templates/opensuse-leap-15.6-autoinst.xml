@@ -272,52 +272,15 @@
       <script>
         <debug config:type="boolean">true</debug>
         <feedback config:type="boolean">false</feedback>
-        <filename>my-script.sh</filename>
+        <filename>tux2lab-post-install.sh</filename>
         <interpreter>shell</interpreter>
         <location><![CDATA[]]></location>
-        <notification>Running custom post-script</notification>
+        <notification>Running tux2lab post-install</notification>
         <source><![CDATA[
-	#!/bin/bash
-  /usr/bin/mkdir /etc/zypp/repos.d/original
-  /usr/bin/mv /etc/zypp/repos.d/*-update.repo /etc/zypp/repos.d/openSUSE* /etc/zypp/repos.d/original/
-  /usr/bin/unlink /usr/bin/python3 && /usr/bin/ln -s /usr/bin/python3.11 /usr/bin/python3
-	/usr/bin/wget -O /etc/motd http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/motd.txt
-  /usr/bin/date '+%Y-%m-%d %H:%M:%S %Z' > /etc/bigbang
-	/usr/bin/mkdir -p /home/get_mgmt_super_user/.ssh /root/.ssh
-	/usr/bin/chmod 0700 /home/get_mgmt_super_user/.ssh /root/.ssh
-	/usr/bin/wget -O /home/get_mgmt_super_user/.ssh/authorized_keys http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/authorized_keys
-	/usr/bin/wget -O /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa.pub
-  /usr/bin/wget -O /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/tux2lab_id_rsa
-  /usr/bin/cp -p /home/get_mgmt_super_user/.ssh/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} /root/.ssh/
-	/usr/bin/chmod 0600 /home/get_mgmt_super_user/.ssh/{authorized_keys,tux2lab_id_rsa} /root/.ssh/{authorized_keys,tux2lab_id_rsa}
-  /usr/bin/chmod 0644 /home/get_mgmt_super_user/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
-	/usr/bin/chown -R get_mgmt_super_user:users /home/get_mgmt_super_user/.ssh
-	/usr/bin/echo -e "HISTSIZE=-1\nHISTFILESIZE=-1" | /usr/bin/tee -a /home/get_mgmt_super_user/.bashrc /root/.bashrc
-	var_PS1_variable_get_mgmt_super_user=$(/usr/bin/curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-normal-user)
-	/usr/bin/echo "${var_PS1_variable_get_mgmt_super_user}" >> /home/get_mgmt_super_user/.bashrc
-	var_PS1_variable_root=$(/usr/bin/curl -s -L http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/PS1-env-variable-root-user)
-	/usr/bin/echo "${var_PS1_variable_root}" >> /root/.bashrc
-	/usr/bin/echo "get_mgmt_super_user ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/get_mgmt_super_user
-	/usr/bin/wget -P /etc/pki/trust/anchors/ http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt && /usr/sbin/update-ca-certificates || true
-	/usr/bin/systemctl disable kdump
-	/usr/bin/echo 'kernel.hostname=get_hostname.get_ipv4_domain' > /etc/sysctl.d/hostname.conf 
-	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /etc/systemd/system/golden-image-setup.service http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.service
-	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /root/golden-image-setup.sh http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/golden-image-setup.sh
-	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
-	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /etc/systemd/system/golden-boot.service http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.service
-	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/wget -O /root/golden-boot.sh http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/golden-boot.sh
-	/usr/bin/get_golden_image_creation_not_requested || /usr/bin/ln -s /etc/systemd/system/golden-boot.service /etc/systemd/system/multi-user.target.wants/golden-boot.service
-	local_lab_info=$(/usr/bin/echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
-  /usr/bin/mkdir -p /etc/ssh/ssh_config.d && /usr/bin/echo -e "Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access\n  IdentityFile ~/.ssh/tux2lab_id_rsa\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel QUIET" > /etc/ssh/ssh_config.d/999-tux2lab.conf
-	/usr/bin/ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
-	/usr/bin/mkdir /tux2lab /lab-share /tux2lab-data
-	/usr/bin/sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
-	/usr/bin/echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
-	/usr/bin/cat << EOF > /etc/auto.master.d/auto-${local_lab_info}
-/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab
-/tux2lab-data -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data
-/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share
-EOF
+#!/bin/bash
+curl -sf http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/post-install.sh -o /root/tux2lab-post-install.sh
+chmod 700 /root/tux2lab-post-install.sh
+/root/tux2lab-post-install.sh
         ]]></source>
       </script>
     </post-scripts>
