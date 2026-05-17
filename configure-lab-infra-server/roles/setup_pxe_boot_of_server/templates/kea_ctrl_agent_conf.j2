@@ -17,11 +17,11 @@
     "control-sockets": {
       "dhcp4": {
         "socket-type": "unix",
-        "socket-name": "/var/run/kea/kea4-ctrl-socket"
+        "socket-name": "{{ kea_run_dir }}/kea4-ctrl-socket"
       },
       "dhcp6": {
         "socket-type": "unix",
-        "socket-name": "/var/run/kea/kea6-ctrl-socket"
+        "socket-name": "{{ kea_run_dir }}/kea6-ctrl-socket"
       }
     }
   }

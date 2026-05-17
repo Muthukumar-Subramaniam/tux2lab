@@ -539,14 +539,13 @@ prepare_lab_infra_config_for_rebuild() {
         chmod 700 "$SSH_DIR"
     fi
 
-    if [[ ! -f "$SSH_PUB_KEY_FILE" || ! -f "$SSH_PRIVATE_KEY_FILE" ]]; then
-        print_info "SSH keys not found on disk. Restoring from environment file..."
-        echo "$lab_infra_ssh_private_key" > "$SSH_PRIVATE_KEY_FILE"
-        chmod 600 "$SSH_PRIVATE_KEY_FILE"
-        echo "$lab_infra_ssh_public_key" > "$SSH_PUB_KEY_FILE"
-        chmod 644 "$SSH_PUB_KEY_FILE"
-        print_success "SSH keys restored."
-    fi
+    # Always restore SSH keys from environment file (source of truth)
+    print_info "Restoring SSH keys from environment file..."
+    echo "$lab_infra_ssh_private_key" > "$SSH_PRIVATE_KEY_FILE"
+    chmod 600 "$SSH_PRIVATE_KEY_FILE"
+    echo "$lab_infra_ssh_public_key" > "$SSH_PUB_KEY_FILE"
+    chmod 644 "$SSH_PUB_KEY_FILE"
+    print_success "SSH keys restored."
 
     # Ensure public key is in authorized_keys
     AUTHORIZED_KEYS_FILE="$SSH_DIR/authorized_keys"

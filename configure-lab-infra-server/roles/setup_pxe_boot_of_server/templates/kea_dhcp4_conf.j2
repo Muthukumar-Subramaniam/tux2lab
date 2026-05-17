@@ -2,7 +2,7 @@
   "Dhcp4": {
     "control-socket": {
       "socket-type": "unix",
-      "socket-name": "/var/run/kea/kea4-ctrl-socket"
+      "socket-name": "{{ kea_run_dir }}/kea4-ctrl-socket"
     },
     "interfaces-config": {
       "interfaces": [ "{{ ansible_facts.env.mgmt_interface_name }}" ]

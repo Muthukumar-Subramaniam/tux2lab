@@ -1,6 +1,23 @@
 ---
 # tasks file for setup_pxe_boot_of_server
 
+- name: Detect Kea socket directory
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      test_output=$(echo '{"Dhcp4":{"control-socket":{"socket-type":"unix","socket-name":"/run/kea/test"}}}' | kea-dhcp4 -t /dev/stdin 2>&1)
+      if echo "$test_output" | grep -q "supported path"; then
+        echo "$test_output" | grep -oP "supported path is '\K[^']+" | head -1
+      else
+        echo "/run/kea"
+      fi
+  register: kea_socket_dir_result
+  changed_when: false
+
+- name: Set Kea socket directory fact
+  ansible.builtin.set_fact:
+    kea_run_dir: "{{ kea_socket_dir_result.stdout }}"
+
 - name: Generate random password for Kea Control Agent
   ansible.builtin.set_fact:
     kea_ctrl_agent_password: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_letters,digits') }}"
