@@ -3,7 +3,7 @@ server {
     listen [{{ ansible_facts.env.dnsbinder_server_ipv6_address }}]:80;
     server_name {{ ansible_facts.env.dnsbinder_server_fqdn }};
 
-    root /{{ ansible_facts.env.dnsbinder_server_fqdn }};
+    root /tux2lab-data;
 
     autoindex on;              # show directory listing
     autoindex_exact_size off;  # human-readable sizes
@@ -23,7 +23,7 @@ server {
     ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
     ssl_prefer_server_ciphers on;
 
-    root /{{ ansible_facts.env.dnsbinder_server_fqdn }};
+    root /tux2lab-data;
 
     autoindex on;              # show directory listing
     autoindex_exact_size off;  # human-readable sizes

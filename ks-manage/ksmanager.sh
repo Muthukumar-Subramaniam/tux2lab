@@ -52,8 +52,8 @@ ipv6_nameserver="${dnsbinder_server_ipv6_address}"
 time_of_last_update=$(date +"%Y-%m-%d_%H-%M-%S_%Z")
 dnsbinder_script='/tux2lab/named-manage/dnsbinder.sh'
 ksmanager_main_dir='/tux2lab/ks-manage'
-ksmanager_hub_dir="/${lab_infra_server_hostname}/ksmanager-hub"
-ipxe_web_dir="/${lab_infra_server_hostname}/ipxe"
+ksmanager_hub_dir="/tux2lab-data/ksmanager-hub"
+ipxe_web_dir="/tux2lab-data/ipxe"
 shadow_password_super_mgmt_user=$(sudo awk -F: -v user="${mgmt_super_user}" '$1 == user {print $2}' /etc/shadow)
 if [[ -d "/tux2lab-data" ]]; then
     if [[ -f "/tux2lab-data/lab_environment_vars" ]]; then
@@ -931,7 +931,7 @@ fi
 fn_check_distro_availability() {
     local os_distribution="${1}"
     local version="${2}"
-    local mount_dir="/${lab_infra_server_hostname}/${os_distribution}/${version}"
+    local mount_dir="/tux2lab-data/os-repos/${os_distribution}/${version}"
     
     if mountpoint -q "${mount_dir}"; then
         print_green '[Ready]'
@@ -1064,7 +1064,7 @@ if $golden_image_creation_not_requested; then
     :
 fi
 
-mount_dir="/${lab_infra_server_hostname}/${os_distribution}/${version}"
+mount_dir="/tux2lab-data/os-repos/${os_distribution}/${version}"
 
 while ! mountpoint -q "${mount_dir}"; do
     print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
@@ -1077,10 +1077,10 @@ while ! mountpoint -q "${mount_dir}"; do
 done
 
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
-    os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/${lab_infra_server_hostname}/${os_distribution}/${version}/.disk/info")
+    os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.disk/info")
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
-    if [[ -f "/${lab_infra_server_hostname}/${os_distribution}/${version}/.treeinfo" ]]; then
-        os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/${lab_infra_server_hostname}/${os_distribution}/${version}/.treeinfo")
+    if [[ -f "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo" ]]; then
+        os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo")
     else
         # Leap 16+ offline installer may not have .treeinfo
         os_name_and_version="openSUSE Leap ${version}"
@@ -1090,13 +1090,13 @@ elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
 else
     redhat_based_distro_name="${os_distribution}"
     if [[ "${os_distribution}" == "centos-stream" ]]; then
-        os_name_and_version=$(grep -i "centos" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
+        os_name_and_version=$(grep -i "centos" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
     elif [[ "${os_distribution}" == "oraclelinux" ]]; then
-        os_name_and_version=$(grep -i "oracle" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
+        os_name_and_version=$(grep -i "oracle" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
     elif [[ "${os_distribution}" == "rhel" ]]; then
-        os_name_and_version=$(grep -i "Red Hat" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
+        os_name_and_version=$(grep -i "Red Hat" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
     else
-        os_name_and_version=$(grep -i "${os_distribution}" "/${lab_infra_server_hostname}/${os_distribution}/${version}/.discinfo" || true)
+        os_name_and_version=$(grep -i "${os_distribution}" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
     fi
 fi
 

@@ -1,9 +1,9 @@
 ---
 # tasks file for configure_nginx_web_server
-- name: Create directory /{{ ansible_facts.env.dnsbinder_server_fqdn }}
+- name: Create directory /tux2lab-data
   become: true
   ansible.builtin.file:
-    path: "/{{ ansible_facts.env.dnsbinder_server_fqdn }}"
+    path: "/tux2lab-data"
     state: directory
     owner: "{{ ansible_facts.env.mgmt_super_user }}"
     group: "{{ ansible_facts.env.mgmt_super_user }}"

@@ -5,7 +5,7 @@
     <add_on_products t="list">
       <listentry t="map">
         <alias>lab-repo-oss</alias>
-        <media_url>http://get_lab_infra_server_hostname/opensuse-leap/get_version/</media_url>
+        <media_url>http://get_lab_infra_server_hostname/os-repos/opensuse-leap/get_version/</media_url>
         <name>Lab OSS Repository</name>
         <priority t="integer">99</priority>
         <product_dir>/</product_dir>
@@ -314,7 +314,7 @@
 	/usr/bin/echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
 	/usr/bin/cat << EOF > /etc/auto.master.d/auto-${local_lab_info}
 /tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab
-/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/get_lab_infra_server_hostname
+/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data
 /lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share
 EOF
         ]]></source>

@@ -22,12 +22,12 @@ v_tmp_file_dnsbinder="$(mktemp /tmp/dnsbinder.XXXXXXXXXX)"
 
 v_domain_name=$(if [[ -f /etc/named.conf ]];then awk '/zones-are-managed-by-dnsbinder/ {print $2}' /etc/named.conf;fi)
 dnsbinder_network=$(if [[ -f /etc/named.conf ]];then awk '/dnsbinder-network/ {print $3}' /etc/named.conf;fi)
-var_zone_dir='/var/named/dnsbinder-managed-zone-files'
+var_zone_dir='/tux2lab-data/dnsbinder-managed-zone-files'
 v_fw_zone="${var_zone_dir}/${v_domain_name}-forward.db"
 
 #--- File Locking Mechanism (mkdir-based spinlock with PID tracking) ---#
 
-dnsbinder_lock_dir="/var/named/.dnsbinder-zone.lock"
+dnsbinder_lock_dir="/tux2lab-data/.dnsbinder-zone.lock"
 zone_lock_acquired=false
 
 fn_acquire_zone_lock() {
@@ -495,7 +495,7 @@ fn_configure_named_dns_server() {
 //Forward Zone for ${v_given_domain}
 zone "${v_given_domain}" IN {
     type master;
-    file "dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
+    file "/tux2lab-data/dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
     allow-update { none; };
 };
 //Reverse Zones
@@ -511,7 +511,7 @@ EOF
         tee -a /etc/named.conf > /dev/null << EOF
 zone "${v_reverse_subnet_part}.in-addr.arpa" IN {
     type master;
-    file "dnsbinder-managed-zone-files/${v_subnet_part}.${v_given_domain}-reverse.db";
+    file "/tux2lab-data/dnsbinder-managed-zone-files/${v_subnet_part}.${v_given_domain}-reverse.db";
     allow-update { none; };
 };
 EOF
@@ -539,7 +539,7 @@ EOF
 //IPv6 Reverse Zone
 zone "${v_ipv6_reverse_zone}.ip6.arpa" IN {
     type master;
-    file "dnsbinder-managed-zone-files/${v_given_domain}-ipv6-reverse.db";
+    file "/tux2lab-data/dnsbinder-managed-zone-files/${v_given_domain}-ipv6-reverse.db";
     allow-update { none; };
 };
 EOF

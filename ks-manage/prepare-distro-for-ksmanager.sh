@@ -36,7 +36,7 @@ set -euo pipefail
 : "${mgmt_super_user:?Must set mgmt_super_user}"
 
 # ====== CONSTANTS ======
-readonly ISO_DIR="/${dnsbinder_server_fqdn}/iso-files"
+readonly ISO_DIR="/tux2lab-data/iso-files"
 readonly FSTAB="/etc/fstab"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
 readonly MIN_DISK_SPACE_GB=12
@@ -72,7 +72,7 @@ Version:
 
 fn_is_distro_ready() {
     local distro="$1" ver="$2"
-    mountpoint -q "/${dnsbinder_server_fqdn}/${distro}/${ver}" 2>/dev/null
+    mountpoint -q "/tux2lab-data/os-repos/${distro}/${ver}" 2>/dev/null
 }
 
 fn_has_golden_image() {
@@ -328,7 +328,7 @@ fn_setup_distro() {
     iso_url=$(fn_get_iso_url "$distro" "$version")
 
     local iso_path="${ISO_DIR}/${iso_file}"
-    local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${version}"
+    local mount_dir="/tux2lab-data/os-repos/${distro}/${version}"
     local distro_key="${distro}:${version}"
     local checksum_url="${CHECKSUM_URLS[$distro_key]:-}"
     local checksum_file="${ISO_DIR}/${distro}-${version}-CHECKSUM"
@@ -484,7 +484,7 @@ fn_cleanup_distro() {
     fi
 
     local iso_path="${ISO_DIR}/${iso_file}"
-    local mount_dir="/${dnsbinder_server_fqdn}/${distro}/${version}"
+    local mount_dir="/tux2lab-data/os-repos/${distro}/${version}"
 
     if ! fn_is_distro_ready "$distro" "$version" && [[ ! -f "$iso_path" ]]; then
         print_info "Nothing to clean up for ${DISTRO_DISPLAY_NAMES[$distro]} ${version} (not set up)."

@@ -76,7 +76,7 @@ autoinstall:
       - sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
       - echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
       - echo '/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab' > /etc/auto.master.d/auto-${local_lab_info}
-      - echo '/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/get_lab_infra_server_hostname' >> /etc/auto.master.d/auto-${local_lab_info}
+      - echo '/lab-web-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data' >> /etc/auto.master.d/auto-${local_lab_info}
       - echo '/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share' >> /etc/auto.master.d/auto-${local_lab_info}
       - kexec -l /boot/vmlinuz --initrd=/boot/initrd.img --command-line="$(cat /proc/cmdline)" && systemctl kexec
 
