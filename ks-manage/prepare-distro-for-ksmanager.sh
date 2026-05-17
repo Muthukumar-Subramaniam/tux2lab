@@ -261,9 +261,17 @@ fn_list_distros() {
     printf "\n  %-${col_distro}s %-${col_ver}s %-${col_pxe}s %s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
     printf "  %-${col_distro}s %-${col_ver}s %-${col_pxe}s %s\n" "------" "-------" "---------" "------------"
 
+    local first_group=true
     for distro in "${DISTRO_KEYS[@]}"; do
+        # Add blank line separator between distro groups
+        if [[ "$first_group" == true ]]; then
+            first_group=false
+        else
+            echo
+        fi
+        local first_ver=true
         for ver in ${DISTRO_AVAILABLE_VERSIONS[$distro]}; do
-            local pxe_padded pxe_status golden_status
+            local pxe_padded pxe_status golden_status distro_label
             if fn_is_distro_ready "$distro" "$ver"; then
                 pxe_padded=$(printf "%-${col_pxe}s" "Ready")
                 pxe_status=$(print_green "$pxe_padded" nskip)
@@ -276,7 +284,14 @@ fn_list_distros() {
             else
                 golden_status=$(print_yellow "not-yet-built" nskip)
             fi
-            printf "  %-${col_distro}s %-${col_ver}s %s %s\n" "${DISTRO_DISPLAY_NAMES[$distro]}" "$ver" "$pxe_status" "$golden_status"
+            # Show distro name only on the first version row
+            if [[ "$first_ver" == true ]]; then
+                distro_label="${DISTRO_DISPLAY_NAMES[$distro]}"
+                first_ver=false
+            else
+                distro_label=""
+            fi
+            printf "  %-${col_distro}s %-${col_ver}s %s %s\n" "$distro_label" "$ver" "$pxe_status" "$golden_status"
         done
     done
     echo
