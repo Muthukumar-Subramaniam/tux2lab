@@ -1,13 +1,25 @@
 ---
 # tasks file for setup_pxe_boot_of_server
 
-- name: Detect Kea socket directory from systemd service
+- name: Detect Kea socket directory
   become: true
   ansible.builtin.shell:
     cmd: |
-      systemctl show kea-dhcp4.service -p Environment 2>/dev/null \
-        | grep -oP 'KEA_CONTROL_SOCKET_DIR=\K[^ "]+' \
-        || echo "/run/kea"
+      kea_dir=$(systemctl show kea-dhcp4.service -p Environment 2>/dev/null \
+        | grep -oP 'KEA_CONTROL_SOCKET_DIR=\K[^ "]+')
+      if [[ -n "$kea_dir" ]]; then
+        echo "$kea_dir"
+      else
+        test_cfg=$(mktemp)
+        echo '{"Dhcp4":{"control-socket":{"socket-type":"unix","socket-name":"/run/kea/test"}}}' > "$test_cfg"
+        test_output=$(kea-dhcp4 -t "$test_cfg" 2>&1)
+        rm -f "$test_cfg"
+        if echo "$test_output" | grep -qP "supported path is '"; then
+          echo "$test_output" | grep -oP "supported path is '\K[^']+" | head -1
+        else
+          echo "/run/kea"
+        fi
+      fi
   register: kea_socket_dir_result
   changed_when: false
 
