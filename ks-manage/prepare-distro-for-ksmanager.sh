@@ -37,7 +37,7 @@ set -euo pipefail
 
 # ====== CONSTANTS ======
 readonly ISO_DIR="/tux2lab-data/iso-files"
-readonly FSTAB="/etc/fstab"
+readonly ISO_MOUNTS_CONF="/tux2lab-data/iso-mounts.conf"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
 readonly MIN_DISK_SPACE_GB=12
 
@@ -423,31 +423,29 @@ fn_setup_distro() {
     sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$(dirname "$mount_dir")" "$mount_dir"
     print_task_done
 
-    # Add fstab entry
-    local fstab_entry="${iso_path} ${mount_dir} iso9660 uid=${mgmt_super_user},gid=${mgmt_super_user} 0 0"
-    if ! grep -qF "$fstab_entry" "$FSTAB"; then
-        print_task "Adding mount entry to /etc/fstab..."
-        if ! echo "$fstab_entry" | sudo tee -a "$FSTAB" >/dev/null; then
+    # Add entry to iso-mounts config
+    local config_entry="${iso_file} ${distro} ${version}"
+    if ! grep -qF "$config_entry" "$ISO_MOUNTS_CONF" 2>/dev/null; then
+        print_task "Adding entry to iso-mounts config..."
+        if ! echo "$config_entry" | sudo tee -a "$ISO_MOUNTS_CONF" >/dev/null; then
             print_task_fail
-            print_error "Failed to add fstab entry. Cleaning up..."
+            print_error "Failed to add config entry. Cleaning up..."
             sudo rm -f "$iso_path"
             sudo rm -rf "$mount_dir"
             exit 1
         fi
-        sudo systemctl daemon-reload
         print_task_done
     else
-        print_info "fstab already contains ISO mount entry."
+        print_info "ISO already registered in iso-mounts config."
     fi
 
     # Mount ISO
     if ! mountpoint -q "$mount_dir"; then
         print_task "Mounting ISO to ${mount_dir}..."
-        if ! sudo mount "$mount_dir" 2>/dev/null; then
+        if ! sudo mount -o loop,ro "$iso_path" "$mount_dir"; then
             print_task_fail
             print_error "Failed to mount ISO at ${mount_dir}. Cleaning up..."
-            sudo sed -i "\|${mount_dir}|d" "$FSTAB"
-            sudo systemctl daemon-reload
+            sudo sed -i "\|${iso_file}.*${distro}.*${version}|d" "$ISO_MOUNTS_CONF"
             sudo rm -f "$iso_path"
             sudo rm -rf "$mount_dir"
             exit 1
@@ -455,6 +453,16 @@ fn_setup_distro() {
         print_task_done
     else
         print_info "ISO already mounted."
+    fi
+
+    # Ensure the iso-mounts service is enabled
+    if ! systemctl is-enabled tux2lab-iso-mounts.service &>/dev/null; then
+        print_task "Enabling tux2lab-iso-mounts service..."
+        sudo cp /tux2lab/common-utils/tux2lab-iso-mounts.service /etc/systemd/system/
+        sudo chmod 644 /etc/systemd/system/tux2lab-iso-mounts.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable tux2lab-iso-mounts.service
+        print_task_done
     fi
 
     print_success "Setup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
@@ -557,10 +565,15 @@ fn_cleanup_distro() {
         print_task_done
     fi
 
-    # Clean fstab
-    print_task "Cleaning /etc/fstab entries..."
-    sudo sed -i "\|${distro}/${version}|d" "$FSTAB"
-    sudo systemctl daemon-reexec
+    # Remove checksum file
+    local checksum_file="${ISO_DIR}/${distro}-${version}-CHECKSUM"
+    if [[ -f "$checksum_file" ]]; then
+        sudo rm -f "$checksum_file"
+    fi
+
+    # Clean iso-mounts config
+    print_task "Removing entry from iso-mounts config..."
+    sudo sed -i "\|${iso_file}.*${distro}.*${version}|d" "$ISO_MOUNTS_CONF" 2>/dev/null || true
     print_task_done
 
     print_success "Cleanup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."

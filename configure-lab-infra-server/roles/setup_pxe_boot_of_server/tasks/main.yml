@@ -67,16 +67,16 @@
     sysctl_set: true
     reload: true
 
-- name: Create tux2lab mount point under /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}
+- name: Create tux2lab bind-mount point under /tux2lab-data
   become: true
   ansible.builtin.file:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/tux2lab"
+    path: "/tux2lab-data/tux2lab"
     state: directory
 
-- name: Bind mount /tux2lab as /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }} update an entry in fstab as well 
+- name: Bind mount /tux2lab as /tux2lab-data/tux2lab and update fstab
   become: true
   ansible.posix.mount:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/tux2lab"
+    path: "/tux2lab-data/tux2lab"
     src: "/tux2lab"
     fstype: none
     opts: "bind,ro"
@@ -85,7 +85,7 @@
 - name: Create infra server ISO mount point
   become: true
   ansible.builtin.file:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
+    path: "/tux2lab-data/os-repos/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
     state: directory
     owner: "{{ ansible_facts.env.mgmt_super_user }}"
     group: "{{ ansible_facts.env.mgmt_super_user }}"
@@ -94,10 +94,10 @@
     - ansible_facts.env.infra_server_distro is defined
     - ansible_facts.env.infra_server_version is defined
 
-- name: Mount infra server ISO from CD-ROM and update an entry in fstab as well 
+- name: Mount infra server ISO from CD-ROM and update an entry in fstab
   become: true
   ansible.posix.mount:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
+    path: "/tux2lab-data/os-repos/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
     src: "{{ ansible_facts.env.default_linux_distro_iso_path }}"
     fstype: iso9660
     opts: "ro,nofail"
@@ -107,10 +107,10 @@
     - ansible_facts.env.infra_server_distro is defined
     - ansible_facts.env.infra_server_version is defined
 
-- name: Create /{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/ipxe to manage iPXE
+- name: Create /tux2lab-data/ipxe to manage iPXE
   become: true
   ansible.builtin.file:
-    path: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/ipxe"
+    path: "/tux2lab-data/ipxe"
     state: directory
     owner: "{{ ansible_facts.env.mgmt_super_user }}"
     group: "{{ ansible_facts.env.mgmt_super_user }}"
@@ -119,7 +119,7 @@
   become: true
   ansible.builtin.copy:
     src: ipxe.efi
-    dest: "/{{ ansible_facts.env.dnsbinder_server_short_name }}.{{ ansible_facts.env.dnsbinder_domain }}/ipxe/ipxe.efi"
+    dest: "/tux2lab-data/ipxe/ipxe.efi"
     mode: '0644'
 
 - name: Deploy ipxe.efi to TFTP directory for PXE boot

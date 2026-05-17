@@ -237,6 +237,24 @@ if ${lab_infra_server_mode_is_host:-false}; then
         fi
     done
 
+    # Stop, disable and remove tux2lab-iso-mounts service
+    if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
+        print_task "Stopping and removing tux2lab-iso-mounts.service..."
+        sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
+        sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
+        sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
+        sudo systemctl daemon-reload
+        print_task_done
+    fi
+
+    # Clean infra server ISO fstab entry
+    if grep -q '/tux2lab-data/os-repos/.*iso9660' /etc/fstab 2>/dev/null; then
+        print_task "Removing infra server ISO fstab entry..."
+        sudo sed -i '\|/tux2lab-data/os-repos/.*iso9660|d' /etc/fstab
+        sudo systemctl daemon-reload
+        print_task_done
+    fi
+
     # Remove dummy interface
     if ip link show dummy-vnet &>/dev/null; then
         print_task "Removing dummy interface dummy-vnet..."

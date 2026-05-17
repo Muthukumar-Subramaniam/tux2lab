@@ -1,0 +1,13 @@
+[Unit]
+Description=Mount tux2lab ISO files for PXE provisioning
+After=local-fs.target
+Before=nginx.service nfs-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/tux2lab/common-utils/tux2lab-iso-mounts.sh start
+ExecStop=/tux2lab/common-utils/tux2lab-iso-mounts.sh stop
+
+[Install]
+WantedBy=multi-user.target
