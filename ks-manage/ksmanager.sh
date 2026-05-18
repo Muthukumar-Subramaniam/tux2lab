@@ -859,6 +859,9 @@ fn_select_os_distro() {
         if [[ ${#available_versions[@]} -eq 0 ]]; then
             print_error "No versions of ${DISTRO_DISPLAY_NAMES[$os_distribution]} are prepared for PXE installation."
             print_info "Use 'tux2lab distro setup ${os_distribution} -v <version>' to prepare a version."
+            if [[ -n "${distro_from_flag}" ]]; then
+                exit 1
+            fi
             os_distribution=""
             continue
         fi
