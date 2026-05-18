@@ -308,12 +308,29 @@ fn_get_iso_url() {
         local iso_path="${ISO_DIR}/${iso_file}"
         print_warning "Red Hat Enterprise Linux requires an active subscription to download."
         print_info "RHEL ISOs are not publicly downloadable. You have two options:"
-        print_info "  1. Manually download the ISO from https://developers.redhat.com/products/rhel/download"
-        print_info "     and place it at: ${iso_path}"
+        print_info "  1. Log in at https://access.redhat.com/downloads/content/rhel"
+        print_info "     (a free Red Hat Developer subscription is sufficient)"
+        print_info "     Download the DVD ISO and place it at: ${iso_path}"
         print_info "  2. Paste a direct download URL below (from your Red Hat account)"
         echo
         read -rp "Paste direct ISO download URL, or press Enter if you placed the ISO manually: " iso_url
         if [[ -n "$iso_url" ]]; then
+            # Validate the URL filename matches expected distro, version, and type
+            local url_basename
+            url_basename=$(basename "${iso_url%%\?*}")
+            if [[ "$url_basename" != *dvd* ]]; then
+                print_error "The URL points to '${url_basename}' which is not a DVD ISO."
+                print_info "The infra server requires a full DVD ISO (filename must contain 'dvd')."
+                print_info "Boot and minimal ISOs do not contain the packages needed for installation."
+                exit 1
+            fi
+            if [[ "$url_basename" != rhel-${version}* ]]; then
+                print_error "The URL points to '${url_basename}' which does not match RHEL ${version}."
+                print_info "The infra server VM must be deployed with RHEL ${version}."
+                print_info "Guest VMs support multiple versions via 'tux2lab distro', but the infra server is RHEL ${version} only."
+                print_info "Expected a filename starting with 'rhel-${version}' (e.g., rhel-${version}.1-x86_64-dvd.iso)."
+                exit 1
+            fi
             echo "$iso_url"
         elif [[ -f "$iso_path" ]]; then
             print_success "Found manually placed ISO: ${iso_path}"
