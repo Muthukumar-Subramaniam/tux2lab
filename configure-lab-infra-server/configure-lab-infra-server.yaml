@@ -9,15 +9,6 @@
     - name: Set Environment Vars for the Playbook
       role: setup_global_vars
 
-##    - name: Upgrade Packages
-##      role: upgrade-server
-
-    - name: Install Required Packages
-      role: install_required_packages
-
-##    - name: Generate SSH Keys
-##      role: generate_ssh_keys_of_server
-
     - name: Apply Firewall Rules
       role:  apply-firewall-rules
 

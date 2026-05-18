@@ -108,31 +108,6 @@
     opts: "bind,ro"
     state: mounted
 
-- name: Create infra server ISO mount point
-  become: true
-  ansible.builtin.file:
-    path: "/tux2lab-data/os-repos/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
-    state: directory
-    owner: "{{ ansible_facts.env.mgmt_super_user }}"
-    group: "{{ ansible_facts.env.mgmt_super_user }}"
-  when:
-    - ansible_facts.env.default_linux_distro_iso_path is defined
-    - ansible_facts.env.infra_server_distro is defined
-    - ansible_facts.env.infra_server_version is defined
-
-- name: Mount infra server ISO from CD-ROM and update an entry in fstab
-  become: true
-  ansible.posix.mount:
-    path: "/tux2lab-data/os-repos/{{ ansible_facts.env.infra_server_distro }}/{{ ansible_facts.env.infra_server_version }}"
-    src: "{{ ansible_facts.env.default_linux_distro_iso_path }}"
-    fstype: iso9660
-    opts: "ro,nofail"
-    state: mounted
-  when:
-    - ansible_facts.env.default_linux_distro_iso_path is defined
-    - ansible_facts.env.infra_server_distro is defined
-    - ansible_facts.env.infra_server_version is defined
-
 - name: Create /tux2lab-data/ipxe to manage iPXE
   become: true
   ansible.builtin.file:

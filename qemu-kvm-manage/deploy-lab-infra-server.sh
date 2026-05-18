@@ -992,6 +992,50 @@ deploy_lab_infra_server_host() {
     print_success "All required packages installed on host successfully."
 
     # -----------------------------
+    # Mount ISO and configure local file-based repo
+    # (same pattern as guest VMs — no internet repos needed)
+    # -----------------------------
+    local iso_mount_path="/tux2lab-data/os-repos/${INFRA_DISTRO}/${INFRA_SERVER_VERSION}"
+    print_info "Configuring local file-based repo from ISO at ${iso_mount_path}..."
+
+    sudo mkdir -p "${iso_mount_path}"
+
+    if ! mountpoint -q "${iso_mount_path}"; then
+        sudo mount -o ro "${default_linux_distro_iso_path}" "${iso_mount_path}"
+    fi
+
+    # Add fstab entry if not already present
+    if ! grep -q "${iso_mount_path}" /etc/fstab; then
+        echo "${default_linux_distro_iso_path}  ${iso_mount_path}  iso9660  ro,nofail  0 0" | sudo tee -a /etc/fstab &>/dev/null
+    fi
+
+    # Backup original repos and create local repo
+    sudo mkdir -p /etc/yum.repos.d/original
+    sudo mv /etc/yum.repos.d/*.repo /etc/yum.repos.d/original/ 2>/dev/null || true
+
+    sudo tee /etc/yum.repos.d/tux2lab-local.repo &>/dev/null << REPOEOF
+[tux2lab-local-baseos]
+name=tux2lab Local ISO - BaseOS
+baseurl=file://${iso_mount_path}/BaseOS
+enabled=1
+gpgcheck=0
+
+[tux2lab-local-appstream]
+name=tux2lab Local ISO - AppStream
+baseurl=file://${iso_mount_path}/AppStream
+enabled=1
+gpgcheck=0
+REPOEOF
+
+    print_success "Local file-based repo configured successfully."
+
+    # Remove subscription-manager on RHEL (not needed with local ISO repo)
+    if [[ "${INFRA_DISTRO}" == "rhel" ]]; then
+        print_info "Removing subscription-manager (not needed with local ISO repo)..."
+        sudo dnf remove -y rhc subscription-manager || true
+    fi
+
+    # -----------------------------
     # Install Ansible if not already installed
     # -----------------------------
     if command -v ansible &>/dev/null; then
