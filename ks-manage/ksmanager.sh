@@ -928,18 +928,6 @@ if $golden_image_creation_not_requested; then
     fn_check_and_create_mac_if_required
 fi
 
-fn_check_distro_availability() {
-    local os_distribution="${1}"
-    local version="${2}"
-    local mount_dir="/tux2lab-data/os-repos/${os_distribution}/${version}"
-    
-    if mountpoint -q "${mount_dir}"; then
-        print_green '[Ready]'
-    else
-        print_yellow '[not-yet-setup]'
-    fi
-}
-
 # Status will be computed dynamically in menu based on selected version
 
 fn_select_os_distro() {
@@ -985,11 +973,34 @@ fn_select_os_distro() {
     while true; do
     # If distro not set via flag, show interactive distro selection menu
     if [[ -z "${os_distribution}" ]]; then
+        # Build list of distros that have at least one PXE-ready version
+        local ready_distro_keys=()
+        local -A ready_distro_versions=()
+        for key in "${DISTRO_KEYS[@]}"; do
+            local ready_vers=""
+            for ver in ${DISTRO_AVAILABLE_VERSIONS[$key]}; do
+                if mountpoint -q "/tux2lab-data/os-repos/${key}/${ver}" 2>/dev/null; then
+                    ready_vers+="${ver} "
+                fi
+            done
+            if [[ -n "$ready_vers" ]]; then
+                ready_distro_keys+=("$key")
+                ready_distro_versions[$key]="${ready_vers% }"
+            fi
+        done
+
+        if [[ ${#ready_distro_keys[@]} -eq 0 ]]; then
+            print_error "No OS distributions are prepared for PXE installation."
+            print_info "Use 'tux2lab distro setup <distro> -v <version>' to prepare a distro."
+            print_info "Use 'tux2lab distro list' to see available distros and their status."
+            exit 1
+        fi
+
         local menu="Please select the OS distribution to install:\n"
-        for i in "${!DISTRO_KEYS[@]}"; do
-            local key="${DISTRO_KEYS[$i]}"
+        for i in "${!ready_distro_keys[@]}"; do
+            local key="${ready_distro_keys[$i]}"
             local name="${DISTRO_DISPLAY_NAMES[$key]}"
-            local versions="${DISTRO_AVAILABLE_VERSIONS[$key]}"
+            local versions="${ready_distro_versions[$key]}"
             printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${name}" "${versions}"
             menu+="${line}"
         done
@@ -1001,8 +1012,8 @@ fn_select_os_distro() {
 
         if [[ "${distro_choice}" == "q" || "${distro_choice}" == "Q" ]]; then
             print_info "Operation cancelled by user."; exit 130
-        elif [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#DISTRO_KEYS[@]} )); then
-            os_distribution="${DISTRO_KEYS[$((distro_choice-1))]}"
+        elif [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#ready_distro_keys[@]} )); then
+            os_distribution="${ready_distro_keys[$((distro_choice-1))]}"
         else
             print_error "Invalid option. Please try again."; continue
         fi
@@ -1010,36 +1021,60 @@ fn_select_os_distro() {
 
     # Select version (if not set via --version flag)
     if [[ -z "${version}" ]]; then
-        local available_versions=(${DISTRO_AVAILABLE_VERSIONS[$os_distribution]})
-        
-        local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$os_distribution]}:\n"
-        for i in "${!available_versions[@]}"; do
-            local ver="${available_versions[$i]}"
-            local status=$(fn_check_distro_availability "$os_distribution" "$ver")
-            printf -v line "  %d)  %-12s %s\n" $((i+1)) "${ver}" "${status}"
-            menu+="${line}"
+        # Get only PXE-ready versions for this distro
+        local available_versions=()
+        for ver in ${DISTRO_AVAILABLE_VERSIONS[$os_distribution]}; do
+            if mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${ver}" 2>/dev/null; then
+                available_versions+=("$ver")
+            fi
         done
-        menu+="  q)  Quit"
-        
-        print_notify "$menu"
-        echo -n "Enter option number: "
-        read version_choice
 
-        if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
-            print_info "Operation cancelled by user."; exit 130
-        elif [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
-            version="${available_versions[$((version_choice-1))]}"
-        else
-            print_error "Invalid option. Please try again."
-            version=""
+        if [[ ${#available_versions[@]} -eq 0 ]]; then
+            print_error "No versions of ${DISTRO_DISPLAY_NAMES[$os_distribution]} are prepared for PXE installation."
+            print_info "Use 'tux2lab distro setup ${os_distribution} -v <version>' to prepare a version."
             os_distribution=""
             continue
+        fi
+
+        # Auto-select if only one version is PXE-ready
+        if [[ ${#available_versions[@]} -eq 1 ]]; then
+            version="${available_versions[0]}"
+            print_info "Auto-selected version ${version} (only PXE-ready version for ${DISTRO_DISPLAY_NAMES[$os_distribution]})"
+        else
+            local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$os_distribution]}:\n"
+            for i in "${!available_versions[@]}"; do
+                local ver="${available_versions[$i]}"
+                printf -v line "  %d)  %s\n" $((i+1)) "${ver}"
+                menu+="${line}"
+            done
+            menu+="  q)  Quit"
+            
+            print_notify "$menu"
+            echo -n "Enter option number: "
+            read version_choice
+
+            if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
+                print_info "Operation cancelled by user."; exit 130
+            elif [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
+                version="${available_versions[$((version_choice-1))]}"
+            else
+                print_error "Invalid option. Please try again."
+                version=""
+                os_distribution=""
+                continue
+            fi
         fi
     else
         # Validate the version from --version flag
         if ! fn_is_valid_version "$os_distribution" "$version"; then
             print_error "Invalid version '${version}' for ${os_distribution}."
             print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$os_distribution]}"
+            exit 1
+        fi
+        # Check if the version is PXE-ready
+        if ! mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${version}" 2>/dev/null; then
+            print_error "${DISTRO_DISPLAY_NAMES[$os_distribution]} ${version} is not prepared for PXE installation."
+            print_info "Use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it."
             exit 1
         fi
     fi
