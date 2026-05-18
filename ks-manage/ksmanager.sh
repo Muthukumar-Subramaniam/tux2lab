@@ -921,9 +921,7 @@ fn_select_os_distro() {
     print_info "OS distribution selected: ${os_distribution} ${version}"
 }
 
-if $golden_image_creation_not_requested; then
-    fn_select_os_distro
-fi
+fn_select_os_distro
 
 if $golden_image_creation_not_requested; then
     fn_check_and_create_host_record "${1}"
