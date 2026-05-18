@@ -27,7 +27,4 @@
     - name: Setup PXE boot environment
       role: setup_pxe_boot_of_server
 
-    - name: Configure Lab Services Restart After IPv6
-      role: restart_lab_services_after_ipv6
-
 ##################### EOF ##########################

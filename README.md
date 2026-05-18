@@ -157,9 +157,8 @@ The interactive wizard will guide you through:
 2. `virt-install` creates and boots the infra server VM
 3. AlmaLinux installs unattended via kickstart (SSH keys, network, local repo configured in `%post`)
 4. First reboot → bootstrap service clones tux2lab repo and runs Ansible
-5. Ansible configures all lab services (DNS, DHCP, PXE, NFS, nginx, etc.)
-6. Second reboot — lab is ready
-7. Press `Ctrl + ]` to exit the console when you see the login prompt
+5. Ansible configures all lab services (DNS, DHCP, PXE, NFS, nginx, etc.) — lab is ready
+6. Press `Ctrl + ]` to exit the console when you see the login prompt
 
 ### Step 5 — Verify Your Lab
 

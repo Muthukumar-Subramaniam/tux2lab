@@ -729,16 +729,6 @@ print(ptr)
         print_task_done
     fi
 
-    print_task "Make named service as a dependency for network-online.target..."
-
-    if [[ "${KVM_HOST_MODE_SET}" != "true" ]]; then
-        if [[ ! -f /etc/systemd/system/network-online.target.wants/named.service ]]; then
-            ln -s /usr/lib/systemd/system/named.service /etc/systemd/system/network-online.target.wants/named.service 
-        fi
-    fi
-
-    print_task_done
-
     print_task "Creating the command dnsbinder..."
 
     ln -s /tux2lab/named-manage/dnsbinder.sh /usr/sbin/dnsbinder
