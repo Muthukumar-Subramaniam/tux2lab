@@ -21,6 +21,7 @@ SUBCOMMANDS:
     list                            List all distros with readiness status
     setup [distro --version|-v ver]    Setup a distro for PXE provisioning
     cleanup [distro --version|-v ver]  Remove a distro's PXE provisioning setup
+    download-infra-iso [distro]     Download ISO for the infra server VM
 
 OPTIONS:
     -h, --help                      Show this help message
@@ -30,7 +31,9 @@ EXAMPLES:
     tux2lab distro setup                                    # Interactive mode
     tux2lab distro setup almalinux --version 10             # Non-interactive mode
     tux2lab distro setup almalinux -v 10                    # Short form
-    tux2lab distro cleanup almalinux --version 10"
+    tux2lab distro cleanup almalinux --version 10
+    tux2lab distro download-infra-iso                       # Interactive (default: AlmaLinux)
+    tux2lab distro download-infra-iso rocky                 # Download Rocky Linux for infra server"
 }
 
 # Run prepare-distro-for-ksmanager.sh on the infra server
@@ -96,6 +99,14 @@ case "$subcommand" in
             exit 0
         fi
         run_on_infra_server --cleanup "$@"
+        ;;
+    download-infra-iso)
+        if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+            show_distro_help
+            exit 0
+        fi
+        # Always runs locally on the KVM host — never SSH to infra server
+        "${PREPARE_SCRIPT}" --download-infra-iso "$@"
         ;;
     *)
         print_error "Unknown distro subcommand: $subcommand"

@@ -5,4 +5,4 @@
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#
-exec /tux2lab/qemu-kvm-manage/download-infra-server-iso.sh "$@"
+exec /tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --download-infra-iso "$@"

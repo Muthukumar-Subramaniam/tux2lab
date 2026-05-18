@@ -623,7 +623,7 @@ EOF
 # Deployment mode functions
 #-------------------------------------------------------------
 validate_infra_server_iso() {
-    # ISO setup — look for the marker file written by download-infra-server-iso.sh
+    # ISO setup — look for the marker file written by 'tux2lab distro download-infra-iso'
     ISO_DIR="/tux2lab-data/iso-files"
     INFRA_ISO_MARKER="${ISO_DIR}/infra-server-iso"
     INFRA_DISTRO_MARKER="${ISO_DIR}/infra-server-distro"
@@ -635,22 +635,22 @@ validate_infra_server_iso() {
         # Validate the marker points to an actual file
         if [[ ! -f "${ISO_DIR}/${ISO_NAME}" ]]; then
             print_error "Marker references ${ISO_NAME} but file not found in ${ISO_DIR}/"
-            print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
+            print_info "Please re-run: \033[1mtux2lab distro download-infra-iso\033[0m"
             exit 1
         fi
     else
         print_error "No infra server ISO has been downloaded yet."
-        print_info "Please run: \033[1mdownload-infra-server-iso.sh\033[0m"
+        print_info "Please run: \033[1mtux2lab distro download-infra-iso\033[0m"
         print_info "Supported: AlmaLinux, Rocky Linux, Oracle Linux, CentOS Stream, RHEL"
         exit 1
     fi
 
-    # Read the distro name written by download-infra-server-iso.sh
+    # Read the distro name written by 'tux2lab distro download-infra-iso'
     if [[ -f "$INFRA_DISTRO_MARKER" ]]; then
         INFRA_DISTRO=$(< "$INFRA_DISTRO_MARKER")
     else
         print_error "No infra server distro marker found."
-        print_info "Please re-run: \033[1mdownload-infra-server-iso.sh\033[0m"
+        print_info "Please re-run: \033[1mtux2lab distro download-infra-iso\033[0m"
         exit 1
     fi
 

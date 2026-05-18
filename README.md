@@ -133,8 +133,8 @@ This script:
 > Skip this step if you plan to deploy in **Host mode**.
 
 ```bash
-./download-infra-server-iso.sh              # AlmaLinux (default)
-./download-infra-server-iso.sh rocky        # Rocky Linux
+tux2lab distro download-infra-iso              # AlmaLinux (default)
+tux2lab distro download-infra-iso rocky        # Rocky Linux
 ```
 
 Downloads the ISO, fetches the checksum, and verifies integrity via SHA256.
@@ -328,7 +328,6 @@ tux2lab/
 ├── qemu-kvm-manage/           KVM host scripts (deploy, setup, VM management)
 │   ├── deploy-lab-infra-server.sh
 │   ├── setup-qemu-kvm.sh
-│   ├── download-infra-server-iso.sh
 │   └── scripts-to-manage-vms/  CLI dispatcher and all tux2lab vm subcommands
 ├── configure-lab-infra-server/ Ansible playbook and roles for infra server setup
 ├── ks-manage/                  Kickstart/cloud-init templates and ksmanager

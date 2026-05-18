@@ -24,7 +24,7 @@ _tux2lab_completions() {
     local vm_subcommands="install-golden install-pxe reimage-golden reimage-pxe start stop shutdown restart reboot remove list info console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove snapshot-create snapshot-list snapshot-info snapshot-delete snapshot-revert"
     
     # Distro subcommands
-    local distro_subcommands="list setup cleanup"
+    local distro_subcommands="list setup cleanup download-infra-iso"
     
     # Golden image subcommands
     local golden_image_subcommands="build list cleanup"
@@ -74,6 +74,12 @@ _tux2lab_completions() {
         # Complete distro names after setup/cleanup
         if [[ ${COMP_CWORD} -eq 3 ]] && [[ "${COMP_WORDS[2]}" == "setup" || "${COMP_WORDS[2]}" == "cleanup" ]]; then
             COMPREPLY=( $(compgen -W "almalinux rocky oraclelinux centos-stream rhel ubuntu-lts opensuse-leap" -- "${cur}") )
+            return 0
+        fi
+
+        # Complete RHEL-based distro names after download-infra-iso
+        if [[ ${COMP_CWORD} -eq 3 ]] && [[ "${COMP_WORDS[2]}" == "download-infra-iso" ]]; then
+            COMPREPLY=( $(compgen -W "almalinux rocky oraclelinux centos-stream rhel" -- "${cur}") )
             return 0
         fi
         
