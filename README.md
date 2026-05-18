@@ -16,7 +16,7 @@ of creating something of my own and sharing it with anyone with similar interest
 > This project is intended for testing, development, and experimentation purposes only.
 
 > [!NOTE]
-> This project is in active development (pre-v1.0). APIs and structure may change.
+> This project is in pre-release stabilization. No structural or functional changes — only hardened testing, bug fixes, and improvements.
 
 ---
 
@@ -292,13 +292,18 @@ tux2lab stop                      Stop lab infrastructure and shut down all VMs
 tux2lab enable                    Enable lab infrastructure auto-start on boot
 tux2lab disable                   Disable lab infrastructure auto-start on boot
 tux2lab health                    Check all lab service health
+tux2lab deploy                    Deploy a new lab infrastructure server
+tux2lab destroy                   Permanently destroy the entire lab environment
+tux2lab rebuild                   Tear down and redeploy lab using existing config
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab distro list               List distributions and setup status
 tux2lab distro setup              Prepare a distro for PXE provisioning
 tux2lab distro cleanup            Remove a distro's PXE setup
+tux2lab distro download-infra-iso Download infra server ISO (VM mode)
 tux2lab ipv6-route enable         Add IPv6 route to lab network
 tux2lab ipv6-route disable        Remove IPv6 route
-tux2lab ipv6-route auto           Configure route to persist across reboots
+tux2lab ipv6-route check          Check IPv6 connectivity and route status
+tux2lab ipv6-route auto           Auto-configure based on host IPv6 connectivity
 tux2lab ipv6-route status         Show current IPv6 route status
 tux2lab version                   Show version information
 ```

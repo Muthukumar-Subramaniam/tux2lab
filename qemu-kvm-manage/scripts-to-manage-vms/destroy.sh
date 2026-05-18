@@ -231,6 +231,29 @@ if $lab_infra_server_mode_is_host; then
         print_task_done
         ((++completed_steps))
     fi
+
+    # Remove chrony tux2lab drop-in config (chrony stays running)
+    if [[ -f /etc/chrony.d/tux2lab.conf ]]; then
+        print_task "Removing chrony tux2lab drop-in config..."
+        sudo rm -f /etc/chrony.d/tux2lab.conf
+        sudo systemctl restart chronyd 2>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    fi
+
+    # Remove firewalld trusted zone rules for lab network
+    if systemctl is-active firewalld &>/dev/null; then
+        print_task "Removing firewalld trusted zone rules..."
+        trusted_sources=$(sudo firewall-cmd --permanent --zone=trusted --list-sources 2>/dev/null || true)
+        if [[ -n "$trusted_sources" ]]; then
+            for src in $trusted_sources; do
+                sudo firewall-cmd --permanent --zone=trusted --remove-source="$src" &>/dev/null || true
+            done
+            sudo firewall-cmd --reload &>/dev/null || true
+        fi
+        print_task_done
+        ((++completed_steps))
+    fi
 fi
 
 # ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
@@ -267,15 +290,17 @@ print_task_done
 # ====== STEP 7: DESTROY VIRTUAL NETWORK ======
 print_task "Destroying tux2lab virtual network..."
 sudo virsh net-destroy tux2lab &>/dev/null || true
+sudo virsh net-undefine tux2lab &>/dev/null || true
 if ip link show labbr0 &>/dev/null; then
     sudo ip addr flush dev labbr0 2>/dev/null || true
 fi
 print_task_done
 ((++completed_steps))
 
-# ====== STEP 8: STOP LIBVIRTD ======
-print_task "Stopping libvirtd..."
+# ====== STEP 8: STOP AND DISABLE LIBVIRTD ======
+print_task "Stopping and disabling libvirtd..."
 if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
+    sudo systemctl disable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null || true
     print_task_done
     ((++completed_steps))
 else
