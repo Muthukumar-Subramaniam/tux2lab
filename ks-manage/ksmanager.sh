@@ -757,154 +757,6 @@ done
 # Version will be set after distro selection (from flag or interactive menu)
 version="${version_from_flag}"
 
-if $golden_image_creation_not_requested; then
-    fn_select_os_distro
-fi
-
-if $golden_image_creation_not_requested; then
-    fn_check_and_create_host_record "${1}"
-    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
-    
-    # Query DNS for IPv6 address (if dual-stack configured)
-    if [[ -n "${ipv6_gateway}" ]]; then
-        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
-    fi
-fi
-
-# Function to validate MAC address
-fn_validate_mac() {
-    local mac_address_of_host="${1}"
-    
-    # Regex for MAC address (allowing both colon and hyphen-separated)
-    if [[ "${mac_address_of_host}" =~ ^([a-fA-F0-9]{2}([-:]?)){5}[a-fA-F0-9]{2}$ ]]
-    then
-        return 0  # Valid MAC address
-    else
-        return 1  # Invalid MAC address
-    fi
-}
-
-fn_convert_mac_for_ipxe_cfg() {
-    # Convert MAC address to required format to append with ipxe.cfg file
-    ipxe_cfg_mac_address="${mac_address_of_host//:/-}"
-    ipxe_cfg_mac_address=$(printf '%s' "${ipxe_cfg_mac_address}" | tr '[:upper:]' '[:lower:]')
-}
-
-fn_cache_the_mac() {
-    print_task "Caching MAC address..."
-    local temp_cache_file="${mac_cache_file}.tmp.$$"
-
-    if ! fn_acquire_mac_cache_lock; then
-        print_task_fail
-        exit 1
-    fi
-
-    touch "${mac_cache_file}"
-    if awk -v host="${kickstart_hostname}" '$1 != host' "${mac_cache_file}" > "${temp_cache_file}" && \
-       printf '%s %s %s %s\n' "${kickstart_hostname}" "${mac_address_of_host}" "${ipv4_address}" "${ipv6_address}" >> "${temp_cache_file}" && \
-       mv "${temp_cache_file}" "${mac_cache_file}"; then
-        fn_release_mac_cache_lock
-        print_task_done
-    else
-        rm -f "${temp_cache_file}"
-        fn_release_mac_cache_lock
-        print_task_fail
-        print_error "Failed to cache MAC address."
-        exit 1
-    fi
-}
-
-# Loop until a valid MAC address is provided
-
-fn_get_mac_address() {
-    while :
-    do
-        echo -n "Enter the MAC address of the VM \"${kickstart_hostname}\": "
-        read mac_address_of_host
-            # Call the function to validate the MAC address
-            if fn_validate_mac "${mac_address_of_host}"
-            then
-                break
-            else
-            print_error "Invalid MAC address provided. Please try again."
-            fi
-    done
-}
-
-fn_check_and_create_mac_if_required() {
-
-# If MAC address was provided via --mac flag, use it directly
-if [[ -n "${mac_from_flag}" ]]; then
-    print_info "Using MAC address provided via --mac flag: ${mac_from_flag}"
-    mac_address_of_host="${mac_from_flag}"
-    # Validate the provided MAC address
-    if ! fn_validate_mac "${mac_address_of_host}"; then
-        print_error "Invalid MAC address provided via --mac flag: ${mac_address_of_host}"
-        exit 1
-    fi
-    fn_convert_mac_for_ipxe_cfg
-    fn_cache_the_mac
-    return
-fi
-
-print_info "Looking up MAC address for host \"${kickstart_hostname}\" from cache..."
-
-if [[ ! -f "${mac_cache_file}" ]]; then
-    touch  "${mac_cache_file}"
-fi
-
-if awk -v host="${kickstart_hostname}" '$1 == host {found=1} END{exit !found}' "${mac_cache_file}"
-then
-    mac_address_of_host=$(awk -v host="${kickstart_hostname}" '$1 == host {print $2; exit}' "${mac_cache_file}")
-
-    print_info "MAC Address ${mac_address_of_host} found for ${kickstart_hostname} in cache."
-    while :
-    do
-        if $invoked_with_qemu_kvm; then
-            fn_convert_mac_for_ipxe_cfg
-            break
-        fi
-        
-        read -p "Has the MAC Address ${mac_address_of_host} been changed for ${kickstart_hostname} (y/N)? : " confirmation 
-
-        if [[ "${confirmation}" =~ ^[Nn]$ ]] 
-        then
-            fn_convert_mac_for_ipxe_cfg
-            break
-
-        elif [[ -z "${confirmation}" ]]
-        then
-            fn_convert_mac_for_ipxe_cfg
-            break
-
-        elif [[ "${confirmation}" =~ ^[Yy]$ ]]
-        then
-            fn_get_mac_address
-            fn_convert_mac_for_ipxe_cfg
-            fn_cache_the_mac
-            break
-        else
-            print_warning "Invalid input."
-        fi
-    done
-else
-    print_info "MAC address for \"${kickstart_hostname}\" not found in cache."
-    if $invoked_with_qemu_kvm; then
-        print_error "MAC address not found in cache and --mac flag not provided for QEMU/KVM mode."
-        print_error "QEMU/KVM scripts must provide MAC address via --mac flag."
-        exit 1
-    else
-        fn_get_mac_address
-        fn_convert_mac_for_ipxe_cfg
-        fn_cache_the_mac
-    fi
-fi
-}
-
-if $golden_image_creation_not_requested; then
-    fn_check_and_create_mac_if_required
-fi
-
 fn_select_os_distro() {
     # Check if --distro flag was provided
     if [[ -n "${distro_from_flag}" ]]; then
@@ -1059,6 +911,154 @@ fn_select_os_distro() {
 
     print_info "OS distribution selected: ${os_distribution} ${version}"
 }
+
+if $golden_image_creation_not_requested; then
+    fn_select_os_distro
+fi
+
+if $golden_image_creation_not_requested; then
+    fn_check_and_create_host_record "${1}"
+    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    
+    # Query DNS for IPv6 address (if dual-stack configured)
+    if [[ -n "${ipv6_gateway}" ]]; then
+        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    fi
+fi
+
+# Function to validate MAC address
+fn_validate_mac() {
+    local mac_address_of_host="${1}"
+    
+    # Regex for MAC address (allowing both colon and hyphen-separated)
+    if [[ "${mac_address_of_host}" =~ ^([a-fA-F0-9]{2}([-:]?)){5}[a-fA-F0-9]{2}$ ]]
+    then
+        return 0  # Valid MAC address
+    else
+        return 1  # Invalid MAC address
+    fi
+}
+
+fn_convert_mac_for_ipxe_cfg() {
+    # Convert MAC address to required format to append with ipxe.cfg file
+    ipxe_cfg_mac_address="${mac_address_of_host//:/-}"
+    ipxe_cfg_mac_address=$(printf '%s' "${ipxe_cfg_mac_address}" | tr '[:upper:]' '[:lower:]')
+}
+
+fn_cache_the_mac() {
+    print_task "Caching MAC address..."
+    local temp_cache_file="${mac_cache_file}.tmp.$$"
+
+    if ! fn_acquire_mac_cache_lock; then
+        print_task_fail
+        exit 1
+    fi
+
+    touch "${mac_cache_file}"
+    if awk -v host="${kickstart_hostname}" '$1 != host' "${mac_cache_file}" > "${temp_cache_file}" && \
+       printf '%s %s %s %s\n' "${kickstart_hostname}" "${mac_address_of_host}" "${ipv4_address}" "${ipv6_address}" >> "${temp_cache_file}" && \
+       mv "${temp_cache_file}" "${mac_cache_file}"; then
+        fn_release_mac_cache_lock
+        print_task_done
+    else
+        rm -f "${temp_cache_file}"
+        fn_release_mac_cache_lock
+        print_task_fail
+        print_error "Failed to cache MAC address."
+        exit 1
+    fi
+}
+
+# Loop until a valid MAC address is provided
+
+fn_get_mac_address() {
+    while :
+    do
+        echo -n "Enter the MAC address of the VM \"${kickstart_hostname}\": "
+        read mac_address_of_host
+            # Call the function to validate the MAC address
+            if fn_validate_mac "${mac_address_of_host}"
+            then
+                break
+            else
+            print_error "Invalid MAC address provided. Please try again."
+            fi
+    done
+}
+
+fn_check_and_create_mac_if_required() {
+
+# If MAC address was provided via --mac flag, use it directly
+if [[ -n "${mac_from_flag}" ]]; then
+    print_info "Using MAC address provided via --mac flag: ${mac_from_flag}"
+    mac_address_of_host="${mac_from_flag}"
+    # Validate the provided MAC address
+    if ! fn_validate_mac "${mac_address_of_host}"; then
+        print_error "Invalid MAC address provided via --mac flag: ${mac_address_of_host}"
+        exit 1
+    fi
+    fn_convert_mac_for_ipxe_cfg
+    fn_cache_the_mac
+    return
+fi
+
+print_info "Looking up MAC address for host \"${kickstart_hostname}\" from cache..."
+
+if [[ ! -f "${mac_cache_file}" ]]; then
+    touch  "${mac_cache_file}"
+fi
+
+if awk -v host="${kickstart_hostname}" '$1 == host {found=1} END{exit !found}' "${mac_cache_file}"
+then
+    mac_address_of_host=$(awk -v host="${kickstart_hostname}" '$1 == host {print $2; exit}' "${mac_cache_file}")
+
+    print_info "MAC Address ${mac_address_of_host} found for ${kickstart_hostname} in cache."
+    while :
+    do
+        if $invoked_with_qemu_kvm; then
+            fn_convert_mac_for_ipxe_cfg
+            break
+        fi
+        
+        read -p "Has the MAC Address ${mac_address_of_host} been changed for ${kickstart_hostname} (y/N)? : " confirmation 
+
+        if [[ "${confirmation}" =~ ^[Nn]$ ]] 
+        then
+            fn_convert_mac_for_ipxe_cfg
+            break
+
+        elif [[ -z "${confirmation}" ]]
+        then
+            fn_convert_mac_for_ipxe_cfg
+            break
+
+        elif [[ "${confirmation}" =~ ^[Yy]$ ]]
+        then
+            fn_get_mac_address
+            fn_convert_mac_for_ipxe_cfg
+            fn_cache_the_mac
+            break
+        else
+            print_warning "Invalid input."
+        fi
+    done
+else
+    print_info "MAC address for \"${kickstart_hostname}\" not found in cache."
+    if $invoked_with_qemu_kvm; then
+        print_error "MAC address not found in cache and --mac flag not provided for QEMU/KVM mode."
+        print_error "QEMU/KVM scripts must provide MAC address via --mac flag."
+        exit 1
+    else
+        fn_get_mac_address
+        fn_convert_mac_for_ipxe_cfg
+        fn_cache_the_mac
+    fi
+fi
+}
+
+if $golden_image_creation_not_requested; then
+    fn_check_and_create_mac_if_required
+fi
 
 # Initialize variables for QEMU/KVM
 disk_type_for_the_vm="vda"
