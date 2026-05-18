@@ -757,31 +757,8 @@ done
 # Version will be set after distro selection (from flag or interactive menu)
 version="${version_from_flag}"
 
-# Early validation of --distro and --version flags (fail-fast before DNS/MAC creation)
-if [[ -n "${distro_from_flag}" ]]; then
-    _early_validated_distro=""
-    case "${distro_from_flag}" in
-        alma|almalinux) _early_validated_distro="almalinux" ;;
-        rocky) _early_validated_distro="rocky" ;;
-        oracle|oraclelinux) _early_validated_distro="oraclelinux" ;;
-        centos|centos-stream) _early_validated_distro="centos-stream" ;;
-        rhel|redhat) _early_validated_distro="rhel" ;;
-        ubuntu-lts|ubuntu) _early_validated_distro="ubuntu-lts" ;;
-        opensuse-leap|opensuse|suse) _early_validated_distro="opensuse-leap" ;;
-        *)
-            print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
-            print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap"
-            exit 1
-            ;;
-    esac
-    if [[ -n "${version_from_flag}" ]]; then
-        if ! fn_is_valid_version "$_early_validated_distro" "$version_from_flag"; then
-            print_error "Invalid version '${version_from_flag}' for ${_early_validated_distro}."
-            print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$_early_validated_distro]}"
-            exit 1
-        fi
-    fi
-    unset _early_validated_distro
+if $golden_image_creation_not_requested; then
+    fn_select_os_distro
 fi
 
 if $golden_image_creation_not_requested; then
@@ -927,8 +904,6 @@ fi
 if $golden_image_creation_not_requested; then
     fn_check_and_create_mac_if_required
 fi
-
-# Status will be computed dynamically in menu based on selected version
 
 fn_select_os_distro() {
     # Check if --distro flag was provided
@@ -1084,7 +1059,6 @@ fn_select_os_distro() {
 
     print_info "OS distribution selected: ${os_distribution} ${version}"
 }
-fn_select_os_distro
 
 # Initialize variables for QEMU/KVM
 disk_type_for_the_vm="vda"
