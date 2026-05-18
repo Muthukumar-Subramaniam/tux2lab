@@ -261,6 +261,8 @@ if [[ "$distro" == "rhel" ]]; then
         fi
         if [[ "$url_basename" != rhel-${version}* ]]; then
             print_error "The URL points to '${url_basename}' which does not match RHEL ${version}."
+            print_info "The infra server VM must be deployed with RHEL ${version}."
+            print_info "Guest VMs support multiple versions via 'tux2lab distro', but the infra server is RHEL ${version} only."
             print_info "Expected a filename starting with 'rhel-${version}' (e.g., rhel-${version}.1-x86_64-dvd.iso)."
             exit 1
         fi
