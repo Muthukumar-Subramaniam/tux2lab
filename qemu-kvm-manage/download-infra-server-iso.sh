@@ -245,8 +245,9 @@ print_info "ISO: ${ISO_NAME}"
 if [[ "$distro" == "rhel" ]]; then
     print_warning "Red Hat Enterprise Linux requires an active subscription to download."
     print_info "RHEL ISOs are not publicly downloadable. You have two options:"
-    print_info "  1. Manually download the ISO from https://developers.redhat.com/products/rhel/download"
-    print_info "     and place it at: ${ISO_DIR}/${ISO_NAME}"
+    print_info "  1. Log in at https://access.redhat.com/downloads/content/rhel"
+    print_info "     (a free Red Hat Developer subscription is sufficient)"
+    print_info "     Download the DVD ISO and place it at: ${ISO_DIR}/${ISO_NAME}"
     print_info "  2. Paste a direct download URL below (from your Red Hat account)"
     echo
     read -rp "Paste direct ISO download URL, or press Enter if you placed the ISO manually: " user_url
