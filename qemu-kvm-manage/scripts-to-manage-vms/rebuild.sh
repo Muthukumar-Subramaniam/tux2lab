@@ -50,8 +50,8 @@ PRESERVED (--clean-state mode):
     - Network bridge definitions
 
 CONFIRMATION:
-    Default mode:       Type 'REBUILD'
-    --clean-state mode: Type 'REBUILD-CLEAN-STATE'
+    Default mode:       Type 'REBUILD-THE-LAB-INFRA-SERVER'
+    --clean-state mode: Type 'REBUILD-THE-LAB-INFRA-SERVER-CLEAN-STATE'
 
     Requires an existing lab deployment (environment file must exist)."
             exit 0
@@ -152,16 +152,16 @@ fi
 
 echo
 if $clean_state; then
-    echo -n "Type REBUILD-CLEAN-STATE to confirm: "
+    echo -n "Type REBUILD-THE-LAB-INFRA-SERVER-CLEAN-STATE to confirm: "
     read -r confirmation
-    if [[ "${confirmation}" != "REBUILD-CLEAN-STATE" ]]; then
+    if [[ "${confirmation}" != "REBUILD-THE-LAB-INFRA-SERVER-CLEAN-STATE" ]]; then
         print_info "Operation cancelled. Your lab is safe."
         exit 0
     fi
 else
-    echo -n "Type REBUILD to confirm: "
+    echo -n "Type REBUILD-THE-LAB-INFRA-SERVER to confirm: "
     read -r confirmation
-    if [[ "${confirmation}" != "REBUILD" ]]; then
+    if [[ "${confirmation}" != "REBUILD-THE-LAB-INFRA-SERVER" ]]; then
         print_info "Operation cancelled. Your lab is safe."
         exit 0
     fi
