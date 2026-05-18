@@ -251,12 +251,17 @@ if [[ "$distro" == "rhel" ]]; then
     echo
     read -rp "Paste direct ISO download URL, or press Enter if you placed the ISO manually: " user_url
     if [[ -n "$user_url" ]]; then
-        # The infra server requires a full DVD ISO — reject boot/minimal ISOs
+        # Validate the URL filename matches expected distro, version, and type
         url_basename=$(basename "${user_url%%\?*}")
         if [[ "$url_basename" != *dvd* ]]; then
             print_error "The URL points to '${url_basename}' which is not a DVD ISO."
             print_info "The infra server requires a full DVD ISO (filename must contain 'dvd')."
             print_info "Boot and minimal ISOs do not contain the packages needed for installation."
+            exit 1
+        fi
+        if [[ "$url_basename" != rhel-${version}* ]]; then
+            print_error "The URL points to '${url_basename}' which does not match RHEL ${version}."
+            print_info "Expected a filename starting with 'rhel-${version}' (e.g., rhel-${version}.1-x86_64-dvd.iso)."
             exit 1
         fi
         ISO_URL="$user_url"
