@@ -823,26 +823,32 @@ fn_select_os_distro() {
             exit 1
         fi
 
-        local menu="Please select the OS distribution to install:\n"
-        for i in "${!ready_distro_keys[@]}"; do
-            local key="${ready_distro_keys[$i]}"
-            local name="${DISTRO_DISPLAY_NAMES[$key]}"
-            local versions="${ready_distro_versions[$key]}"
-            printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${name}" "${versions}"
-            menu+="${line}"
-        done
-        menu+="  q)  Quit"
-        
-        print_notify "$menu"
-        echo -n "Enter option number: "
-        read distro_choice
-
-        if [[ "${distro_choice}" == "q" || "${distro_choice}" == "Q" ]]; then
-            print_info "Operation cancelled by user."; exit 130
-        elif [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#ready_distro_keys[@]} )); then
-            os_distribution="${ready_distro_keys[$((distro_choice-1))]}"
+        # Auto-select if only one distro is PXE-ready
+        if [[ ${#ready_distro_keys[@]} -eq 1 ]]; then
+            os_distribution="${ready_distro_keys[0]}"
+            print_info "Auto-selected ${DISTRO_DISPLAY_NAMES[$os_distribution]} (only PXE-ready distro)"
         else
-            print_error "Invalid option. Please try again."; continue
+            local menu="Please select the OS distribution to install:\n"
+            for i in "${!ready_distro_keys[@]}"; do
+                local key="${ready_distro_keys[$i]}"
+                local name="${DISTRO_DISPLAY_NAMES[$key]}"
+                local versions="${ready_distro_versions[$key]}"
+                printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${name}" "${versions}"
+                menu+="${line}"
+            done
+            menu+="  q)  Quit"
+            
+            print_notify "$menu"
+            echo -n "Enter option number: "
+            read distro_choice
+
+            if [[ "${distro_choice}" == "q" || "${distro_choice}" == "Q" ]]; then
+                print_info "Operation cancelled by user."; exit 130
+            elif [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#ready_distro_keys[@]} )); then
+                os_distribution="${ready_distro_keys[$((distro_choice-1))]}"
+            else
+                print_error "Invalid option. Please try again."; continue
+            fi
         fi
     fi
 
