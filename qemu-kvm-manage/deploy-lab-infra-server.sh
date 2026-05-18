@@ -18,7 +18,7 @@ if [[ -z "${INFRA_SERVER_VERSION:-}" ]]; then
     exit 1
 fi
 
-# Internal flag: --rebuild is used by 'tux2lab rebuild-lab' to redeploy
+# Internal flag: --rebuild is used by 'tux2lab rebuild' to redeploy
 # using the existing environment file without interactive prompts.
 REBUILD_MODE=false
 if [[ "${1:-}" == "--rebuild" ]]; then
@@ -501,7 +501,7 @@ prepare_lab_infra_config_for_rebuild() {
     if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
         print_error "Lab environment file not found at $LAB_ENV_VARS_FILE"
         print_info "Cannot rebuild without existing configuration."
-        print_info "Run 'tux2lab deploy-lab' to create a new lab from scratch."
+        print_info "Run 'tux2lab deploy' to create a new lab from scratch."
         exit 1
     fi
 
@@ -1221,7 +1221,7 @@ if $REBUILD_MODE; then
     LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
     if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
         print_error "Lab environment file not found. Cannot rebuild."
-        print_info "Run 'tux2lab deploy-lab' to create a new lab from scratch."
+        print_info "Run 'tux2lab deploy' to create a new lab from scratch."
         exit 1
     fi
     source "$LAB_ENV_VARS_FILE"

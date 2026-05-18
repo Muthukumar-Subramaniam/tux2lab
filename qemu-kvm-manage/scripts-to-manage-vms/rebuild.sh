@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
-# Script Name: rebuild-lab.sh                                                            #
+# Script Name: rebuild.sh                                                               #
 # Description: Tear down and redeploy the lab infra server using existing configuration  #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
@@ -16,7 +16,7 @@ for arg in "$@"; do
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
-    tux2lab rebuild-lab [OPTIONS]
+    tux2lab rebuild [OPTIONS]
 
 DESCRIPTION:
     Destroys ALL virtual machines (guests and infra server) and redeploys
@@ -50,8 +50,8 @@ PRESERVED (--clean-state mode):
     - Network bridge definitions
 
 CONFIRMATION:
-    Default mode:       Type 'REBUILD-LAB'
-    --clean-state mode: Type 'REBUILD-LAB-CLEAN-STATE'
+    Default mode:       Type 'REBUILD'
+    --clean-state mode: Type 'REBUILD-CLEAN-STATE'
 
     Requires an existing lab deployment (environment file must exist)."
             exit 0
@@ -61,7 +61,7 @@ CONFIRMATION:
             ;;
         *)
             print_error "Unknown argument: $arg"
-            echo "Run 'tux2lab rebuild-lab --help' for usage information."
+            echo "Run 'tux2lab rebuild --help' for usage information."
             exit 1
             ;;
     esac
@@ -79,7 +79,7 @@ LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
 if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
     print_error "No existing lab deployment found."
     print_info "Cannot rebuild without an existing configuration."
-    print_info "Run 'tux2lab deploy-lab' to create a new lab from scratch."
+    print_info "Run 'tux2lab deploy' to create a new lab from scratch."
     exit 1
 fi
 
@@ -152,16 +152,16 @@ fi
 
 echo
 if $clean_state; then
-    echo -n "Type REBUILD-LAB-CLEAN-STATE to confirm: "
+    echo -n "Type REBUILD-CLEAN-STATE to confirm: "
     read -r confirmation
-    if [[ "${confirmation}" != "REBUILD-LAB-CLEAN-STATE" ]]; then
+    if [[ "${confirmation}" != "REBUILD-CLEAN-STATE" ]]; then
         print_info "Operation cancelled. Your lab is safe."
         exit 0
     fi
 else
-    echo -n "Type REBUILD-LAB to confirm: "
+    echo -n "Type REBUILD to confirm: "
     read -r confirmation
-    if [[ "${confirmation}" != "REBUILD-LAB" ]]; then
+    if [[ "${confirmation}" != "REBUILD" ]]; then
         print_info "Operation cancelled. Your lab is safe."
         exit 0
     fi

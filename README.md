@@ -142,7 +142,7 @@ The ISO is used as the install medium for the infra server VM.
 ### Step 4 — Deploy the Lab Infrastructure Server
 
 ```bash
-tux2lab deploy-lab
+tux2lab deploy
 ```
 
 The interactive wizard will guide you through:

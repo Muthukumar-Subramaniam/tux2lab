@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
-# Script Name: destroy-lab.sh                                                            #
+# Script Name: destroy.sh                                                               #
 # Description: Permanently destroy the entire tux2lab environment                        #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
@@ -16,7 +16,7 @@ for arg in "$@"; do
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
-    tux2lab destroy-lab [OPTIONS]
+    tux2lab destroy [OPTIONS]
 
 DESCRIPTION:
     Permanently destroys the entire tux2lab environment, including:
@@ -29,7 +29,7 @@ DESCRIPTION:
 
     Downloaded ISO files are preserved by default.
 
-    After destruction, run 'tux2lab deploy-lab' to create a new lab.
+    After destruction, run 'tux2lab deploy' to create a new lab.
 
 OPTIONS:
     --wipe-iso-files-too    Also delete downloaded ISO files
@@ -43,7 +43,7 @@ OPTIONS:
             ;;
         *)
             print_error "Unknown argument: $arg"
-            echo "Run 'tux2lab destroy-lab --help' for usage information."
+            echo "Run 'tux2lab destroy --help' for usage information."
             exit 1
             ;;
     esac
@@ -312,7 +312,7 @@ if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
     print_info "ISO files preserved at /tux2lab-data/iso-files/"
 fi
 echo
-print_info "To create a new lab, run: tux2lab deploy-lab"
+print_info "To create a new lab, run: tux2lab deploy"
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
 exit 0

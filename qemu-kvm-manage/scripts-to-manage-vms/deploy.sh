@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
-# Script Name: deploy-lab.sh                                                             #
+# Script Name: deploy.sh                                                                #
 # Description: Deploy a new lab infrastructure server                                    #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
@@ -12,7 +12,7 @@ source /tux2lab/common-utils/color-functions.sh
 # ====== HELP ======
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     print_cyan "USAGE:
-    tux2lab deploy-lab
+    tux2lab deploy
 
 DESCRIPTION:
     Deploy a new lab infrastructure server. This is the starting point
@@ -31,7 +31,7 @@ fi
 
 if [[ $# -gt 0 ]]; then
     print_error "Unknown argument: $1"
-    echo "Run 'tux2lab deploy-lab --help' for usage information."
+    echo "Run 'tux2lab deploy --help' for usage information."
     exit 1
 fi
 

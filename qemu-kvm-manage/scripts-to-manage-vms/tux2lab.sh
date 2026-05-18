@@ -48,9 +48,9 @@ LAB OPERATIONS:
     health           Check lab infrastructure health
 
 LAB LIFECYCLE:
-    deploy-lab       Deploy a new lab infrastructure server
-    destroy-lab      Permanently destroy the entire lab environment
-    rebuild-lab      Tear down and redeploy lab using existing config
+    deploy           Deploy a new lab infrastructure server
+    destroy          Permanently destroy the entire lab environment
+    rebuild          Tear down and redeploy lab using existing config
 
 OPTIONS:
     -h, --help       Show this help message
@@ -105,14 +105,14 @@ main() {
         dns)
             exec "$SCRIPT_DIR/dns.sh" "$@"
             ;;
-        deploy-lab)
-            exec "$SCRIPT_DIR/deploy-lab.sh" "$@"
+        deploy)
+            exec "$SCRIPT_DIR/deploy.sh" "$@"
             ;;
-        destroy-lab)
-            exec "$SCRIPT_DIR/destroy-lab.sh" "$@"
+        destroy)
+            exec "$SCRIPT_DIR/destroy.sh" "$@"
             ;;
-        rebuild-lab)
-            exec "$SCRIPT_DIR/rebuild-lab.sh" "$@"
+        rebuild)
+            exec "$SCRIPT_DIR/rebuild.sh" "$@"
             ;;
         ipv6-route)
             exec "$SCRIPT_DIR/ipv6-route.sh" "$@"
