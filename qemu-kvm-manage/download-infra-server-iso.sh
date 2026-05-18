@@ -108,15 +108,15 @@ fn_extract_expected_hash() {
     # Fallback for 'latest' symlinks: mirrors list the real dated filename
     # e.g., URL has "CentOS-Stream-10-latest-x86_64-dvd1.iso" but checksum has "CentOS-Stream-10-20260513.0-x86_64-dvd1.iso"
     if [[ -z "$expected_hash" && "$iso_name" == *"latest"* ]]; then
-        local pattern="${iso_name//latest/[0-9][^ )]*}"
+        local pattern="${iso_name//latest/[A-Za-z0-9][^ )]*}"
         expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -E "$pattern" | awk -F'= ' '{print $2}' | tr -d '[:space:]' | head -1) || true
         if [[ -z "$expected_hash" ]]; then
             expected_hash=$(grep -E "$pattern" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
         fi
     fi
     if [[ -z "$expected_hash" ]]; then
-        print_error "Could not find SHA256 checksum for ${iso_name} in CHECKSUM file."
-        print_info "The CHECKSUM file format may have changed. Please verify manually."
+        print_error "Could not find SHA256 checksum for ${iso_name} in CHECKSUM file." >&2
+        print_info "The CHECKSUM file format may have changed. Please verify manually." >&2
         return 1
     fi
     echo "$expected_hash"
@@ -268,9 +268,16 @@ sudo chown -R "$USER":"$(id -g)" "${ISO_DIR}"
 
 # Download and verify checksum if available
 has_checksum=false
+# Use the real filename from the download URL for checksum lookup
+# (e.g., OracleLinux-R10-U1-x86_64-dvd.iso vs the generic ISO_FILENAMES "latest" entry)
+local_checksum_lookup_name="$ISO_NAME"
+if [[ -n "${ISO_URL:-}" ]]; then
+    local_checksum_lookup_name=$(basename "$ISO_URL")
+fi
+
 if [[ -n "$CHECKSUM_URL" ]]; then
     if fn_download_checksum "$CHECKSUM_URL" "$CHECKSUM_FILE"; then
-        EXPECTED_HASH=$(fn_extract_expected_hash "$ISO_NAME" "$CHECKSUM_FILE") || true
+        EXPECTED_HASH=$(fn_extract_expected_hash "$local_checksum_lookup_name" "$CHECKSUM_FILE") || true
         if [[ -n "${EXPECTED_HASH:-}" ]]; then
             has_checksum=true
         else

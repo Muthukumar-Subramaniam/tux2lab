@@ -189,11 +189,12 @@ fi
 
 # ====== STEP 4: STOP HOST-MODE LAB SERVICES (IF APPLICABLE) ======
 if $lab_infra_server_mode_is_host; then
-    print_info "Stopping host-mode lab services..."
+    print_info "Stopping and disabling host-mode lab services..."
     host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
     for service_name in "${host_services[@]}"; do
-        print_task "Stopping ${service_name}..."
-        if sudo systemctl stop "$service_name" 2>/dev/null; then
+        print_task "Stopping and disabling ${service_name}..."
+        sudo systemctl stop "$service_name" 2>/dev/null || true
+        if sudo systemctl disable "$service_name" 2>/dev/null; then
             print_task_done
             ((++completed_steps))
         else
