@@ -17,8 +17,8 @@ server {
     listen [{{ ansible_facts.env.dnsbinder_server_ipv6_address }}]:443 ssl;
     server_name {{ ansible_facts.env.dnsbinder_server_fqdn }};
 
-    ssl_certificate /etc/pki/tls/certs/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.crt;
-    ssl_certificate_key /etc/pki/tls/private/{{ ansible_facts.env.dnsbinder_server_fqdn }}-nginx-selfsigned.key;
+    ssl_certificate /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt;
+    ssl_certificate_key /etc/pki/tls/private/tux2lab-nginx-selfsigned.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
     ssl_prefer_server_ciphers on;

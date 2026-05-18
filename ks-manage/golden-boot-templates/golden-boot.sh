@@ -410,7 +410,7 @@ log "Installation timestamp: $(cat /etc/bigbang)"
 log "Downloading self-signed SSL certificate from lab infrastructure server"
 case "${DISTRO_FAMILY}" in
 	redhat)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/get_lab_infra_server_hostname-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-trust
 			log "SSL certificate installed and CA trust updated (RedHat)"
 		else
@@ -418,7 +418,7 @@ case "${DISTRO_FAMILY}" in
 		fi
 		;;
 	debian)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt" -o /usr/local/share/ca-certificates/get_lab_infra_server_hostname-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt; then
 			update-ca-certificates
 			log "SSL certificate installed and CA certificates updated (Debian/Ubuntu)"
 		else
@@ -426,7 +426,7 @@ case "${DISTRO_FAMILY}" in
 		fi
 		;;
 	opensuse)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/get_lab_infra_server_hostname-nginx-selfsigned.crt" -o /etc/pki/trust/anchors/get_lab_infra_server_hostname-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-certificates
 			log "SSL certificate installed and CA certificates updated (OpenSUSE)"
 		else

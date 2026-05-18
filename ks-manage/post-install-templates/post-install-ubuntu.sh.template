@@ -85,7 +85,7 @@ echo "get_mgmt_super_user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/get_mgmt_supe
 ######################################################################
 # 5. CA certificate
 ######################################################################
-cat > /usr/local/share/ca-certificates/get_lab_infra_server_hostname-nginx-selfsigned.crt << 'EMBED_EOF'
+cat > /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt << 'EMBED_EOF'
 EMBED_CONTENT:ca-cert
 EMBED_EOF
 update-ca-certificates || true

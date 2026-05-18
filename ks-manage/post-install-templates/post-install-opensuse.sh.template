@@ -89,7 +89,7 @@ EMBED_EOF
 ######################################################################
 # 8. CA certificate
 ######################################################################
-cat > /etc/pki/trust/anchors/get_lab_infra_server_hostname-nginx-selfsigned.crt << 'EMBED_EOF'
+cat > /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt << 'EMBED_EOF'
 EMBED_CONTENT:ca-cert
 EMBED_EOF
 /usr/sbin/update-ca-certificates || true
