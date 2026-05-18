@@ -485,7 +485,7 @@ fn_setup_distro() {
         sudo cp /tux2lab/common-utils/tux2lab-iso-mounts.service /etc/systemd/system/
         sudo chmod 644 /etc/systemd/system/tux2lab-iso-mounts.service
         sudo systemctl daemon-reload
-        sudo systemctl enable tux2lab-iso-mounts.service
+        sudo systemctl enable tux2lab-iso-mounts.service &>/dev/null
         print_task_done
     fi
 
