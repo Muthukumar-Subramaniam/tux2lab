@@ -133,8 +133,7 @@ This script:
 > Skip this step if you plan to deploy in **Host mode**.
 
 ```bash
-tux2lab distro download-infra-iso              # AlmaLinux (default)
-tux2lab distro download-infra-iso rocky        # Rocky Linux
+tux2lab distro download-infra-iso
 ```
 
 Downloads the ISO, fetches the checksum, and verifies integrity via SHA256.
@@ -143,7 +142,7 @@ The ISO is used as the install medium for the infra server VM.
 ### Step 4 — Deploy the Lab Infrastructure Server
 
 ```bash
-./deploy-lab-infra-server.sh
+tux2lab deploy-lab
 ```
 
 The interactive wizard will guide you through:
@@ -156,9 +155,9 @@ The interactive wizard will guide you through:
 
 1. A kickstart file is generated from your inputs
 2. `virt-install` creates and boots the infra server VM
-3. AlmaLinux installs unattended via kickstart
-4. First reboot — SSH keys, network normalization
-5. Ansible playbook configures all lab services (DNS, DHCP, PXE, NFS, nginx, etc.)
+3. AlmaLinux installs unattended via kickstart (SSH keys, network, local repo configured in `%post`)
+4. First reboot → bootstrap service clones tux2lab repo and runs Ansible
+5. Ansible configures all lab services (DNS, DHCP, PXE, NFS, nginx, etc.)
 6. Second reboot — lab is ready
 7. Press `Ctrl + ]` to exit the console when you see the login prompt
 
