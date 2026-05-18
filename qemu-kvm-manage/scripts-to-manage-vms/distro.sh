@@ -21,7 +21,7 @@ SUBCOMMANDS:
     list                            List all distros with readiness status
     setup [distro --version|-v ver]    Setup a distro for PXE provisioning
     cleanup [distro --version|-v ver]  Remove a distro's PXE provisioning setup
-    download-infra-iso [distro]     Download ISO for the infra server VM
+    download-infra-iso [distro]     Download ISO for the infra server (VM mode only, one-time)
 
 OPTIONS:
     -h, --help                      Show this help message

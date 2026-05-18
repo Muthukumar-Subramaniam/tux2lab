@@ -25,7 +25,7 @@ DESCRIPTION:
 
     Prerequisites:
     - QEMU/KVM must be set up first (run setup-qemu-kvm.sh)
-    - For VM mode: download the infra server ISO (tux2lab download-infra-iso)"
+    - For VM mode: download the infra server ISO (tux2lab distro download-infra-iso)"
     exit 0
 fi
 

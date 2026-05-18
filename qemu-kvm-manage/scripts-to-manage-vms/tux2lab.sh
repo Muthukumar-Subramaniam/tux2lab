@@ -51,7 +51,6 @@ LAB LIFECYCLE:
     deploy-lab       Deploy a new lab infrastructure server
     destroy-lab      Permanently destroy the entire lab environment
     rebuild-lab      Tear down and redeploy lab using existing config
-    download-infra-iso  Download and verify infra server ISO
 
 OPTIONS:
     -h, --help       Show this help message
@@ -114,9 +113,6 @@ main() {
             ;;
         rebuild-lab)
             exec "$SCRIPT_DIR/rebuild-lab.sh" "$@"
-            ;;
-        download-infra-iso)
-            exec "$SCRIPT_DIR/download-infra-iso.sh" "$@"
             ;;
         ipv6-route)
             exec "$SCRIPT_DIR/ipv6-route.sh" "$@"

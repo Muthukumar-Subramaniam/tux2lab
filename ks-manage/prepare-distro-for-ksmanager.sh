@@ -136,6 +136,7 @@ if [[ "${1:-}" == "--download-infra-iso" ]]; then
                 print_cyan "Usage: tux2lab distro download-infra-iso [distro]
 
 Download and verify version ${INFRA_SERVER_VERSION} ISO for the lab infra server.
+Applicable only to VM mode of infra server deployment (one-time task).
 
 Supported distros (RHEL-based only):
   almalinux        AlmaLinux (default)
