@@ -423,6 +423,17 @@ fn_setup_distro() {
             sudo rm -f "$iso_path"
             exit 1
         fi
+
+        # Sanity check: an ISO must be at least 100MB
+        downloaded_size=$(stat --format='%s' "$iso_path" 2>/dev/null || echo 0)
+        if (( downloaded_size < 104857600 )); then
+            print_error "Downloaded file is only $(( downloaded_size / 1024 )) KB — clearly not a valid ISO."
+            print_info "This usually means the URL requires authentication (e.g., Red Hat SSO)."
+            print_info "Download the ISO manually and place it at: ${iso_path}"
+            sudo rm -f "$iso_path"
+            exit 1
+        fi
+
         sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$iso_path"
         print_success "Download complete."
 

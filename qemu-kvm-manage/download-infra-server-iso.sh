@@ -327,6 +327,16 @@ if ! wget --continue --output-document="$ISO_PATH" "$ISO_URL"; then
     exit 1
 fi
 
+# Sanity check: an ISO must be at least 100MB
+downloaded_size=$(stat --format='%s' "$ISO_PATH" 2>/dev/null || echo 0)
+if (( downloaded_size < 104857600 )); then
+    print_error "Downloaded file is only $(( downloaded_size / 1024 )) KB — clearly not a valid ISO."
+    print_info "This usually means the URL requires authentication (e.g., Red Hat SSO)."
+    print_info "Download the ISO in a browser and place it at: ${ISO_PATH}"
+    rm -f "$ISO_PATH"
+    exit 1
+fi
+
 print_success "ISO downloaded successfully!"
 print_info "ISO File Path: ${ISO_PATH}"
 
