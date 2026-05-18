@@ -13,6 +13,14 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
+# Verify KVM kernel module is loaded (hardware virtualization must be enabled in BIOS/UEFI)
+if ! lsmod | grep -q '^kvm'; then
+    print_error "KVM kernel module is not loaded."
+    print_info "Hardware virtualization (VT-x/AMD-V) must be enabled in your BIOS/UEFI settings."
+    print_info "After enabling it, reboot and verify with: lsmod | grep kvm"
+    exit 1
+fi
+
 print_warning "This script will configure QEMU/KVM virtualization environment on this system."
 print_info "The following actions will be performed:
   - Grant passwordless sudo privileges to user '$USER'
