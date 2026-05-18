@@ -24,7 +24,7 @@ of creating something of my own and sharing it with anyone with similar interest
 
 - Automated VM provisioning via PXE boot & golden images
 - Dynamic DNS management for your local domain
-- Full infrastructure-as-code automation (Ansible)
+- Configuration management via Ansible
 - Complete VM lifecycle management — deploy, resize, snapshot, destroy
 - Multi-distribution support across Red Hat, Debian, and SUSE families
 - Dual-stack networking (IPv4 + IPv6) out of the box
