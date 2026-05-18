@@ -320,14 +320,13 @@ fn_get_iso_url() {
             url_basename=$(basename "${iso_url%%\?*}")
             if [[ "$url_basename" != *dvd* ]]; then
                 print_error "The URL points to '${url_basename}' which is not a DVD ISO."
-                print_info "The infra server requires a full DVD ISO (filename must contain 'dvd')."
+                print_info "A full DVD ISO is required (filename must contain 'dvd')."
                 print_info "Boot and minimal ISOs do not contain the packages needed for installation."
                 exit 1
             fi
             if [[ "$url_basename" != rhel-${version}* ]]; then
                 print_error "The URL points to '${url_basename}' which does not match RHEL ${version}."
-                print_info "The infra server VM must be deployed with RHEL ${version}."
-                print_info "Guest VMs support multiple versions via 'tux2lab distro', but the infra server is RHEL ${version} only."
+                print_info "You selected RHEL ${version}, but the URL points to a different version."
                 print_info "Expected a filename starting with 'rhel-${version}' (e.g., rhel-${version}.1-x86_64-dvd.iso)."
                 exit 1
             fi
