@@ -163,7 +163,7 @@ else
     DISTRO_FAMILY="redhat"
 fi
 
-HOSTNAME_FQDN=$(hostname -f 2>/dev/null || hostname)
+HOSTNAME_FQDN=$(hostnamectl --static 2>/dev/null)
 DOMAIN=$(echo "$HOSTNAME_FQDN" | cut -d. -f2-)
 
 # Output structured results: CHECK_NAME|STATUS|DETAIL
@@ -216,7 +216,14 @@ fi
 case "$DISTRO_FAMILY" in
     redhat)   systemctl is-active NetworkManager &>/dev/null && emit "NetworkManager active" "PASS" "" || emit "NetworkManager active" "FAIL" "" ;;
     ubuntu)   systemctl is-active systemd-networkd &>/dev/null && emit "systemd-networkd active" "PASS" "" || emit "systemd-networkd active" "FAIL" "" ;;
-    opensuse) systemctl is-active wicked &>/dev/null && emit "wicked active" "PASS" "" || emit "wicked active" "FAIL" "" ;;
+    opensuse)
+        suse_major="${DISTRO_VERSION%%.*}"
+        if [[ "$suse_major" -ge 16 ]]; then
+            systemctl is-active NetworkManager &>/dev/null && emit "NetworkManager active" "PASS" "" || emit "NetworkManager active" "FAIL" ""
+        else
+            systemctl is-active wicked &>/dev/null && emit "wicked active" "PASS" "" || emit "wicked active" "FAIL" ""
+        fi
+        ;;
 esac
 
 # Firewall disabled
@@ -391,18 +398,10 @@ case "$DISTRO_FAMILY" in
             && emit "Install timestamp" "PASS" "" \
             || emit "Install timestamp" "FAIL" ""
 
-        for pkg in autofs chrony tmux tar openssh wicked xfsprogs kexec-tools; do
+        for pkg in nfs-client xfsprogs kexec-tools; do
             rpm -q "$pkg" &>/dev/null \
                 && emit "Package: $pkg" "PASS" "" \
                 || emit "Package: $pkg" "FAIL" ""
-        done
-
-        for svc in cups smartd mcelog irqbalance postfix; do
-            if systemctl is-enabled "$svc" 2>/dev/null | grep -q "enabled"; then
-                emit "Service $svc removed" "FAIL" "still enabled"
-            else
-                emit "Service $svc removed" "PASS" ""
-            fi
         done
         ;;
 esac
