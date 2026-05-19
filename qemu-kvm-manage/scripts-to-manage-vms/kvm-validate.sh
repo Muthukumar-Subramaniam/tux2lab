@@ -90,6 +90,14 @@ if [[ -n "$hosts_list" ]]; then
     if ! validate_and_process_hostnames hosts_array; then
         exit 1
     fi
+    # Reject the lab infra server — it has a different validation path
+    for vm_candidate in "${VALIDATED_HOSTS[@]}"; do
+        if [[ "$vm_candidate" == "$lab_infra_server_hostname" ]]; then
+            print_error "Cannot validate the lab infra server with this command."
+            print_info "Use 'tux2lab health' to check lab infrastructure services."
+            exit 1
+        fi
+    done
     target_vms=("${VALIDATED_HOSTS[@]}")
 else
     # All running VMs
