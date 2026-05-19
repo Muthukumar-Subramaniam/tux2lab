@@ -44,7 +44,7 @@ do_mount() {
 
         mkdir -p "$mount_dir"
 
-        if mount -o loop,ro "$iso_path" "$mount_dir"; then
+        if mount -o loop,ro "$iso_path" "$mount_dir" 2>/dev/null; then
             log "MOUNTED: ${iso_path} → ${mount_dir}"
             (( count++ ))
         else

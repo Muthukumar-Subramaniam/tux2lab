@@ -885,7 +885,7 @@ fn_setup_distro() {
     # Mount ISO
     if ! mountpoint -q "$mount_dir"; then
         print_task "Mounting ISO to ${mount_dir}..."
-        if ! sudo mount -o loop,ro "$iso_path" "$mount_dir"; then
+        if ! sudo mount -o loop,ro "$iso_path" "$mount_dir" 2>/dev/null; then
             print_task_fail
             print_error "Failed to mount ISO at ${mount_dir}. Cleaning up..."
             sudo sed -i "\|${iso_file}.*${distro}.*${version}|d" "$ISO_MOUNTS_CONF"
