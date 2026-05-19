@@ -66,8 +66,8 @@ golden_image_list() {
         return 0
     fi
 
-    printf "\n  %-20s %-12s %-22s %-30s\n" "DISTRO" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
-    printf "  %-20s %-12s %-22s %-30s\n" "------" "-------" "---------------------" "-------"
+    printf "\n  %-28s %-12s %-22s %-30s\n" "DISTRO" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
+    printf "  %-28s %-12s %-22s %-30s\n" "------" "-------" "---------------------" "-------"
 
     for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
         local filename
@@ -99,7 +99,7 @@ golden_image_list() {
         created=$(stat -c '%y' "$qcow2_file" 2>/dev/null | cut -d'.' -f1)
         created="${created:-unknown}"
 
-        printf "  %-20s %-12s %-22s %-30s\n" "$display_name" "$version" "$size" "$created"
+        printf "  %-28s %-12s %-22s %-30s\n" "$display_name" "$version" "$size" "$created"
     done
     echo
 }
