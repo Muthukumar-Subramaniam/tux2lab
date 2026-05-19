@@ -200,13 +200,13 @@ DAD_VAL=$(sysctl -n net.ipv6.conf.all.accept_dad 2>/dev/null)
 [[ "$DAD_VAL" == "0" ]] && emit "IPv6 DAD disabled" "PASS" "" || emit "IPv6 DAD disabled" "WARN" "value=$DAD_VAL"
 
 # Real connectivity: ping the lab infra server (IPv4 + IPv6)
-if ping -c 1 -W 2 "$LAB_INFRA_SERVER" &>/dev/null; then
+if timeout 3 ping -c 1 "$LAB_INFRA_SERVER" &>/dev/null; then
     emit "Ping infra server (IPv4)" "PASS" ""
 else
     emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
 fi
 
-if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
+if timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
     emit "Ping infra server (IPv6)" "PASS" ""
 else
     emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
@@ -271,12 +271,17 @@ systemctl is-active autofs &>/dev/null && emit "autofs active" "PASS" "" || emit
 # --- NFS Automounts (real mount test) ---
 for mnt in /tux2lab /tux2lab-data /lab-share; do
     if [[ -d "$mnt" ]]; then
-        ls "$mnt/" &>/dev/null
-        sleep 0.5
         if mountpoint -q "$mnt" 2>/dev/null; then
             emit "NFS $mnt" "PASS" "mounted"
         else
-            emit "NFS $mnt" "FAIL" "dir exists but not mounting"
+            # Not mounted yet — trigger autofs and recheck
+            timeout 5 stat "$mnt/" &>/dev/null 2>&1
+            sleep 1
+            if mountpoint -q "$mnt" 2>/dev/null; then
+                emit "NFS $mnt" "PASS" "mounted"
+            else
+                emit "NFS $mnt" "FAIL" "dir exists but not mounting"
+            fi
         fi
     else
         emit "NFS $mnt" "FAIL" "directory missing"
