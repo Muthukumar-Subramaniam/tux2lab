@@ -206,7 +206,7 @@ else
     emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
 fi
 
-if ping6 -c 1 -W 2 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || ping -6 -c 1 -W 2 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
+if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
     emit "Ping infra server (IPv6)" "PASS" ""
 else
     emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
