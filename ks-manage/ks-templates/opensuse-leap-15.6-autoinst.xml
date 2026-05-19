@@ -178,14 +178,9 @@
       <package>xfsprogs</package>
       <package>wicked</package>
       <package>shim</package>
-      <package>os-prober</package>
       <package>openssh</package>
       <package>openSUSE-release</package>
-      <package>nvme-cli</package>
-      <package>numactl</package>
-      <package>mokutil</package>
       <package>kexec-tools</package>
-      <package>irqbalance</package>
       <package>grub2-x86_64-efi</package>
       <package>glibc</package>
       <package>dosfstools</package>
@@ -193,7 +188,6 @@
       <package>autoyast2</package>
       <package>tmux</package>
       <package>tar</package>
-      <package>samba-client</package>
       <package>autofs</package>
       <package>python311</package>
     </packages>
