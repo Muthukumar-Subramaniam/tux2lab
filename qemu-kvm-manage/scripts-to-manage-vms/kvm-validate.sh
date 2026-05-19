@@ -330,7 +330,7 @@ fi
 
 # --- Timezone ---
 TZ=$(timedatectl show --property=Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo "unknown")
-[[ "$TZ" == "UTC" ]] && emit "Timezone UTC" "PASS" "" || emit "Timezone UTC" "FAIL" "$TZ"
+[[ "$TZ" == "UTC" || "$TZ" == "Etc/UTC" ]] && emit "Timezone UTC" "PASS" "" || emit "Timezone UTC" "FAIL" "$TZ"
 
 # --- Shell customization ---
 [[ -s "/etc/motd" ]] && emit "Motd" "PASS" "" || emit "Motd" "FAIL" ""
