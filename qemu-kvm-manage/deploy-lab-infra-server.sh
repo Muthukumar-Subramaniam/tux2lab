@@ -977,8 +977,8 @@ deploy_lab_infra_server_host() {
     print_info "Installing required packages on host via dnf..."
 
     REQUIRED_PACKAGES=(
-        bash-completion vim git bind-utils bind wget tar net-tools cifs-utils zip
-        tftp-server tftp kea kea-hooks radvd nginx nginx-mod-stream openssl tmux
+        bash-completion vim git bind-utils bind wget tar cifs-utils
+        tftp-server kea kea-hooks radvd nginx nginx-mod-stream openssl tmux
         rsync sysstat tcpdump traceroute nc samba-client lsof nfs-utils
         nmap tuned tree yum-utils python3-pip python3-cryptography
     )
