@@ -69,7 +69,6 @@
       "sw_management"
     ],
     "packages": [
-      "autofs",
       "nfs-client"
     ]
   },

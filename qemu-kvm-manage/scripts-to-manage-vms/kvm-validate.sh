@@ -266,33 +266,6 @@ else
     emit "NTP synchronized" "WARN" "may still be syncing"
 fi
 
-systemctl is-active autofs &>/dev/null && emit "autofs active" "PASS" "" || emit "autofs active" "FAIL" ""
-
-# --- NFS Automounts (real mount test) ---
-for mnt in /tux2lab /tux2lab-data /lab-share; do
-    if [[ -d "$mnt" ]]; then
-        if mountpoint -q "$mnt" 2>/dev/null; then
-            emit "NFS $mnt" "PASS" "mounted"
-        else
-            # Not mounted yet — trigger autofs and recheck
-            timeout 5 stat "$mnt/" &>/dev/null 2>&1
-            sleep 1
-            if mountpoint -q "$mnt" 2>/dev/null; then
-                emit "NFS $mnt" "PASS" "mounted"
-            else
-                emit "NFS $mnt" "FAIL" "dir exists but not mounting"
-            fi
-        fi
-    else
-        emit "NFS $mnt" "FAIL" "directory missing"
-    fi
-done
-
-# Autofs map file
-LOCAL_LAB_INFO=$(echo "$DOMAIN" | sed 's/\./-/g')
-AUTOFS_MAP="/etc/auto.master.d/auto-${LOCAL_LAB_INFO}"
-[[ -f "$AUTOFS_MAP" ]] && emit "Autofs map file" "PASS" "$AUTOFS_MAP" || emit "Autofs map file" "FAIL" "$AUTOFS_MAP"
-
 # --- User & Auth ---
 MGMT_USER=$(ls /etc/sudoers.d/ 2>/dev/null | grep -v README | head -1)
 [[ -z "$MGMT_USER" ]] && MGMT_USER="unknown"
@@ -392,7 +365,7 @@ case "$DISTRO_FAMILY" in
             && emit "Netplan eth0 config" "PASS" "" \
             || emit "Netplan eth0 config" "FAIL" ""
 
-        for pkg in chrony autofs nfs-common vim tmux kexec-tools; do
+        for pkg in chrony nfs-common vim tmux kexec-tools; do
             dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" \
                 && emit "Package: $pkg" "PASS" "" \
                 || emit "Package: $pkg" "FAIL" ""
@@ -500,8 +473,7 @@ fn_validate_vm() {
             FQDN*|DNS*)                    section="Identity" ;;
             eth0*|IPv*|*route*|*DAD*|*Manager*|*networkd*|wicked*|Firewall*) section="Networking" ;;
             Root*|EFI*)                    section="Filesystem" ;;
-            SSH\ active|Chrony*|NTP*|autofs*) section="Services" ;;
-            NFS*|Autofs\ map*)             section="NFS Automounts" ;;
+            SSH\ active|Chrony*|NTP*)   section="Services" ;;
             Mgmt*|Sudo*|SSH\ auth*|SSH\ priv*|Root\ SSH*|SSH\ client*) section="User & Auth" ;;
             CA*)                           section="CA Certificate" ;;
             Timezone*)                     section="Timezone" ;;

@@ -38,7 +38,7 @@ fi
 apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
-    rsync netcat-openbsd lsof autofs
+    rsync netcat-openbsd lsof
 apt-get remove -y lvm2 && apt-get autoremove -y
 
 ######################################################################
@@ -153,21 +153,7 @@ Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access
 EOF
 
 ######################################################################
-# 11. NFS automounts (autofs)
-######################################################################
-local_lab_info=$(echo 'get_ipv4_domain' | sed "s/\./-/g")
-ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
-mkdir -p /tux2lab /lab-share /tux2lab-data
-sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
-echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
-cat << EOF > /etc/auto.master.d/auto-${local_lab_info}
-/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab
-/tux2lab-data -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data
-/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share
-EOF
-
-######################################################################
-# 12. kexec fast reboot
+# 11. kexec fast reboot
 ######################################################################
 echo "tux2lab post-install completed: $(date)"
 kexec -l /boot/vmlinuz --initrd=/boot/initrd.img --command-line="$(cat /proc/cmdline)" && systemctl kexec

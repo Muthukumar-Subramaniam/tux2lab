@@ -181,7 +181,6 @@
       <package>autoyast2</package>
       <package>tmux</package>
       <package>tar</package>
-      <package>autofs</package>
       <package>python311</package>
     </packages>
     <patterns t="list">

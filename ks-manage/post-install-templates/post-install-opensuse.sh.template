@@ -116,7 +116,6 @@ EOF
 ######################################################################
 systemctl disable firewalld 2>/dev/null || true
 systemctl disable kdump 2>/dev/null || true
-systemctl enable autofs
 systemctl enable sshd
 systemctl enable chronyd
 
@@ -127,20 +126,7 @@ systemctl enable chronyd
 /usr/bin/rm -f /etc/chrony.d/pool.conf
 
 ######################################################################
-# 13. NFS automounts (autofs)
-######################################################################
-local_lab_info=$(/usr/bin/echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
-/usr/bin/mkdir -p /tux2lab /lab-share /tux2lab-data
-/usr/bin/sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
-/usr/bin/echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
-cat << EOF > /etc/auto.master.d/auto-${local_lab_info}
-/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab
-/tux2lab-data -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data
-/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share
-EOF
-
-######################################################################
-# 14. Golden image setup (conditional)
+# 13. Golden image setup (conditional)
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 

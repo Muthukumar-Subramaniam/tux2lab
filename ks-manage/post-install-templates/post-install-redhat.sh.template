@@ -177,31 +177,18 @@ if [[ "get_redhat_based_distro_name" == "rhel" ]]; then
 fi
 
 ######################################################################
-# 12. NFS automounts (autofs)
-######################################################################
-/usr/bin/ln -s /usr/lib/systemd/system/autofs.service /etc/systemd/system/multi-user.target.wants/autofs.service
-/usr/bin/mkdir -p /tux2lab /lab-share /tux2lab-data
-/usr/bin/sed -i 's/^[[:space:]]*#\+[[:space:]]*\(+dir:\/etc\/auto\.master\.d\)/\1/' /etc/auto.master
-/usr/bin/echo "/- /etc/auto.master.d/auto-${local_lab_info}" > /etc/auto.master.d/direct.autofs
-/usr/bin/cat << EOF > /etc/auto.master.d/auto-${local_lab_info}
-/tux2lab -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab
-/tux2lab-data -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/tux2lab-data
-/lab-share -fstype=nfs,soft,timeo=5,retrans=2 get_lab_infra_server_hostname:/lab-share
-EOF
-
-######################################################################
-# 13. systemd-resolved
+# 12. systemd-resolved
 ######################################################################
 /usr/bin/systemctl enable systemd-resolved.service
 /usr/bin/ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 
 ######################################################################
-# 14. Mask dnf-makecache
+# 13. Mask dnf-makecache
 ######################################################################
 /usr/bin/systemctl mask dnf-makecache.timer dnf-makecache.service
 
 ######################################################################
-# 15. Installation timestamp
+# 14. Installation timestamp
 ######################################################################
 /usr/bin/date '+%Y-%m-%d %H:%M:%S %Z' > /etc/bigbang
 

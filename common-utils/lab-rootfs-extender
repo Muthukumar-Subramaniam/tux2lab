@@ -6,13 +6,28 @@
 # lab-rootfs-extender
 # Usage:
 #   ./lab-rootfs-extender [remote-host/localhost]
+# This script is self-contained — no NFS or external file dependencies.
 
-source /tux2lab/common-utils/color-functions.sh
 set -euo pipefail
+
+# --- Inline color functions ---
+MAKE_IT_RED='\033[0;31m'
+MAKE_IT_GREEN='\033[0;32m'
+MAKE_IT_YELLOW='\033[0;33m'
+MAKE_IT_CYAN='\033[0;36m'
+MAKE_IT_MAGENTA='\033[0;35m'
+RESET_COLOR='\033[0m'
+
+print_error()     { echo -e "${MAKE_IT_RED}[ERROR] ${1}${RESET_COLOR}"; }
+print_info()      { echo -e "${MAKE_IT_MAGENTA}[INFO] ${1}${RESET_COLOR}"; }
+print_warning()   { echo -e "${MAKE_IT_YELLOW}[WARN] ${1}${RESET_COLOR}"; }
+print_task()      { echo -ne "${MAKE_IT_CYAN}[TASK] ${1}${RESET_COLOR}"; }
+print_task_done() { echo -e " ${MAKE_IT_GREEN}[DONE]${RESET_COLOR}"; }
+print_task_fail() { echo -e " ${MAKE_IT_RED}[FAIL]${RESET_COLOR}"; }
+print_task_skip() { echo -e " ${MAKE_IT_YELLOW}[SKIP]${RESET_COLOR}"; }
 
 # --- Config ---
 SSH_OPTS=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
-SCRIPT_LOCATION="/tux2lab/common-utils/lab-rootfs-extender"
 
 # ----------------------
 # Prompt for hostname if not passed
@@ -26,6 +41,7 @@ fi
 
 # ----------------------
 # Remote execution logic
+# Pipes this script to the remote host via SSH (no NFS dependency on remote)
 # ----------------------
 if [[ "$REMOTE_HOST" != "localhost" ]]; then
     print_task "Checking SSH connectivity to $REMOTE_HOST..."
@@ -36,7 +52,7 @@ if [[ "$REMOTE_HOST" != "localhost" ]]; then
     fi
     print_task_done
 
-    ssh "${SSH_OPTS[@]}" -t "$REMOTE_HOST" "sudo bash $SCRIPT_LOCATION localhost"
+    ssh "${SSH_OPTS[@]}" -t "$REMOTE_HOST" "sudo bash -s -- localhost" < "${BASH_SOURCE[0]}"
     exit $?
 fi
 
@@ -49,29 +65,39 @@ print_info "Root filesystem size before expansion: $FS_BEFORE"
 # Ensure growpart is installed
 fn_get_growpart() {
     print_task "Checking for growpart utility..."
-    if ! command -v growpart >/dev/null 2>&1; then
-        print_task_skip
-        print_task "Creating binary link from lab infra NFS share..."
-        if ! sudo ln -s /tux2lab/common-utils/growpart /usr/bin/growpart 2>/dev/null; then
-            print_task_fail
-            print_task "Downloading growpart from official repository..."
-            local tmp_growpart
-            tmp_growpart=$(mktemp)
-            if ! curl -fsSL -o "$tmp_growpart" https://raw.githubusercontent.com/canonical/cloud-utils/main/bin/growpart 2>/dev/null; then
-                rm -f "$tmp_growpart"
-                print_task_fail
-                return 1
-            fi
-            sudo mv "$tmp_growpart" /usr/bin/growpart
-            sudo chmod +x /usr/bin/growpart
-            print_task_done
-            return 0
-        fi
+    if command -v growpart >/dev/null 2>&1; then
         print_task_done
         return 0
     fi
-    print_task_done
-    return 0
+    print_task_skip
+
+    # Determine lab infra server hostname from DNS domain
+    local infra_server
+    infra_server=$(hostname -d 2>/dev/null | sed 's/^/tux2lab-infra-server./')
+
+    print_task "Downloading growpart from lab infra server..."
+    local tmp_growpart
+    tmp_growpart=$(mktemp)
+    if [[ -n "$infra_server" ]] && curl -fsSL -o "$tmp_growpart" "http://${infra_server}/tux2lab/common-utils/growpart" 2>/dev/null; then
+        sudo mv "$tmp_growpart" /usr/bin/growpart
+        sudo chmod +x /usr/bin/growpart
+        print_task_done
+        return 0
+    fi
+    rm -f "$tmp_growpart"
+    print_task_fail
+
+    print_task "Downloading growpart from official repository..."
+    tmp_growpart=$(mktemp)
+    if curl -fsSL -o "$tmp_growpart" https://raw.githubusercontent.com/canonical/cloud-utils/main/bin/growpart 2>/dev/null; then
+        sudo mv "$tmp_growpart" /usr/bin/growpart
+        sudo chmod +x /usr/bin/growpart
+        print_task_done
+        return 0
+    fi
+    rm -f "$tmp_growpart"
+    print_task_fail
+    return 1
 }
 
 ROOT_DEV=$(findmnt -n -o SOURCE /)

@@ -1,14 +1,5 @@
 ---
 # tasks file for configure_nfs_service_of_server
-- name: Create /lab-share with necessary ownership and permissions
-  become: true
-  ansible.builtin.file:
-    path: /lab-share
-    state: directory
-    mode: '2770'
-    owner: "{{ ansible_facts.env.mgmt_super_user }}"
-    group: "{{ ansible_facts.env.mgmt_super_user }}"
-
 - name: Create custom exports under /etc/exports
   become: true
   ansible.builtin.template:
