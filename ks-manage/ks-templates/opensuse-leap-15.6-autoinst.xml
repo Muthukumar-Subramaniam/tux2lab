@@ -148,20 +148,16 @@
         <service>klog</service>
         <service>chronyd</service>
         <service>cron</service>
-        <service>cups</service>
         <service>wickedd-auto4</service>
         <service>wickedd-dhcp4</service>
         <service>wickedd-dhcp6</service>
         <service>wickedd-nanny</service>
-        <service>irqbalance</service>
         <service>issue-generator</service>
         <service>kbdsettings</service>
-        <service>mcelog</service>
         <service>wicked</service>
         <service>nscd</service>
         <service>purge-kernels</service>
         <service>rsyslog</service>
-        <service>smartd</service>
         <service>sshd</service>
         <service>systemd-pstore</service>
         <service>systemd-remount-fs</service>
