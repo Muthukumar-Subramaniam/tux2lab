@@ -159,9 +159,6 @@
         <service>mcelog</service>
         <service>wicked</service>
         <service>nscd</service>
-        <service>nvmefc-boot-connections</service>
-        <service>nvmf-autoconnect</service>
-        <service>postfix</service>
         <service>purge-kernels</service>
         <service>rsyslog</service>
         <service>smartd</service>
