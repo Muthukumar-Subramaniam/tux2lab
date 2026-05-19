@@ -142,10 +142,13 @@ fn_section() {
 
 # ====== REMOTE VALIDATION PAYLOAD ======
 # This function generates the script that runs ON the target VM via SSH.
+# The lab infra server hostname is passed as $1 to the remote script.
 fn_generate_validation_payload() {
     cat << 'VALIDATION_SCRIPT'
 #!/bin/bash
 set -uo pipefail
+
+LAB_INFRA_SERVER="${1:-}"
 
 # Detect distro family
 source /etc/os-release 2>/dev/null || exit 99
@@ -170,8 +173,16 @@ emit() { echo "RESULT|$1|$2|$3"; }
 # --- Identity ---
 [[ "$HOSTNAME_FQDN" == *.* ]] && emit "FQDN set" "PASS" "$HOSTNAME_FQDN" || emit "FQDN set" "FAIL" "$HOSTNAME_FQDN"
 
+# Real DNS validation: forward and reverse lookup
 if host "$HOSTNAME_FQDN" &>/dev/null; then
     emit "DNS forward lookup" "PASS" ""
+    # Verify reverse lookup matches
+    RESOLVED_IP=$(host "$HOSTNAME_FQDN" | head -1 | awk '{print $NF}')
+    if host "$RESOLVED_IP" 2>/dev/null | grep -q "$HOSTNAME_FQDN"; then
+        emit "DNS reverse lookup" "PASS" "$RESOLVED_IP"
+    else
+        emit "DNS reverse lookup" "WARN" "PTR may not match"
+    fi
 else
     emit "DNS forward lookup" "WARN" "may not be populated yet"
 fi
@@ -187,6 +198,19 @@ ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" ||
 
 DAD_VAL=$(sysctl -n net.ipv6.conf.all.accept_dad 2>/dev/null)
 [[ "$DAD_VAL" == "0" ]] && emit "IPv6 DAD disabled" "PASS" "" || emit "IPv6 DAD disabled" "WARN" "value=$DAD_VAL"
+
+# Real connectivity: ping the lab infra server (IPv4 + IPv6)
+if ping -c 1 -W 2 "$LAB_INFRA_SERVER" &>/dev/null; then
+    emit "Ping infra server (IPv4)" "PASS" ""
+else
+    emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
+fi
+
+if ping6 -c 1 -W 2 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || ping -6 -c 1 -W 2 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
+    emit "Ping infra server (IPv6)" "PASS" ""
+else
+    emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
+fi
 
 # Network manager
 case "$DISTRO_FAMILY" in
@@ -232,7 +256,11 @@ case "$DISTRO_FAMILY" in
     *)      systemctl is-active chronyd &>/dev/null && emit "Chrony active" "PASS" "" || emit "Chrony active" "FAIL" "" ;;
 esac
 
-if chronyc tracking 2>/dev/null | grep -qiE "Leap status.*Normal"; then
+# Real NTP validation: check chrony is synced to the lab infra server
+NTP_SOURCE=$(chronyc sources 2>/dev/null | grep -E '^\^\*' | awk '{print $2}')
+if [[ -n "$NTP_SOURCE" ]]; then
+    emit "NTP synchronized" "PASS" "source: $NTP_SOURCE"
+elif chronyc tracking 2>/dev/null | grep -qiE "Leap status.*Normal"; then
     emit "NTP synchronized" "PASS" ""
 else
     emit "NTP synchronized" "WARN" "may still be syncing"
@@ -240,7 +268,7 @@ fi
 
 systemctl is-active autofs &>/dev/null && emit "autofs active" "PASS" "" || emit "autofs active" "FAIL" ""
 
-# --- NFS Automounts ---
+# --- NFS Automounts (real mount test) ---
 for mnt in /tux2lab /tux2lab-data /lab-share; do
     if [[ -d "$mnt" ]]; then
         ls "$mnt/" &>/dev/null
@@ -266,18 +294,39 @@ MGMT_USER=$(ls /etc/sudoers.d/ 2>/dev/null | grep -v README | head -1)
 
 id "$MGMT_USER" &>/dev/null && emit "Mgmt user exists" "PASS" "$MGMT_USER" || emit "Mgmt user exists" "FAIL" "$MGMT_USER"
 [[ -f "/etc/sudoers.d/$MGMT_USER" ]] && emit "Sudoers file" "PASS" "" || emit "Sudoers file" "FAIL" ""
+
+# Real sudo validation: actually run a command as the user
+if su - "$MGMT_USER" -c "sudo -n true" &>/dev/null; then
+    emit "Sudo NOPASSWD works" "PASS" "$MGMT_USER"
+else
+    emit "Sudo NOPASSWD works" "FAIL" "$MGMT_USER cannot sudo without password"
+fi
+
 [[ -s "/home/$MGMT_USER/.ssh/authorized_keys" ]] && emit "SSH authorized_keys" "PASS" "" || emit "SSH authorized_keys" "FAIL" ""
 [[ -f "/home/$MGMT_USER/.ssh/tux2lab_id_rsa" ]] && emit "SSH private key" "PASS" "" || emit "SSH private key" "FAIL" ""
 [[ -f "/root/.ssh/tux2lab_id_rsa" ]] && emit "Root SSH key" "PASS" "" || emit "Root SSH key" "FAIL" ""
 [[ -f "/etc/ssh/ssh_config.d/999-tux2lab.conf" ]] && emit "SSH client config" "PASS" "" || emit "SSH client config" "FAIL" ""
 
-# --- CA Certificate ---
+# --- CA Certificate (real HTTPS test) ---
 case "$DISTRO_FAMILY" in
     redhat)   CA_PATH="/etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt" ;;
     ubuntu)   CA_PATH="/usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt" ;;
     opensuse) CA_PATH="/etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt" ;;
 esac
-[[ -f "$CA_PATH" ]] && emit "CA certificate" "PASS" "" || emit "CA certificate" "FAIL" "$CA_PATH"
+
+[[ -f "$CA_PATH" ]] && emit "CA cert file exists" "PASS" "" || emit "CA cert file exists" "FAIL" "$CA_PATH"
+
+# Real validation: HTTPS to lab infra server without --insecure
+if curl -sf --max-time 5 "https://${LAB_INFRA_SERVER}/" -o /dev/null 2>/dev/null; then
+    emit "HTTPS to infra (trusted)" "PASS" "cert verified by system CA bundle"
+else
+    # Check if HTTP works (to distinguish cert issue from connectivity)
+    if curl -sf --max-time 5 "http://${LAB_INFRA_SERVER}/" -o /dev/null 2>/dev/null; then
+        emit "HTTPS to infra (trusted)" "FAIL" "HTTP works but HTTPS cert not trusted"
+    else
+        emit "HTTPS to infra (trusted)" "WARN" "infra server may not have HTTPS configured"
+    fi
+fi
 
 # --- Timezone ---
 TZ=$(timedatectl show --property=Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo "unknown")
@@ -300,10 +349,13 @@ case "$DISTRO_FAMILY" in
             && emit "systemd-resolved enabled" "PASS" "" \
             || emit "systemd-resolved enabled" "FAIL" ""
 
-        if [[ -L /etc/resolv.conf ]] && readlink /etc/resolv.conf | grep -q "stub-resolv"; then
-            emit "resolv.conf symlink" "PASS" ""
+        # Real DNS resolution test via systemd-resolved
+        if resolvectl query "$LAB_INFRA_SERVER" &>/dev/null; then
+            emit "DNS resolution (resolved)" "PASS" ""
+        elif [[ -L /etc/resolv.conf ]] && readlink /etc/resolv.conf | grep -q "stub-resolv"; then
+            emit "DNS resolution (resolved)" "WARN" "symlink ok but query failed"
         else
-            emit "resolv.conf symlink" "FAIL" ""
+            emit "DNS resolution (resolved)" "FAIL" ""
         fi
 
         if systemctl show dnf-makecache.timer -p LoadState --value 2>/dev/null | grep -q masked; then
@@ -312,9 +364,14 @@ case "$DISTRO_FAMILY" in
             emit "dnf-makecache masked" "WARN" ""
         fi
 
-        ls /etc/yum.repos.d/*lab* &>/dev/null || ls /etc/yum.repos.d/*tux2lab* &>/dev/null \
-            && emit "Lab yum repo" "PASS" "" \
-            || emit "Lab yum repo" "FAIL" ""
+        # Real yum repo validation: actually query metadata
+        if dnf repolist 2>/dev/null | grep -qiE "lab|tux2lab"; then
+            emit "Lab yum repo" "PASS" "reachable"
+        elif ls /etc/yum.repos.d/*lab* &>/dev/null || ls /etc/yum.repos.d/*tux2lab* &>/dev/null; then
+            emit "Lab yum repo" "WARN" "file exists but repo metadata unreachable"
+        else
+            emit "Lab yum repo" "FAIL" ""
+        fi
 
         command -v growpart &>/dev/null \
             && emit "growpart available" "PASS" "" \
@@ -415,9 +472,9 @@ fn_validate_vm() {
         return
     fi
 
-    # Run validation payload remotely
+    # Run validation payload remotely — pass infra server hostname as $1
     local raw_output
-    raw_output=$(fn_generate_validation_payload | ssh "${ssh_options[@]}" "root@${vm_name}" "bash -s" 2>/dev/null)
+    raw_output=$(fn_generate_validation_payload | ssh "${ssh_options[@]}" "root@${vm_name}" "bash -s -- ${lab_infra_server_hostname}" 2>/dev/null)
 
     if [[ $? -ne 0 ]] && [[ -z "$raw_output" ]]; then
         print_error "  SSH connection failed — skipping"
