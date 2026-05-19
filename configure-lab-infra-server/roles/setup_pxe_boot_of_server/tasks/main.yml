@@ -99,6 +99,14 @@
     path: "/tux2lab-data/tux2lab"
     state: directory
 
+- name: Unmount stale bind mount at /tux2lab-data/tux2lab if present
+  become: true
+  ansible.builtin.command:
+    cmd: umount /tux2lab-data/tux2lab
+  register: tux2lab_umount
+  changed_when: tux2lab_umount.rc == 0
+  failed_when: false
+
 - name: Bind mount /tux2lab as /tux2lab-data/tux2lab and update fstab
   become: true
   ansible.posix.mount:
