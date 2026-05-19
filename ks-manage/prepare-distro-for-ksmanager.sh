@@ -280,16 +280,34 @@ Guest VMs also support Debian-based (Ubuntu) and SUSE-based (openSUSE) via 'tux2
         local_checksum_lookup_name=$(basename "$ISO_URL")
     fi
 
+    # If both local checksum file and ISO exist, verify against LOCAL checksum first.
+    # Only download a fresh checksum if the local one is missing.
     if [[ -n "$CHECKSUM_URL" ]]; then
-        if fn_download_checksum "$CHECKSUM_URL" "$CHECKSUM_FILE"; then
+        if [[ -f "$CHECKSUM_FILE" ]] && [[ -f "$ISO_PATH" ]]; then
+            # Use existing local checksum for verification
+            print_info "Using existing local CHECKSUM file for verification."
             EXPECTED_HASH=$(fn_extract_expected_hash "$local_checksum_lookup_name" "$CHECKSUM_FILE") || true
             if [[ -n "${EXPECTED_HASH:-}" ]]; then
                 has_checksum=true
             else
-                print_warning "Could not extract checksum. Will skip verification."
+                print_warning "Could not extract checksum from local file. Re-downloading..."
+                if fn_download_checksum "$CHECKSUM_URL" "$CHECKSUM_FILE"; then
+                    EXPECTED_HASH=$(fn_extract_expected_hash "$local_checksum_lookup_name" "$CHECKSUM_FILE") || true
+                    [[ -n "${EXPECTED_HASH:-}" ]] && has_checksum=true
+                fi
             fi
         else
-            print_warning "Could not download checksum file. Will skip verification."
+            # No local checksum file or no ISO — download fresh
+            if fn_download_checksum "$CHECKSUM_URL" "$CHECKSUM_FILE"; then
+                EXPECTED_HASH=$(fn_extract_expected_hash "$local_checksum_lookup_name" "$CHECKSUM_FILE") || true
+                if [[ -n "${EXPECTED_HASH:-}" ]]; then
+                    has_checksum=true
+                else
+                    print_warning "Could not extract checksum. Will skip verification."
+                fi
+            else
+                print_warning "Could not download checksum file. Will skip verification."
+            fi
         fi
     else
         print_warning "No checksum URL configured for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}. Skipping verification."
@@ -749,15 +767,31 @@ fn_setup_distro() {
         checksum_lookup_name="$iso_file"
     fi
     if [[ -n "$checksum_url" ]]; then
-        if fn_download_checksum "$checksum_url" "$checksum_file"; then
+        if [[ -f "$checksum_file" ]] && [[ -f "$iso_path" ]]; then
+            # Use existing local checksum for verification
+            print_info "Using existing local CHECKSUM file for verification."
             expected_hash=$(fn_extract_expected_hash "$checksum_lookup_name" "$checksum_file") || true
             if [[ -n "$expected_hash" ]]; then
                 has_checksum=true
             else
-                print_warning "Could not extract checksum. Will skip verification."
+                print_warning "Could not extract checksum from local file. Re-downloading..."
+                if fn_download_checksum "$checksum_url" "$checksum_file"; then
+                    expected_hash=$(fn_extract_expected_hash "$checksum_lookup_name" "$checksum_file") || true
+                    [[ -n "$expected_hash" ]] && has_checksum=true
+                fi
             fi
         else
-            print_warning "Could not download checksum file. Will skip verification."
+            # No local checksum file or no ISO — download fresh
+            if fn_download_checksum "$checksum_url" "$checksum_file"; then
+                expected_hash=$(fn_extract_expected_hash "$checksum_lookup_name" "$checksum_file") || true
+                if [[ -n "$expected_hash" ]]; then
+                    has_checksum=true
+                else
+                    print_warning "Could not extract checksum. Will skip verification."
+                fi
+            else
+                print_warning "Could not download checksum file. Will skip verification."
+            fi
         fi
     else
         print_warning "No checksum URL configured for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}. Skipping verification."
