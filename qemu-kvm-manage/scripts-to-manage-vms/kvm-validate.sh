@@ -539,7 +539,7 @@ fn_validate_vm() {
 # ====== MAIN EXECUTION ======
 echo ""
 print_cyan "┌──────────────────────────────────────────────────────────────┐"
-print_cyan "│          tux2lab VM Post-Install Validation                   │"
+print_cyan "│          tux2lab VM Post-Install Validation                  │"
 print_cyan "└──────────────────────────────────────────────────────────────┘"
 print_info "Validating ${#target_vms[@]} VM(s)..."
 
