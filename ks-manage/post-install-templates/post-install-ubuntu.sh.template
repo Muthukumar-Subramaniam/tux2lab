@@ -38,7 +38,7 @@ fi
 apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
-    rsync netcat-openbsd nmap lsof autofs
+    rsync netcat-openbsd lsof autofs
 apt-get remove -y lvm2 && apt-get autoremove -y
 
 ######################################################################
