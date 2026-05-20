@@ -233,6 +233,19 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
         fi
     fi
 
+    # Restore named.conf to clean state (remove server-hub's dnsbinder markers)
+    if [[ -f /etc/named.conf ]] && grep -q 'zones-are-managed-by-dnsbinder' /etc/named.conf 2>/dev/null; then
+        print_task "Restoring named.conf to clean state..."
+        if [[ -f /etc/named.conf_bkp_by_dnsbinder ]]; then
+            sudo cp -p /etc/named.conf_bkp_by_dnsbinder /etc/named.conf
+        else
+            sudo sed -i '/# BEGIN zones-of-.*-domain/,/# END zones-of-.*-domain/d' /etc/named.conf
+        fi
+        sudo rm -f /etc/named.conf_bkp_by_dnsbinder
+        print_task_done
+        ((++completed_steps))
+    fi
+
     # Remove web root directory (/<fqdn>/)
     if [[ -n "$lab_infra_server_hostname" && -d "/${lab_infra_server_hostname}" ]]; then
         # Unmount any filesystems mounted under the web root (ISOs, bind mounts)
