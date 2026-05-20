@@ -9,9 +9,28 @@
 set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 readonly PREPARE_SCRIPT="/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh"
+
+# Handle download-infra-iso early — it runs pre-deploy so lab_environment_vars
+# may not exist yet.  No other environment variables are needed for this path.
+if [[ "${1:-}" == "download-infra-iso" ]]; then
+    shift
+    if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+        print_cyan "USAGE:
+    tux2lab distro download-infra-iso [distro]
+
+Downloads the ISO for the infra server (VM mode only, one-time step).
+
+EXAMPLES:
+    tux2lab distro download-infra-iso                       # Interactive (default: AlmaLinux)
+    tux2lab distro download-infra-iso rocky                 # Download Rocky Linux for infra server"
+        exit 0
+    fi
+    # Always runs locally on the KVM host — never SSH to infra server
+    "${PREPARE_SCRIPT}" --download-infra-iso "$@"
+    exit 0
+fi
 
 show_distro_help() {
     print_cyan "USAGE:
@@ -36,6 +55,15 @@ EXAMPLES:
     tux2lab distro download-infra-iso rocky                 # Download Rocky Linux for infra server"
 }
 
+# Show help without requiring lab environment
+if [[ $# -eq 0 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+    show_distro_help
+    exit 0
+fi
+
+# All other subcommands require the lab environment to be deployed
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
+
 # Run prepare-distro-for-ksmanager.sh on the infra server
 run_on_infra_server() {
     if $lab_infra_server_mode_is_host; then
@@ -51,12 +79,6 @@ run_on_infra_server() {
             "${PREPARE_SCRIPT}" "$@"
     fi
 }
-
-# Main dispatch
-if [[ $# -eq 0 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
-    show_distro_help
-    exit 0
-fi
 
 subcommand="$1"
 shift
@@ -99,14 +121,6 @@ case "$subcommand" in
             exit 0
         fi
         run_on_infra_server --cleanup "$@"
-        ;;
-    download-infra-iso)
-        if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
-            show_distro_help
-            exit 0
-        fi
-        # Always runs locally on the KVM host — never SSH to infra server
-        "${PREPARE_SCRIPT}" --download-infra-iso "$@"
         ;;
     *)
         print_error "Unknown distro subcommand: $subcommand"
