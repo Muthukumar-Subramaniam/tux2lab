@@ -246,6 +246,14 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
         ((++completed_steps))
     fi
 
+    # Remove old nginx server config from conf.d (server-hub named it after the FQDN)
+    if [[ -n "$lab_infra_server_hostname" && -f "/etc/nginx/conf.d/${lab_infra_server_hostname}.conf" ]]; then
+        print_task "Removing old nginx config /etc/nginx/conf.d/${lab_infra_server_hostname}.conf..."
+        sudo rm -f "/etc/nginx/conf.d/${lab_infra_server_hostname}.conf"
+        print_task_done
+        ((++completed_steps))
+    fi
+
     # Remove web root directory (/<fqdn>/)
     if [[ -n "$lab_infra_server_hostname" && -d "/${lab_infra_server_hostname}" ]]; then
         # Unmount any filesystems mounted under the web root (ISOs, bind mounts)
