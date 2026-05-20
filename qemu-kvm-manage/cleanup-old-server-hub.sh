@@ -188,7 +188,7 @@ fi
 # ====== PHASE 3: HOST MODE EXTRAS ======
 if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
     print_info "Stopping and disabling host-mode lab services..."
-    host_services=("named" "kea-dhcp4" "kea-dhcp6" "radvd" "nfs-server" "tftp.socket" "nginx")
+    host_services=("named" "kea-dhcp4" "kea-dhcp6" "radvd" "nfs-server" "tftp.socket" "nginx" "lab-services-restart")
     for service_name in "${host_services[@]}"; do
         if systemctl list-unit-files "${service_name}.service" &>/dev/null 2>&1 || \
            systemctl list-unit-files "${service_name}" &>/dev/null 2>&1; then
@@ -203,6 +203,10 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
             fi
         fi
     done
+
+    # Remove custom service unit file
+    sudo rm -f /etc/systemd/system/lab-services-restart.service 2>/dev/null || true
+    sudo systemctl daemon-reload 2>/dev/null || true
 
     # Remove dummy-vnet interface
     if ip link show dummy-vnet &>/dev/null; then
@@ -355,6 +359,11 @@ sudo rm -f /usr/local/bin/qlabhealth 2>/dev/null || true
 sudo rm -f /usr/local/bin/qlabdnsbinder 2>/dev/null || true
 sudo rm -f /usr/local/bin/ksmanager 2>/dev/null || true
 sudo rm -f /usr/local/bin/prepare-distro-for-ksmanager 2>/dev/null || true
+sudo rm -f /usr/local/bin/wait-for-ipv6.sh 2>/dev/null || true
+sudo rm -f /usr/sbin/dnsbinder 2>/dev/null || true
+sudo rm -f /usr/bin/dnsbinder 2>/dev/null || true
+# Remove legacy virt-install wrapper (pre-vendored versions wrote a shell wrapper here)
+sudo rm -f /usr/local/bin/virt-install 2>/dev/null || true
 print_task_done
 ((++completed_steps))
 
