@@ -1236,6 +1236,9 @@ if $REBUILD_MODE; then
     exit 0
 fi
 
+# Cleanup predecessor project (server-hub) if detected
+bash /tux2lab/qemu-kvm-manage/cleanup-old-server-hub.sh
+
 # CRITICAL: Check for existing deployment before proceeding
 check_existing_lab_deployment
 

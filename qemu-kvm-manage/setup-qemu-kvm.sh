@@ -13,6 +13,9 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
+# Cleanup predecessor project (server-hub) if detected
+bash /tux2lab/qemu-kvm-manage/cleanup-old-server-hub.sh
+
 # Verify KVM kernel module is loaded (hardware virtualization must be enabled in BIOS/UEFI)
 if ! lsmod | grep -q '^kvm'; then
     print_error "KVM kernel module is not loaded."
