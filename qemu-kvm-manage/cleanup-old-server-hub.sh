@@ -74,7 +74,7 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
     print_warning "  • DNS zone files (/var/named/dnsbinder-managed-zone-files/)"
 fi
 print_warning "  • SSH keys and config (kvm_lab_global_id_rsa, 999-kvm-lab-global.conf)"
-print_warning "  • CLI tools (qlabvmctl, qlabstart, qlabhealth, qlabdnsbinder)"
+print_warning "  • CLI tools (qlabvmctl, qlabstart, qlabhealth, qlabdnsbinder, ksmanager)"
 print_warning "  • Directories: /server-hub, /kvm-hub, /iso-files"
 print_warning "  • /etc/sudoers.d/$USER"
 if [[ -d "/iso-files" ]]; then
@@ -353,6 +353,8 @@ sudo rm -f /usr/local/bin/qlabvmctl 2>/dev/null || true
 sudo rm -f /usr/local/bin/qlabstart 2>/dev/null || true
 sudo rm -f /usr/local/bin/qlabhealth 2>/dev/null || true
 sudo rm -f /usr/local/bin/qlabdnsbinder 2>/dev/null || true
+sudo rm -f /usr/local/bin/ksmanager 2>/dev/null || true
+sudo rm -f /usr/local/bin/prepare-distro-for-ksmanager 2>/dev/null || true
 print_task_done
 ((++completed_steps))
 
