@@ -429,22 +429,41 @@ done
 # ====== PHASE 6: DIRECTORY CLEANUP & ISO MIGRATION ======
 iso_migrated=false
 if [[ -d "/iso-files" ]]; then
-    # Migrate ISO file
-    if [[ -f "/iso-files/AlmaLinux-10-latest-x86_64-dvd.iso" ]]; then
-        print_task "Migrating ISO to /tux2lab-data/iso-files/..."
+    # Migrate all ISO files (filenames are identical between projects)
+    iso_files_found=false
+    for iso_file in /iso-files/*.iso; do
+        [[ -f "$iso_file" ]] || continue
+        iso_files_found=true
+        break
+    done
+
+    if [[ "$iso_files_found" == true ]]; then
+        print_task "Migrating ISO files from /iso-files/ to /tux2lab-data/iso-files/..."
         sudo mkdir -p /tux2lab-data/iso-files
         sudo chown "$USER":"$(id -g)" /tux2lab-data/iso-files
-        if sudo mv /iso-files/AlmaLinux-10-latest-x86_64-dvd.iso /tux2lab-data/iso-files/; then
-            iso_migrated=true
+        migration_failed=false
+        for iso_file in /iso-files/*.iso; do
+            [[ -f "$iso_file" ]] || continue
+            if ! sudo mv "$iso_file" /tux2lab-data/iso-files/; then
+                print_warning "Failed to migrate $(basename "$iso_file")"
+                migration_failed=true
+            fi
+        done
+        if [[ "$migration_failed" == false ]]; then
             print_task_done
             ((++completed_steps))
         else
             print_task_fail
             ((++failed_steps))
         fi
+
+        # Check if infra server ISO was among migrated files
+        if [[ -f "/tux2lab-data/iso-files/AlmaLinux-10-latest-x86_64-dvd.iso" ]]; then
+            iso_migrated=true
+        fi
     fi
 
-    # Migrate and rename checksum file
+    # Migrate and rename checksum file for infra server ISO
     if [[ -f "/iso-files/CHECKSUM" ]]; then
         print_task "Migrating checksum file (CHECKSUM → almalinux-10-CHECKSUM)..."
         sudo mkdir -p /tux2lab-data/iso-files
@@ -458,7 +477,7 @@ if [[ -d "/iso-files" ]]; then
         fi
     fi
 
-    # Write marker files (only if ISO was migrated successfully)
+    # Write marker files (only if infra ISO was migrated successfully)
     if [[ "$iso_migrated" == true ]]; then
         print_task "Writing infra server ISO marker files..."
         echo "AlmaLinux-10-latest-x86_64-dvd.iso" > /tux2lab-data/iso-files/infra-server-iso
