@@ -254,6 +254,31 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
         ((++completed_steps))
     fi
 
+    # Remove old SSL cert/key files (server-hub used <FQDN>-nginx-selfsigned.{key,crt})
+    if [[ -n "$lab_infra_server_hostname" ]]; then
+        local old_ssl_key="/etc/pki/tls/private/${lab_infra_server_hostname}-nginx-selfsigned.key"
+        local old_ssl_cert="/etc/pki/tls/certs/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+        local old_ssl_anchor="/etc/pki/ca-trust/source/anchors/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+        if [[ -f "$old_ssl_key" || -f "$old_ssl_cert" || -f "$old_ssl_anchor" ]]; then
+            print_task "Removing old server-hub SSL cert/key files..."
+            sudo rm -f "$old_ssl_key" "$old_ssl_cert" "$old_ssl_anchor"
+            sudo update-ca-trust 2>/dev/null || true
+            print_task_done
+            ((++completed_steps))
+        fi
+    fi
+
+    # Remove old chrony/NTP markers from /etc/chrony.conf (server-hub blockinfile)
+    if [[ -n "$lab_infra_server_hostname" ]] && grep -q "ntp-${lab_infra_server_hostname}-settings" /etc/chrony.conf 2>/dev/null; then
+        print_task "Removing old NTP config markers from /etc/chrony.conf..."
+        sudo sed -i "/# BEGIN ntp-${lab_infra_server_hostname}-settings/,/# END ntp-${lab_infra_server_hostname}-settings/d" /etc/chrony.conf
+        # Restore commented pool lines
+        sudo sed -i 's/^#pool /pool /' /etc/chrony.conf
+        sudo systemctl restart chronyd 2>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    fi
+
     # Remove web root directory (/<fqdn>/)
     if [[ -n "$lab_infra_server_hostname" && -d "/${lab_infra_server_hostname}" ]]; then
         # Unmount any filesystems mounted under the web root (ISOs, bind mounts)
