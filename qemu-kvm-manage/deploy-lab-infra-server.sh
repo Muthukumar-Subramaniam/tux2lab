@@ -95,9 +95,9 @@ Re-running this script will OVERWRITE your existing setup.
         print_yellow "If you want to redeploy from scratch, you must:
     1. Backup any important data from your lab
     2. Manually remove the existing deployment:
-        • Delete VM: sudo virsh destroy ${lab_infra_server_hostname:-tux2lab-infra-server}
-                     sudo virsh undefine ${lab_infra_server_hostname:-tux2lab-infra-server} --nvram
-                     sudo rm -rf /tux2lab-data/vms/${lab_infra_server_hostname:-tux2lab-infra-server}
+        • Delete VM: sudo virsh destroy ${lab_infra_server_hostname:-jbobs-engine}
+                     sudo virsh undefine ${lab_infra_server_hostname:-jbobs-engine} --nvram
+                     sudo rm -rf /tux2lab-data/vms/${lab_infra_server_hostname:-jbobs-engine}
         • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
     3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
     4. Remove SSH keys: rm -f ~/.ssh/tux2lab_id_rsa*"
@@ -153,10 +153,10 @@ prepare_lab_infra_config() {
     # Get Infra Server Name
     while true; do
         echo
-        read -rp "Enter your Lab Infra Server name [default: tux2lab-infra-server]: " lab_infra_server_shortname
+        read -rp "Enter your Lab Infra Server name [default: jbobs-engine]: " lab_infra_server_shortname
 
         if [[ -z "$lab_infra_server_shortname" ]]; then
-            lab_infra_server_shortname="tux2lab-infra-server"
+            lab_infra_server_shortname="jbobs-engine"
             break
         fi
 
@@ -1076,7 +1076,7 @@ REPOEOF
     fi
 
     # Create CNAME aliases so well-known names always resolve
-    local cname_aliases=("tux2lab-infra-server" "lab-infra-server")
+    local cname_aliases=("jbobs-engine" "tux2lab-infra-server" "lab-infra-server")
     for cname_alias in "${cname_aliases[@]}"; do
         if [[ "${lab_infra_server_shortname}" == "${cname_alias}" ]]; then
             print_info "Skipping CNAME for ${cname_alias} (matches server name)"

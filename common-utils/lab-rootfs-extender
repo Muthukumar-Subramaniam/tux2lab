@@ -73,7 +73,7 @@ fn_get_growpart() {
 
     # Determine lab infra server hostname from DNS domain
     local infra_server
-    infra_server=$(hostname -d 2>/dev/null | sed 's/^/tux2lab-infra-server./')
+    infra_server=$(hostname -d 2>/dev/null | sed 's/^/jbobs-engine./')
 
     print_task "Downloading growpart from lab infra server..."
     local tmp_growpart

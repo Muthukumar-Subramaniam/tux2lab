@@ -84,7 +84,7 @@ source /etc/environment
 : "${dnsbinder_last24_subnet:?Error: dnsbinder did not set subnet}"
 
 # Create CNAME aliases so well-known names always resolve
-cname_aliases=("tux2lab-infra-server" "lab-infra-server")
+cname_aliases=("jbobs-engine" "tux2lab-infra-server" "lab-infra-server")
 for cname_alias in "${cname_aliases[@]}"; do
     if [[ "${dnsbinder_server_short_name}" == "${cname_alias}" ]]; then
         echo -e "\nSkipping CNAME for ${cname_alias} (matches server name) . . .\n"
