@@ -17,11 +17,16 @@ fi
 bash /tux2lab/qemu-kvm-manage/cleanup-old-server-hub.sh
 
 # Verify KVM kernel module is loaded (hardware virtualization must be enabled in BIOS/UEFI)
-if ! lsmod | grep -q '^kvm'; then
-    print_error "KVM kernel module is not loaded."
-    print_info "Hardware virtualization (VT-x/AMD-V) must be enabled in your BIOS/UEFI settings."
-    print_info "After enabling it, reboot and verify with: lsmod | grep kvm"
-    exit 1
+if [[ ! -d /sys/module/kvm ]]; then
+    # Module not loaded — attempt to load it before failing
+    sudo modprobe kvm 2>/dev/null || true
+    sudo modprobe kvm_intel 2>/dev/null || sudo modprobe kvm_amd 2>/dev/null || true
+    if [[ ! -d /sys/module/kvm ]]; then
+        print_error "KVM kernel module is not loaded and could not be loaded."
+        print_info "Hardware virtualization (VT-x/AMD-V) must be enabled in your BIOS/UEFI settings."
+        print_info "After enabling it, reboot and verify with: lsmod | grep kvm"
+        exit 1
+    fi
 fi
 
 print_warning "This script will configure QEMU/KVM virtualization environment on this system."

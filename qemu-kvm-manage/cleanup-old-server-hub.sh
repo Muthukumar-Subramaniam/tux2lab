@@ -231,6 +231,10 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
 
     # Remove web root directory (/<fqdn>/)
     if [[ -n "$lab_infra_server_hostname" && -d "/${lab_infra_server_hostname}" ]]; then
+        # Unmount any filesystems mounted under the web root (ISOs, bind mounts)
+        while IFS= read -r mount_point; do
+            sudo umount -l "$mount_point" 2>/dev/null || true
+        done < <(findmnt -rn -o TARGET | grep "^/${lab_infra_server_hostname}/" | sort -r)
         print_task "Removing web root directory (/${lab_infra_server_hostname}/)..."
         if sudo rm -rf "/${lab_infra_server_hostname}"; then
             print_task_done
