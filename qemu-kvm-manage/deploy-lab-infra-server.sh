@@ -242,7 +242,15 @@ prepare_lab_infra_config() {
     if $REBUILD_MODE; then
         print_info "Restarting libvirtd to ensure clean state..."
         sudo systemctl restart libvirtd
-        sleep 2
+        local retries=0
+        while ! sudo virsh version &>/dev/null; do
+            retries=$((retries + 1))
+            if [[ $retries -ge 30 ]]; then
+                print_error "libvirtd failed to become ready after restart"
+                exit 1
+            fi
+            sleep 1
+        done
     fi
 
     # Ensure tux2lab network is defined and active
