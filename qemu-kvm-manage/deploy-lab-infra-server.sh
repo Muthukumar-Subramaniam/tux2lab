@@ -95,16 +95,16 @@ Re-running this script will OVERWRITE your existing setup.
         print_yellow "If you want to redeploy from scratch, you must:
     1. Backup any important data from your lab
     2. Manually remove the existing deployment:
-        • Delete VM: sudo virsh destroy ${lab_infra_server_hostname:-jbobs-engine}
-                     sudo virsh undefine ${lab_infra_server_hostname:-jbobs-engine} --nvram
-                     sudo rm -rf /tux2lab-data/vms/${lab_infra_server_hostname:-jbobs-engine}
+        • Delete VM: sudo virsh destroy ${lab_infra_server_hostname:-tux2lab-engine}
+                     sudo virsh undefine ${lab_infra_server_hostname:-tux2lab-engine} --nvram
+                     sudo rm -rf /tux2lab-data/vms/${lab_infra_server_hostname:-tux2lab-engine}
         • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
     3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
     4. Remove SSH keys: rm -f ~/.ssh/tux2lab_id_rsa*"
     
-        read -rp "Do you understand the risks and want to FORCE re-deployment? (yes/NO): " force_confirm
+        read -rp "Do you understand the risks and want to FORCE re-deployment? (YES/NO): " force_confirm
     
-        if [[ "$force_confirm" != "yes" ]]; then
+        if [[ "$force_confirm" != "YES" ]]; then
             print_info "Deployment cancelled. Your existing lab is safe."
             exit 0
         fi
@@ -150,32 +150,13 @@ prepare_lab_infra_config() {
 
     print_info "Pre-flight checks passed: QEMU/KVM environment is ready."
 
-    # Get Infra Server Name
-    while true; do
-        echo
-        read -rp "Enter your Lab Infra Server name [default: jbobs-engine]: " lab_infra_server_shortname
+    # Fixed server name and domain — deterministic, no user prompt needed
+    lab_infra_server_shortname="tux2lab-engine"
+    lab_infra_domain_name="${USER}.internal"
+    lab_infra_server_hostname="${lab_infra_server_shortname}.${lab_infra_domain_name}"
 
-        if [[ -z "$lab_infra_server_shortname" ]]; then
-            lab_infra_server_shortname="jbobs-engine"
-            break
-        fi
+    print_info "Lab Infra Server Hostname: \033[1m${lab_infra_server_hostname}\033[0m"
 
-        if [[ ${#lab_infra_server_shortname} -lt 6 ]]; then
-            print_error "Server name must be at least 6 characters long."
-            continue
-        fi
-
-        if [[ ! "$lab_infra_server_shortname" =~ ^[a-z0-9-]+$ || "$lab_infra_server_shortname" =~ ^- || "$lab_infra_server_shortname" =~ -$ ]]; then
-            print_error "Invalid hostname!"
-            print_info "Use only lowercase letters, numbers, and hyphens (-)." nskip
-            print_info "Must not start or end with a hyphen."
-            continue
-        fi
-
-        break
-    done
-
-    print_info "Using Lab Infra Server name: \033[1m${lab_infra_server_shortname}\033[0m"
     lab_infra_admin_username="$USER"
     print_info "Using current user '${lab_infra_admin_username}' as Lab Infra Global user."
 
@@ -214,51 +195,6 @@ prepare_lab_infra_config() {
     lab_admin_shadow_password=$(openssl passwd -6 -salt "$lab_admin_password_salt" "$lab_admin_password_plain")
 
     print_info "Infra Management user credentials are ready for user: \033[1m${lab_infra_admin_username}\033[0m"
-
-    # Function to instruct user on valid domain names
-    fn_instruct_on_valid_domain_name() {
-        print_info "
-\e[1mDomain Name Rules:\e[0m
-─────────────────────────────
-    Only allowed TLD:          \e[1minternal\e[0m
-    Max subdomains allowed:    \e[1m2\e[0m
-    Allowed characters:        Letters (a-z), digits (0-9), and hyphens (-)
-    Hyphens:                   Cannot be at the start or end of subdomains
-    Total length:              Must be between \e[1m1\e[0m and \e[1m63\e[0m characters
-
-\e[1mExamples of valid domain names:\e[0m
-    tux2lab.internal
-    test.example.internal
-    123-example.internal
-    test-lab1.internal
-"
-    }
-
-    # Prompt user for local infra domain name
-    while true; do
-        fn_instruct_on_valid_domain_name
-        read -rp "Enter your local Infra Domain Name [default: tux2lab.internal]: " lab_infra_domain_name
-
-        # Use default if empty
-        if [[ -z "${lab_infra_domain_name}" ]]; then
-            lab_infra_domain_name="tux2lab.internal"
-        fi
-
-        # Validate domain length and pattern
-        if [[ "${#lab_infra_domain_name}" -le 63 ]] && \
-            [[ "${lab_infra_domain_name}" =~ ^[[:alnum:]]+([-.][[:alnum:]]+)*(\.[[:alnum:]]+){0,2}\.internal$ ]]; then
-            break
-        else
-            print_error "Invalid domain name. Please follow the rules above."
-        fi
-    done
-
-    # Print the final validated domain name
-    print_info "Lab Infra Domain Name set to: \033[1m${lab_infra_domain_name}\033[0m"
-
-    lab_infra_server_hostname="${lab_infra_server_shortname}.${lab_infra_domain_name}"
-  
-    print_info "Lab Infra Server Hostname set to: \033[1m${lab_infra_server_hostname}\033[0m"
 
     # SSH public key logic
     print_info "Checking for SSH public key on local workstation..."
@@ -301,6 +237,24 @@ prepare_lab_infra_config() {
     fi
     # Print confirmation
     print_info "Lab Infra SSH public key is ready for user \033[1m${lab_infra_admin_username}\033[0m on domain \033[1m${lab_infra_domain_name}\033[0m"
+
+    # Ensure QEMU/KVM environment is ready for rebuild
+    if $REBUILD_MODE; then
+        print_info "Restarting libvirtd to ensure clean state..."
+        sudo systemctl restart libvirtd
+        sleep 2
+    fi
+
+    # Ensure tux2lab network is defined and active
+    if ! sudo virsh net-info tux2lab &>/dev/null; then
+        print_info "Recreating tux2lab network..."
+        sudo virsh net-define /tux2lab/qemu-kvm-manage/labbr0.xml
+        sudo virsh net-start tux2lab
+        sudo virsh net-autostart tux2lab
+    elif ! sudo virsh net-list --name | grep -qw tux2lab; then
+        print_info "Starting tux2lab network..."
+        sudo virsh net-start tux2lab
+    fi
 
     # Capture network info from QEMU-KVM default bridge
     print_task "Capturing network info from QEMU-KVM default network bridge"
@@ -353,7 +307,8 @@ prepare_lab_infra_config() {
     network_o2=$((o2 & m2))
     network_o3=$((o3 & m3))
     network_o4=$((o4 & m4))
-    lab_infra_server_ipv4_subnet="${network_o1}.${network_o2}.${network_o3}.${network_o4}/${cidr_prefix}"
+    lab_infra_server_ipv4_cidr_prefix="${cidr_prefix}"
+    lab_infra_server_ipv4_subnet="${network_o1}.${network_o2}.${network_o3}.${network_o4}/${lab_infra_server_ipv4_cidr_prefix}"
 
     print_task_done
 
@@ -479,6 +434,7 @@ lab_infra_ssh_private_key='${lab_infra_ssh_private_key}'
 lab_infra_ssh_public_key='${lab_infra_ssh_public_key}'
 lab_infra_server_ipv4_gateway="${lab_infra_server_ipv4_gateway}"
 lab_infra_server_ipv4_netmask="${lab_infra_server_ipv4_netmask}"
+lab_infra_server_ipv4_cidr_prefix="${lab_infra_server_ipv4_cidr_prefix}"
 lab_infra_server_ipv4_address="${lab_infra_server_ipv4_address}"
 lab_infra_server_ipv4_subnet="${lab_infra_server_ipv4_subnet}"
 lab_infra_server_ipv6_gateway="${lab_infra_server_ipv6_gateway}"
@@ -672,24 +628,41 @@ deploy_lab_infra_server_vm() {
     VM_DIR="/tux2lab-data/vms/${lab_infra_server_hostname}"
     VM_DISK_PATH="${VM_DIR}/${lab_infra_server_hostname}.qcow2"
 
-    # Create VM directory if it doesn't exist
+    # Clean up existing VM if in rebuild mode, otherwise error out
+    if sudo virsh list --all | grep -qw "${lab_infra_server_hostname}"; then
+        if $REBUILD_MODE; then
+            print_info "Cleaning up existing VM '${lab_infra_server_hostname}' for rebuild..."
+            sudo virsh destroy "${lab_infra_server_hostname}" &>/dev/null || true
+            sudo virsh undefine "${lab_infra_server_hostname}" --nvram &>/dev/null || true
+        else
+            print_error "Lab Infra VM '${lab_infra_server_hostname}' already exists in libvirt!"
+            print_info "To remove it, run: sudo virsh destroy ${lab_infra_server_hostname} && sudo virsh undefine ${lab_infra_server_hostname} --nvram && sudo rm -rf ${VM_DIR}"
+            exit 1
+        fi
+    fi
+
+    # Clean up stale ISO mount if present
+    if mountpoint -q "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null; then
+        sudo umount -l "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
+        sudo rmdir "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
+    fi
+
+    # Clean up VM directory (disk, NVRAM, old kickstart files)
+    if [[ -d "$VM_DIR" ]]; then
+        if $REBUILD_MODE; then
+            print_info "Removing existing VM directory..."
+            rm -rf "$VM_DIR"
+        else
+            print_error "Lab Infra VM directory already exists at $VM_DIR."
+            print_info "To remove it, run: sudo rm -rf ${VM_DIR}"
+            exit 1
+        fi
+    fi
+
+    # Recreate clean VM directory
     mkdir -p "$VM_DIR"
 
-    # Check if VM already exists in virsh
-    if sudo virsh list --all | grep -qw "${lab_infra_server_hostname}"; then
-        print_error "Lab Infra VM '${lab_infra_server_hostname}' already exists in libvirt!"
-        print_info "To remove it, run: sudo virsh destroy ${lab_infra_server_hostname} && sudo virsh undefine ${lab_infra_server_hostname} --nvram && sudo rm -rf ${VM_DIR}"
-        exit 1
-    fi
-
-    # Check if VM disk already exists
-    if [[ -f "$VM_DISK_PATH" ]]; then
-        print_error "Lab Infra VM disk already exists at $VM_DISK_PATH."
-        print_info "To remove it, run: sudo rm -rf ${VM_DIR}"
-        exit 1
-    fi
-
-    print_info "Lab Infra VM '${lab_infra_server_hostname}' does not exist. Ready to create."
+    print_info "Lab Infra VM '${lab_infra_server_hostname}' ready to create."
 
     lab_infra_server_mode_is_host=false
 
@@ -799,6 +772,7 @@ EOF
     # Launch VM via virt-install
     # -----------------------------
     print_info "Buckle up! We are about to view the Infra Server VM (${lab_infra_server_hostname}) deployment from console!"
+    print_info "The console will disconnect automatically after the OS installation completes."
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-ovmf.sh
 
     sudo PYTHONPATH="/tux2lab/vendor/virt-manager" python3 "/tux2lab/vendor/virt-manager/virt-install" \
@@ -814,6 +788,7 @@ EOF
         --location "/mnt/iso-for-${lab_infra_server_hostname}" \
         --extra-args "inst.ks=file:/${lab_infra_server_hostname}_ks.cfg inst.stage2=cdrom inst.repo=cdrom console=ttyS0 nomodeset inst.text quiet" \
         --graphics none \
+        --noreboot \
         --watchdog none \
         --console pty,target_type=serial \
         --machine q35 \
@@ -822,19 +797,82 @@ EOF
 nvram.template=${OVMF_VARS_PATH},\
 nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
 
-    # -----------------------------
-    # Check deployment status
-    # -----------------------------
-    if sudo virsh list --all | grep -q "${lab_infra_server_hostname}"; then
-        print_success "Successfully deployed your Infra Server VM (${lab_infra_server_hostname})!"
-    else
-        print_error "Failed to deploy your Infra Server VM (${lab_infra_server_hostname})!"
-        print_info "Please check where it went wrong."
-    fi
-
     # Cleanup ISO mount
     sudo umount -l "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
     sudo rmdir "/mnt/iso-for-${lab_infra_server_hostname}" &>/dev/null || true
+
+    # -----------------------------
+    # Post-install: start VM and wait for bootstrap to complete
+    # -----------------------------
+    echo
+    print_info "OS installation complete. Starting VM for first-boot configuration..."
+
+    # Brief pause to let libvirt finalize domain state after install
+    sleep 5
+
+    # Start the VM (kickstart powered it off after install)
+    if ! sudo virsh start "${lab_infra_server_hostname}" &>/dev/null; then
+        print_error "Failed to start VM after installation."
+        exit 1
+    fi
+
+    # Wait for SSH to become reachable
+    print_info "Waiting for SSH to become available on ${lab_infra_server_hostname}..." "nskip"
+    local ssh_opts="-i ${HOME}/.ssh/tux2lab_id_rsa -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
+    local max_ssh_wait=300  # 5 minutes
+    local elapsed=0
+
+    while ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" true 2>/dev/null; do
+        if [[ $elapsed -ge $max_ssh_wait ]]; then
+            echo
+            print_error "Timed out waiting for SSH (${max_ssh_wait}s). VM may still be booting."
+            print_info "You can check manually: ssh ${lab_infra_admin_username}@${lab_infra_server_ipv4_address}"
+            exit 1
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+    print_success ""
+
+    # Wait for bootstrap to complete
+    print_info "Waiting for lab infrastructure bootstrap to complete..." "nskip"
+    local max_bootstrap_wait=900  # 15 minutes
+    elapsed=0
+
+    while ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+        "test -f /opt/tux2lab-bootstrap.done" 2>/dev/null; do
+        if [[ $elapsed -ge $max_bootstrap_wait ]]; then
+            echo
+            print_error "Timed out waiting for bootstrap (${max_bootstrap_wait}s)."
+            print_info "Bootstrap may still be running. Check with:"
+            print_info "  ssh ${lab_infra_admin_username}@${lab_infra_server_ipv4_address} 'journalctl -u tux2lab-bootstrap -f'"
+            exit 1
+        fi
+        sleep 10
+        elapsed=$((elapsed + 10))
+    done
+    print_success ""
+
+    echo
+    print_green "═══════════════════════════════════════════════════════════════════"
+    print_green "  Lab Infrastructure Server deployed successfully!"
+    print_green "═══════════════════════════════════════════════════════════════════"
+    print_green "  Hostname    : ${lab_infra_server_hostname}"
+    print_green "  Domain      : ${lab_infra_domain_name}"
+    print_green "  Admin       : ${lab_infra_admin_username}"
+    print_green "  IPv4        : ${lab_infra_server_ipv4_address}"
+    print_green "  IPv6        : ${lab_infra_server_ipv6_address}"
+    print_green "  IPv4 Subnet : ${lab_infra_server_ipv4_subnet}"
+    print_green "  IPv6 Subnet : ${lab_infra_server_ipv6_ula_subnet}"
+    print_green "  IPv4 Gateway: ${lab_infra_server_ipv4_gateway}"
+    print_green "  IPv6 Gateway: ${lab_infra_server_ipv6_gateway}"
+    print_green "═══════════════════════════════════════════════════════════════════"
+    echo
+
+    # Run health check to verify all services
+    print_info "Running health check..."
+    echo
+    /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh
 
     exit 0
 }
@@ -1031,19 +1069,6 @@ deploy_lab_infra_server_host() {
         exit 1
     fi
 
-    # Create CNAME aliases so well-known names always resolve
-    local cname_aliases=("jbobs-engine" "tux2lab-infra-server" "lab-infra-server")
-    for cname_alias in "${cname_aliases[@]}"; do
-        if [[ "${lab_infra_server_shortname}" == "${cname_alias}" ]]; then
-            print_info "Skipping CNAME for ${cname_alias} (matches server name)"
-            continue
-        fi
-        print_info "Creating CNAME record: ${cname_alias} -> ${lab_infra_server_hostname}..."
-        if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "${cname_alias}" "${lab_infra_server_hostname}"; then
-            print_warning "Failed to create CNAME for ${cname_alias}"
-        fi
-    done
-
     # Set mgmt_super_user in environment using lab_infra_admin_username
     if ! grep -q mgmt_super_user /etc/environment; then
         echo "mgmt_super_user=\"${lab_infra_admin_username}\"" | sudo tee -a /etc/environment &>/dev/null
@@ -1228,14 +1253,15 @@ Choose where to deploy your lab infra server:
 -------------------------------------------------------------"
 
 while true; do
-    read -rp "Enter your choice (vm/host): " DEPLOY_TARGET
+    read -rp "Enter your choice (VM/HOST) [ Default: VM ]: " DEPLOY_TARGET
+    DEPLOY_TARGET="${DEPLOY_TARGET:-VM}"
     case "$DEPLOY_TARGET" in
-        vm)
+        VM)
             print_info "Confirmed: Lab Infra Server Deployment Mode set to 'VM'."
             deploy_lab_infra_server_vm
             break
             ;;
-        host)
+        HOST)
             print_yellow "═══════════════════════════════════════════════════════════════════
 ⚠  WARNING: HOST MODE DEPLOYMENT
 ═══════════════════════════════════════════════════════════════════"
@@ -1270,16 +1296,16 @@ If you have sufficient resources, consider using VM mode for safer deployment."
             read -rp "Type 'CONFIRM' to proceed with HOST mode deployment or 'NO' to cancel: " host_confirm
             
             if [[ "$host_confirm" != "CONFIRM" ]]; then
-                print_info "Host deployment cancelled. Please choose 'vm' for safer deployment."
+                print_info "Host deployment cancelled. Please choose 'VM' for safer deployment."
                 continue
             fi
             
-            print_info "Confirmed: Lab Infra Server Deployment Mode set to 'Host'."
+            print_info "Confirmed: Lab Infra Server Deployment Mode set to 'HOST'."
             deploy_lab_infra_server_host
             break
             ;;
         *)
-            print_warning "Invalid choice. Please type either 'vm' or 'host'."
+            print_warning "Invalid choice. Please type either 'VM' or 'HOST'."
             ;;
     esac
 done

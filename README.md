@@ -146,10 +146,11 @@ tux2lab deploy
 ```
 
 The interactive wizard will guide you through:
-- Choosing a hostname and domain (default: `tux2lab.internal`)
-- Setting an admin user and password
+- Setting an admin password
 - Selecting VM mode (recommended) or Host mode
 - Configuring SSH keys for passwordless access
+
+The hostname is fixed to `tux2lab-engine` and the domain is automatically set to `<your-username>.internal`.
 
 **What happens next (VM mode):**
 
@@ -169,7 +170,7 @@ tux2lab health
 ```
 KVM Lab Infra Health Check
 Lab Infra Server Mode: VM
-Lab Infra Server     : lab-infra-server.tux2lab.internal
+Lab Infra Server     : tux2lab-engine.user.internal
 
 [ ✓ ] DNS Server           [ 53/tcp  ]
 [ ✓ ] DHCP Server          [ 67/udp  ]

@@ -104,10 +104,10 @@ if [[ "$force_delete" == false ]]; then
         print_warning "This will permanently delete snapshot '$snapshot_name' from VM \"${validated_hosts[0]}\"."
     fi
     print_notify "This action cannot be undone."
-    read -rp "Are you sure you want to continue? (yes/no): " confirmation
+    read -rp "Are you sure you want to continue? (YES/NO): " confirmation
     echo -ne "\033[1A\033[2K"
 
-    if [[ "$confirmation" != "yes" ]]; then
+    if [[ "$confirmation" != "YES" ]]; then
         print_info "Operation cancelled by user."
         exit 0
     fi

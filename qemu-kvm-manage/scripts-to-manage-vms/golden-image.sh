@@ -204,8 +204,8 @@ golden_image_cleanup() {
             for f in "${files_to_remove[@]}"; do
                 print_info "  $(basename "$f")"
             done
-            read -rp "Are you sure? (yes/no): " confirm
-            if [[ "$confirm" != "yes" ]]; then
+            read -rp "Are you sure? (YES/NO): " confirm
+            if [[ "$confirm" != "YES" ]]; then
                 print_info "Cleanup aborted."
                 exit 0
             fi
@@ -279,8 +279,8 @@ golden_image_cleanup() {
         for f in "${files_to_remove[@]}"; do
             print_info "  $(basename "$f")"
         done
-        read -rp "Are you sure? (yes/no): " confirm
-        if [[ "$confirm" != "yes" ]]; then
+        read -rp "Are you sure? (YES/NO): " confirm
+        if [[ "$confirm" != "YES" ]]; then
             print_info "Cleanup aborted."
             exit 0
         fi

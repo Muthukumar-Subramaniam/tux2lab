@@ -109,10 +109,10 @@ if [[ "$force_revert" == false ]]; then
         print_warning "This will revert VM \"${validated_hosts[0]}\" to snapshot '$snapshot_name'."
     fi
     print_notify "Current disk state will be OVERWRITTEN. This cannot be undone."
-    read -rp "Are you sure you want to continue? (yes/no): " confirmation
+    read -rp "Are you sure you want to continue? (YES/NO): " confirmation
     echo -ne "\033[1A\033[2K"
 
-    if [[ "$confirmation" != "yes" ]]; then
+    if [[ "$confirmation" != "YES" ]]; then
         print_info "Operation cancelled by user."
         exit 0
     fi

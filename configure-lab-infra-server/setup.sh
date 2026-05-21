@@ -83,18 +83,7 @@ source /etc/environment
 : "${dnsbinder_server_short_name:?Error: dnsbinder did not set server name}"
 : "${dnsbinder_last24_subnet:?Error: dnsbinder did not set subnet}"
 
-# Create CNAME aliases so well-known names always resolve
-cname_aliases=("jbobs-engine" "tux2lab-infra-server" "lab-infra-server")
-for cname_alias in "${cname_aliases[@]}"; do
-    if [[ "${dnsbinder_server_short_name}" == "${cname_alias}" ]]; then
-        echo -e "\nSkipping CNAME for ${cname_alias} (matches server name) . . .\n"
-        continue
-    fi
-    echo -e "\nCreating CNAME record: ${cname_alias} -> ${dnsbinder_server_short_name} . . .\n"
-    if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cc "${cname_alias}" "${dnsbinder_server_short_name}"; then
-        echo -e "\nWarning: Failed to create CNAME for ${cname_alias}\n"
-    fi
-done
+# No CNAME aliases needed — single fixed hostname: tux2lab-engine
 
 echo -e "\nSetting motd . . .\n"
 

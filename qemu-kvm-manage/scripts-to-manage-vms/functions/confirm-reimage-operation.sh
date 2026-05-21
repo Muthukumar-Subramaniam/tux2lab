@@ -30,8 +30,8 @@ confirm_reimage_operation() {
     
     print_warning "This will reimage VM \"$vm_hostname\" using $reimage_method!"
     print_warning "All existing data on this VM will be permanently lost."
-    read -rp "Are you sure you want to proceed? (yes/no): " confirmation
-    if [[ "$confirmation" != "yes" ]]; then
+    read -rp "Are you sure you want to proceed? (YES/NO): " confirmation
+    if [[ "$confirmation" != "YES" ]]; then
         print_info "Reimage of \"$vm_hostname\" skipped by user."
         return 1
     fi

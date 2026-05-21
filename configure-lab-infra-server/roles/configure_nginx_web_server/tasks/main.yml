@@ -21,11 +21,6 @@
     ssl_san: >-
       DNS:{{ ansible_facts.env.dnsbinder_server_fqdn }},DNS:{{ ansible_facts.env.dnsbinder_server_short_name }},IP:{{ ansible_facts.env.dnsbinder_server_ipv4_address }},IP:{{ ansible_facts.env.dnsbinder_server_ipv6_address }}
 
-- name: Add lab-infra-server alias to SSL SANs if server short name is different
-  ansible.builtin.set_fact:
-    ssl_san: "{{ ssl_san }},DNS:lab-infra-server.{{ ansible_facts.env.dnsbinder_domain }},DNS:lab-infra-server"
-  when: ansible_facts.env.dnsbinder_server_short_name != "lab-infra-server"
-
 - name: Generate self-signed SSL private key
   become: true
   ansible.builtin.command: >

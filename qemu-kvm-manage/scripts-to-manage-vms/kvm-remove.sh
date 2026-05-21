@@ -66,8 +66,8 @@ remove_vm() {
     elif [[ "$skip_confirmation" == false ]]; then
         # Regular confirmation for other VMs
         print_warning "This will permanently delete VM \"$vm_name\" and all associated files!"
-        read -rp "Are you sure you want to proceed? (yes/no): " confirmation
-        if [[ "$confirmation" != "yes" ]]; then
+        read -rp "Are you sure you want to proceed? (YES/NO): " confirmation
+        if [[ "$confirmation" != "YES" ]]; then
             print_info "Operation cancelled by user."
             return 1
         fi

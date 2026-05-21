@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: health.sh                                                            #
-# Description: KVM Lab Infrastructure Health Check Tool                                  #
+# Description: tux2lab Health Check Tool                                                 #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
@@ -81,7 +81,7 @@ else
 fi
 
 print_cyan "-------------------------------------------------------------
-KVM Lab Infra Health Check
+tux2lab Health Check
 Lab Infra Server Mode: ${lab_infra_server_mode}
 Lab Infra Server     : ${lab_infra_server_hostname}
 IPv4 Address         : ${lab_infra_server_ipv4_address}
@@ -128,22 +128,22 @@ done
 # -------------------------------------------------------------
 total_services=${#services_to_check[@]}
 print_cyan "-------------------------------------------------------------
-Health Check Summary of KVM Lab Infra:
+Health Check Summary of tux2lab:
 Total Services    : $total_services
 Active Services   : $active_services
 Inactive Services : $inactive_services
 -------------------------------------------------------------"
 if [[ $active_services -eq 0 ]]; then
-    print_error "KVM Lab Infra health is CRITICAL."
+    print_error "tux2lab health is CRITICAL."
     print_info "All services are down. Try: tux2lab start"
     print_cyan "-------------------------------------------------------------"
     exit 2
 elif [[ $total_services -eq $active_services ]]; then
-    print_success "KVM Lab Infra health is STABLE."
+    print_success "tux2lab health is STABLE."
     print_cyan "-------------------------------------------------------------"
     exit 0
 else
-    print_warning "KVM Lab Infra health is DEGRADED."
+    print_warning "tux2lab health is DEGRADED."
     print_info "Some services are down. Try: tux2lab start"
     print_cyan "-------------------------------------------------------------"
     exit 1

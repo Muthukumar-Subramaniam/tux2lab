@@ -115,10 +115,10 @@ golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.q
 # Check if golden image already exists
 if [[ -f "${golden_image_path}" ]]; then
     print_warning "Golden image \"${qemu_kvm_hostname}\" already exists!"
-    read -rp "Do you want to delete and recreate it? (yes/no): " answer
+    read -rp "Do you want to delete and recreate it? (YES/NO): " answer
     echo -ne "\033[1A\033[2K"  # Move up one line and clear it
     case "$answer" in
-        yes|YES)
+        YES)
             print_task "Deleting existing golden image..." nskip
             if sudo rm -f "${golden_image_path}"; then
                 print_task_done

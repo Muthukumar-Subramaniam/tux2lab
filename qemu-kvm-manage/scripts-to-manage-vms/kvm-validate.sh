@@ -350,9 +350,10 @@ case "$DISTRO_FAMILY" in
         fi
 
         # Real yum repo validation: actually query metadata
-        if dnf repolist 2>/dev/null | grep -qiE "lab|tux2lab"; then
+        local repo_pattern="${lab_infra_domain_name//./-}"
+        if dnf repolist 2>/dev/null | grep -qiE "${repo_pattern}|lab|tux2lab"; then
             emit "Lab yum repo" "PASS" "reachable"
-        elif ls /etc/yum.repos.d/*lab* &>/dev/null || ls /etc/yum.repos.d/*tux2lab* &>/dev/null; then
+        elif ls /etc/yum.repos.d/*"${repo_pattern}"* &>/dev/null || ls /etc/yum.repos.d/*lab* &>/dev/null || ls /etc/yum.repos.d/*tux2lab* &>/dev/null; then
             emit "Lab yum repo" "WARN" "file exists but repo metadata unreachable"
         else
             emit "Lab yum repo" "FAIL" ""
