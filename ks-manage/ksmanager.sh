@@ -1434,6 +1434,7 @@ fn_update_kea_dhcp_reservations() {
   local kea_dhcp6_tmp_config="${kea_config_temp_dir}/kea-dhcp6.conf_${kea_temp_config_timestamp}"
 
   mkdir -p "$kea_config_temp_dir"
+  find "$kea_config_temp_dir" -type f -name "kea-dhcp*.conf_*" -delete
 
     local kea_cache_snapshot="${kea_config_temp_dir}/mac-address-cache.snapshot.$$"
 
@@ -1603,6 +1604,7 @@ EOF
     -u "$kea_api_auth" \
     -d @"$kea_dhcp4_tmp_config" \
     "$kea_api_url" &>/dev/null; then
+    rm -f "${kea_cache_snapshot}"
     print_task_fail
     print_error "Failed to update KEA DHCPv4 reservations (API unreachable or authentication failed)."
     exit 1
