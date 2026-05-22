@@ -238,20 +238,23 @@ prepare_lab_infra_config() {
     # Print confirmation
     print_info "Lab Infra SSH public key is ready for user \033[1m${lab_infra_admin_username}\033[0m on domain \033[1m${lab_infra_domain_name}\033[0m"
 
-    # Ensure QEMU/KVM environment is ready for rebuild
+    # Ensure QEMU/KVM environment is ready
     if $REBUILD_MODE; then
         print_info "Restarting libvirtd to ensure clean state..."
         sudo systemctl restart libvirtd
-        local retries=0
-        while ! sudo virsh version &>/dev/null; do
-            retries=$((retries + 1))
-            if [[ $retries -ge 30 ]]; then
-                print_error "libvirtd failed to become ready after restart"
-                exit 1
-            fi
-            sleep 1
-        done
+    elif ! sudo virsh version &>/dev/null; then
+        print_info "libvirtd is not responding, restarting..."
+        sudo systemctl restart libvirtd
     fi
+    local retries=0
+    while ! sudo virsh version &>/dev/null; do
+        retries=$((retries + 1))
+        if [[ $retries -ge 30 ]]; then
+            print_error "libvirtd failed to become ready"
+            exit 1
+        fi
+        sleep 1
+    done
 
     # Ensure tux2lab network is defined and active
     if ! sudo virsh net-info tux2lab &>/dev/null; then
