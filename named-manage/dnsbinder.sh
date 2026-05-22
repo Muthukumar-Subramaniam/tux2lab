@@ -418,7 +418,9 @@ fn_configure_named_dns_server() {
 
     print_task "Taking backup of named.conf..."
 
-    cp -p /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
+    if [[ -f /etc/named.conf ]]; then
+        cp -p /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
+    fi
     
     print_task_done
 
