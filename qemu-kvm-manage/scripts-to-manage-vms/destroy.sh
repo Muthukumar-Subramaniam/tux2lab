@@ -188,18 +188,33 @@ else
 fi
 
 # ====== STEP 4: STOP HOST-MODE LAB SERVICES (IF APPLICABLE) ======
-if $lab_infra_server_mode_is_host; then
+# Detect host-mode by checking if any lab services are enabled/active,
+# even if lab_environment_vars was already wiped by a previous run.
+host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
+host_mode_detected=$lab_infra_server_mode_is_host
+
+if ! $host_mode_detected; then
+    for svc in "${host_services[@]}"; do
+        if systemctl is-enabled "$svc" &>/dev/null; then
+            host_mode_detected=true
+            break
+        fi
+    done
+fi
+
+if $host_mode_detected; then
     print_info "Stopping and disabling host-mode lab services..."
-    host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
     for service_name in "${host_services[@]}"; do
-        print_task "Stopping and disabling ${service_name}..."
-        sudo systemctl stop "$service_name" 2>/dev/null || true
-        if sudo systemctl disable "$service_name" 2>/dev/null; then
-            print_task_done
-            ((++completed_steps))
-        else
-            print_task_fail
-            ((++failed_steps))
+        if systemctl is-enabled "$service_name" &>/dev/null || systemctl is-active "$service_name" &>/dev/null; then
+            print_task "Stopping and disabling ${service_name}..."
+            sudo systemctl stop "$service_name" 2>/dev/null || true
+            if sudo systemctl disable "$service_name" 2>/dev/null; then
+                print_task_done
+                ((++completed_steps))
+            else
+                print_task_fail
+                ((++failed_steps))
+            fi
         fi
     done
 
