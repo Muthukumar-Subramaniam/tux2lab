@@ -413,7 +413,13 @@ fi
 
 # ====== SUMMARY ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
-print_success "Lab has been completely destroyed."
+if [[ $completed_steps -eq 0 && $failed_steps -eq 0 ]]; then
+    print_success "Lab is already clean — nothing left to destroy."
+elif [[ $failed_steps -eq 0 ]]; then
+    print_success "Lab has been completely destroyed."
+else
+    print_warning "Lab destruction completed with ${failed_steps} failed step(s)."
+fi
 echo
 print_info "Summary: ${completed_steps} completed, ${skipped_steps} skipped, ${failed_steps} failed"
 if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
