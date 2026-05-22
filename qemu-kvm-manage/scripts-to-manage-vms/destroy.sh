@@ -188,81 +188,102 @@ else
 fi
 
 # ====== STEP 4: STOP HOST-MODE LAB SERVICES ======
-print_info "Stopping and disabling host-mode lab services..."
+# Detect if any host-mode artifacts exist on this machine
 host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
+host_mode_detected=false
 for service_name in "${host_services[@]}"; do
-    print_task "Stopping and disabling ${service_name}..."
     if systemctl is-enabled "$service_name" &>/dev/null || systemctl is-active "$service_name" &>/dev/null; then
-        sudo systemctl stop "$service_name" 2>/dev/null || true
-        if sudo systemctl disable "$service_name" 2>/dev/null; then
-            print_task_done
-            ((++completed_steps))
-        else
-            print_task_fail
-            ((++failed_steps))
-        fi
-    else
-        print_task_skip
-        ((++skipped_steps))
+        host_mode_detected=true
+        break
     fi
 done
-
-# Stop, disable and remove tux2lab-iso-mounts service
-print_task "Stopping and removing tux2lab-iso-mounts.service..."
-if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
-    sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
-    sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
-    sudo systemctl daemon-reload
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
+if ! $host_mode_detected; then
+    # Also check for other host-mode artifacts
+    if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1 || \
+       ip link show dummy-vnet &>/dev/null 2>&1 || \
+       [[ -f /etc/chrony.d/tux2lab.conf ]] || \
+       [[ -f /etc/named.conf ]] || \
+       grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
+        host_mode_detected=true
+    fi
 fi
 
-# Remove dummy interface
-print_task "Removing dummy interface dummy-vnet..."
-if ip link show dummy-vnet &>/dev/null; then
-    sudo ip link set dummy-vnet down 2>/dev/null || true
-    sudo ip link del dummy-vnet 2>/dev/null || true
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
-fi
+if $host_mode_detected; then
+    print_info "Stopping and disabling host-mode lab services..."
+    for service_name in "${host_services[@]}"; do
+        print_task "Stopping and disabling ${service_name}..."
+        if systemctl is-enabled "$service_name" &>/dev/null || systemctl is-active "$service_name" &>/dev/null; then
+            sudo systemctl stop "$service_name" 2>/dev/null || true
+            if sudo systemctl disable "$service_name" 2>/dev/null; then
+                print_task_done
+                ((++completed_steps))
+            else
+                print_task_fail
+                ((++failed_steps))
+            fi
+        else
+            print_task_skip
+            ((++skipped_steps))
+        fi
+    done
 
-# Remove chrony tux2lab drop-in config (chrony stays running)
-print_task "Removing chrony tux2lab drop-in config..."
-if [[ -f /etc/chrony.d/tux2lab.conf ]]; then
-    sudo rm -f /etc/chrony.d/tux2lab.conf
-    sudo systemctl restart chronyd 2>/dev/null || true
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
-fi
-
-# Remove firewalld trusted zone rules for lab network
-print_task "Removing firewalld trusted zone rules..."
-if systemctl is-active firewalld &>/dev/null; then
-    trusted_sources=$(sudo firewall-cmd --permanent --zone=trusted --list-sources 2>/dev/null || true)
-    if [[ -n "$trusted_sources" ]]; then
-        for src in $trusted_sources; do
-            sudo firewall-cmd --permanent --zone=trusted --remove-source="$src" &>/dev/null || true
-        done
-        sudo firewall-cmd --reload &>/dev/null || true
+    # Stop, disable and remove tux2lab-iso-mounts service
+    print_task "Stopping and removing tux2lab-iso-mounts.service..."
+    if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
+        sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
+        sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
+        sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
+        sudo systemctl daemon-reload
         print_task_done
         ((++completed_steps))
     else
         print_task_skip
         ((++skipped_steps))
     fi
-else
-    print_task_skip
-    ((++skipped_steps))
+
+    # Remove dummy interface
+    print_task "Removing dummy interface dummy-vnet..."
+    if ip link show dummy-vnet &>/dev/null; then
+        sudo ip link set dummy-vnet down 2>/dev/null || true
+        sudo ip link del dummy-vnet 2>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
+
+    # Remove chrony tux2lab drop-in config (chrony stays running)
+    print_task "Removing chrony tux2lab drop-in config..."
+    if [[ -f /etc/chrony.d/tux2lab.conf ]]; then
+        sudo rm -f /etc/chrony.d/tux2lab.conf
+        sudo systemctl restart chronyd 2>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
+
+    # Remove firewalld trusted zone rules for lab network
+    print_task "Removing firewalld trusted zone rules..."
+    if systemctl is-active firewalld &>/dev/null; then
+        trusted_sources=$(sudo firewall-cmd --permanent --zone=trusted --list-sources 2>/dev/null || true)
+        if [[ -n "$trusted_sources" ]]; then
+            for src in $trusted_sources; do
+                sudo firewall-cmd --permanent --zone=trusted --remove-source="$src" &>/dev/null || true
+            done
+            sudo firewall-cmd --reload &>/dev/null || true
+            print_task_done
+            ((++completed_steps))
+        else
+            print_task_skip
+            ((++skipped_steps))
+        fi
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
 fi
 
 # ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
@@ -330,26 +351,27 @@ else
 fi
 
 # ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
-# Remove named.conf (entirely generated by dnsbinder, recreated on next deploy)
-print_task "Removing named.conf..."
-if [[ -f /etc/named.conf ]]; then
-    sudo rm -f /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
-fi
+# Remove host-mode config artifacts (named.conf, /etc/environment)
+if $host_mode_detected; then
+    print_task "Removing named.conf..."
+    if [[ -f /etc/named.conf ]]; then
+        sudo rm -f /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
 
-# Remove dnsbinder and tux2lab variables from /etc/environment
-print_task "Removing tux2lab variables from /etc/environment..."
-if grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
-    sudo sed -i '/^dnsbinder_/d; /^mgmt_super_user/d; /^mgmt_interface_name/d' /etc/environment
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
+    print_task "Removing tux2lab variables from /etc/environment..."
+    if grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
+        sudo sed -i '/^dnsbinder_/d; /^mgmt_super_user/d; /^mgmt_interface_name/d' /etc/environment
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
 fi
 
 # Unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)
