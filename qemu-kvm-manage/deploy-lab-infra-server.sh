@@ -823,7 +823,7 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     print_success ""
 
     # Wait for bootstrap to complete
-    print_info "Waiting for lab infrastructure bootstrap to complete..." "nskip"
+    print_info "Waiting for lab infrastructure bootstrap to complete (this may take 5-10 minutes)..." "nskip"
     local max_bootstrap_wait=900  # 15 minutes
     elapsed=0
 
