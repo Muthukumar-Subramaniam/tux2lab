@@ -309,6 +309,14 @@ if [[ -f /etc/named.conf ]] && grep -q 'zones-are-managed-by-dnsbinder' /etc/nam
     ((++completed_steps))
 fi
 
+# Remove dnsbinder variables from /etc/environment
+if grep -q '^dnsbinder_' /etc/environment 2>/dev/null; then
+    print_task "Removing dnsbinder variables from /etc/environment..."
+    sudo sed -i '/^dnsbinder_/d' /etc/environment
+    print_task_done
+    ((++completed_steps))
+fi
+
 # Unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)
 if findmnt --list --output TARGET | grep -q '/tux2lab-data/'; then
     print_task "Unmounting active mounts under /tux2lab-data/..."
