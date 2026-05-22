@@ -205,8 +205,8 @@ fi
 if $host_mode_detected; then
     print_info "Stopping and disabling host-mode lab services..."
     for service_name in "${host_services[@]}"; do
+        print_task "Stopping and disabling ${service_name}..."
         if systemctl is-enabled "$service_name" &>/dev/null || systemctl is-active "$service_name" &>/dev/null; then
-            print_task "Stopping and disabling ${service_name}..."
             sudo systemctl stop "$service_name" 2>/dev/null || true
             if sudo systemctl disable "$service_name" 2>/dev/null; then
                 print_task_done
@@ -215,6 +215,9 @@ if $host_mode_detected; then
                 print_task_fail
                 ((++failed_steps))
             fi
+        else
+            print_task_skip
+            ((++skipped_steps))
         fi
     done
 
