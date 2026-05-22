@@ -207,37 +207,46 @@ for service_name in "${host_services[@]}"; do
 done
 
 # Stop, disable and remove tux2lab-iso-mounts service
+print_task "Stopping and removing tux2lab-iso-mounts.service..."
 if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
-    print_task "Stopping and removing tux2lab-iso-mounts.service..."
     sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
     sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
     sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
     sudo systemctl daemon-reload
     print_task_done
     ((++completed_steps))
+else
+    print_task_skip
+    ((++skipped_steps))
 fi
 
 # Remove dummy interface
+print_task "Removing dummy interface dummy-vnet..."
 if ip link show dummy-vnet &>/dev/null; then
-    print_task "Removing dummy interface dummy-vnet..."
     sudo ip link set dummy-vnet down 2>/dev/null || true
     sudo ip link del dummy-vnet 2>/dev/null || true
     print_task_done
     ((++completed_steps))
+else
+    print_task_skip
+    ((++skipped_steps))
 fi
 
 # Remove chrony tux2lab drop-in config (chrony stays running)
+print_task "Removing chrony tux2lab drop-in config..."
 if [[ -f /etc/chrony.d/tux2lab.conf ]]; then
-    print_task "Removing chrony tux2lab drop-in config..."
     sudo rm -f /etc/chrony.d/tux2lab.conf
     sudo systemctl restart chronyd 2>/dev/null || true
     print_task_done
     ((++completed_steps))
+else
+    print_task_skip
+    ((++skipped_steps))
 fi
 
 # Remove firewalld trusted zone rules for lab network
+print_task "Removing firewalld trusted zone rules..."
 if systemctl is-active firewalld &>/dev/null; then
-    print_task "Removing firewalld trusted zone rules..."
     trusted_sources=$(sudo firewall-cmd --permanent --zone=trusted --list-sources 2>/dev/null || true)
     if [[ -n "$trusted_sources" ]]; then
         for src in $trusted_sources; do
@@ -247,6 +256,9 @@ if systemctl is-active firewalld &>/dev/null; then
     fi
     print_task_done
     ((++completed_steps))
+else
+    print_task_skip
+    ((++skipped_steps))
 fi
 
 # ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
