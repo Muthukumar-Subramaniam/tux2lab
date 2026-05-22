@@ -841,6 +841,16 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     done
     print_success ""
 
+    # Configure DNS resolution on the KVM host to use the lab's DNS server
+    print_task "Configuring DNS resolution for labbr0..."
+    if sudo resolvectl dns labbr0 "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}" 2>/dev/null && \
+       sudo resolvectl domain labbr0 "~${lab_infra_domain_name}" 2>/dev/null; then
+        print_task_done
+    else
+        print_task_fail
+        print_warning "Could not configure resolvectl. Run 'tux2lab dns' manually."
+    fi
+
     echo
     print_green "═══════════════════════════════════════════════════════════════════"
     print_green "  Lab Infrastructure Server deployed successfully!"
