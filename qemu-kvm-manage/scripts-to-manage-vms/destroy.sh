@@ -121,7 +121,6 @@ print_cyan "══════════════════════�
 # ====== STEP 1: FORCE STOP ALL RUNNING VMs ======
 running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$running_vms" ]]; then
-    print_info "Force stopping all running VMs..."
     while IFS= read -r vm_name; do
         [[ -z "$vm_name" ]] && continue
         print_task "Force stopping VM \"${vm_name}\"..."
@@ -134,14 +133,14 @@ if [[ -n "$running_vms" ]]; then
         fi
     done <<< "$running_vms"
 else
-    print_info "No running VMs to stop."
+    print_task "Force stopping running VMs..."
+    print_task_skip
     ((++skipped_steps))
 fi
 
 # ====== STEP 2: UNDEFINE ALL VMs ======
 all_vms=$(sudo virsh list --all --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$all_vms" ]]; then
-    print_info "Removing all VMs from libvirt..."
     while IFS= read -r vm_name; do
         [[ -z "$vm_name" ]] && continue
         print_task "Undefining VM \"${vm_name}\"..."
@@ -169,13 +168,14 @@ if [[ -n "$all_vms" ]]; then
         fi
     done <<< "$all_vms"
 else
-    print_info "No VMs to remove."
+    print_task "Removing VMs from libvirt..."
+    print_task_skip
     ((++skipped_steps))
 fi
 
 # ====== STEP 3: STOP AND REMOVE SYSTEMD SERVICE ======
+print_task "Stopping and removing tux2lab-lab-infra.service..."
 if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
-    print_task "Stopping and removing tux2lab-lab-infra.service..."
     sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
     sudo systemctl disable tux2lab-lab-infra.service 2>/dev/null || true
     sudo rm -f /etc/systemd/system/tux2lab-lab-infra.service
@@ -183,6 +183,7 @@ if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
     print_task_done
     ((++completed_steps))
 else
+    print_task_skip
     ((++skipped_steps))
 fi
 
