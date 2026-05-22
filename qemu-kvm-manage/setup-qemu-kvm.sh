@@ -80,8 +80,19 @@ print_info "Disabling libvirtd-tls and libvirtd-tcp sockets..."
 sudo systemctl disable --now libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
 sudo systemctl mask libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
 
-print_info "Enabling and starting libvirtd..."
-sudo systemctl enable --now libvirtd
+print_info "Enabling and restarting libvirtd..."
+sudo systemctl enable libvirtd
+sudo systemctl restart libvirtd
+# Wait for libvirtd socket to become ready
+retries=0
+while ! sudo virsh version &>/dev/null; do
+    retries=$((retries + 1))
+    if [[ $retries -ge 30 ]]; then
+        print_error "libvirtd failed to become ready after restart"
+        exit 1
+    fi
+    sleep 1
+done
 sudo systemctl status libvirtd -l --no-pager || true
 
 print_task "Creating /tux2lab-data/vms to manage VMs"
