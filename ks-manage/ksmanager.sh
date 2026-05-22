@@ -1598,18 +1598,18 @@ EOF
    "$kea_api_url" &>/dev/null
 
   # ===== Push new configs dynamically =====
-  # Push DHCPv4 config
-  if ! curl -s -X POST -H "Content-Type: application/json" \
+  # Push DHCPv4 config (--fail ensures non-zero exit on HTTP 4xx/5xx)
+  if ! curl -sf -X POST -H "Content-Type: application/json" \
     -u "$kea_api_auth" \
     -d @"$kea_dhcp4_tmp_config" \
     "$kea_api_url" &>/dev/null; then
     print_task_fail
-    print_error "Failed to update KEA DHCPv4 reservations."
+    print_error "Failed to update KEA DHCPv4 reservations (API unreachable or authentication failed)."
     exit 1
   fi
 
-  # Push DHCPv6 config
-  if curl -s -X POST -H "Content-Type: application/json" \
+  # Push DHCPv6 config (--fail ensures non-zero exit on HTTP 4xx/5xx)
+  if curl -sf -X POST -H "Content-Type: application/json" \
     -u "$kea_api_auth" \
     -d @"$kea_dhcp6_tmp_config" \
     "$kea_api_url" &>/dev/null; then
@@ -1618,7 +1618,7 @@ EOF
   else
         rm -f "${kea_cache_snapshot}"
     print_task_fail
-    print_error "Failed to update KEA DHCPv6 reservations."
+    print_error "Failed to update KEA DHCPv6 reservations (API unreachable or authentication failed)."
     exit 1
   fi
 }

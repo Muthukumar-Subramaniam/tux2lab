@@ -27,9 +27,9 @@
   ansible.builtin.set_fact:
     kea_run_dir: "{{ kea_socket_dir_result.stdout }}"
 
-- name: Generate random password for Kea Control Agent
+- name: Set password for Kea Control Agent
   ansible.builtin.set_fact:
-    kea_ctrl_agent_password: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    kea_ctrl_agent_password: "kea-api-password"
 
 - name: Configure /etc/kea/kea-dhcp4.conf
   become: true
