@@ -301,6 +301,19 @@ else
 fi
 
 # ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
+# Restore named.conf to clean state (remove dnsbinder markers)
+if [[ -f /etc/named.conf ]] && grep -q 'zones-are-managed-by-dnsbinder' /etc/named.conf 2>/dev/null; then
+    print_task "Restoring named.conf to clean state..."
+    if [[ -f /etc/named.conf_bkp_by_dnsbinder ]]; then
+        sudo cp -p /etc/named.conf_bkp_by_dnsbinder /etc/named.conf
+    else
+        sudo sed -i '/# BEGIN zones-of-.*-domain/,/# END zones-of-.*-domain/d' /etc/named.conf
+    fi
+    sudo rm -f /etc/named.conf_bkp_by_dnsbinder
+    print_task_done
+    ((++completed_steps))
+fi
+
 # Unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)
 if findmnt --list --output TARGET | grep -q '/tux2lab-data/'; then
     print_task "Unmounting active mounts under /tux2lab-data/..."
