@@ -253,9 +253,12 @@ if systemctl is-active firewalld &>/dev/null; then
             sudo firewall-cmd --permanent --zone=trusted --remove-source="$src" &>/dev/null || true
         done
         sudo firewall-cmd --reload &>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
     fi
-    print_task_done
-    ((++completed_steps))
 else
     print_task_skip
     ((++skipped_steps))
@@ -376,18 +379,35 @@ fi
 if [[ -d "/tux2lab-data" ]]; then
     if $wipe_iso_files; then
         print_task "Wiping /tux2lab-data/ contents (including ISOs)..."
-        sudo rm -rf /tux2lab-data/*
-        print_task_done
-        ((++completed_steps))
+        if compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
+            sudo rm -rf /tux2lab-data/*
+            print_task_done
+            ((++completed_steps))
+        else
+            print_task_skip
+            ((++skipped_steps))
+        fi
     else
-        print_task "Wiping /tux2lab-data/ contents (preserving ISOs)..."
-        # Remove everything except iso-files/
+        # Check if anything besides iso-files/ exists
+        has_content=false
         for item in /tux2lab-data/*; do
+            [[ ! -e "$item" ]] && continue
             [[ "$(basename "$item")" == "iso-files" ]] && continue
-            sudo rm -rf "$item"
+            has_content=true
+            break
         done
-        print_task_done
-        ((++completed_steps))
+        print_task "Wiping /tux2lab-data/ contents (preserving ISOs)..."
+        if $has_content; then
+            for item in /tux2lab-data/*; do
+                [[ "$(basename "$item")" == "iso-files" ]] && continue
+                sudo rm -rf "$item"
+            done
+            print_task_done
+            ((++completed_steps))
+        else
+            print_task_skip
+            ((++skipped_steps))
+        fi
     fi
 fi
 
