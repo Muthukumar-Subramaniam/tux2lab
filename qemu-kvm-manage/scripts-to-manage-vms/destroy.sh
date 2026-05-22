@@ -262,56 +262,67 @@ else
 fi
 
 # ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
-if [[ -n "$lab_infra_domain_name" ]]; then
-    print_task "Cleaning lab entries from /etc/hosts..."
+print_task "Cleaning lab entries from /etc/hosts..."
+if [[ -n "$lab_infra_domain_name" ]] && grep -q "${lab_infra_domain_name}" /etc/hosts 2>/dev/null; then
     escaped_domain="${lab_infra_domain_name//./\\.}"
     sudo sed -i.bak "/${escaped_domain}/d" /etc/hosts 2>/dev/null || true
     print_task_done
     ((++completed_steps))
 else
+    print_task_skip
     ((++skipped_steps))
 fi
 
 # ====== STEP 6: REMOVE SSH ARTIFACTS ======
 print_task "Removing SSH artifacts..."
-rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
+if [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] || [[ -f /etc/ssh/ssh_config.d/999-tux2lab.conf ]]; then
+    rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
 
-# Remove tux2lab key from authorized_keys
-if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_infra_domain_name" ]]; then
-    escaped_domain="${lab_infra_domain_name//./\\.}"
-    sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+    # Remove tux2lab key from authorized_keys
+    if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_infra_domain_name" ]]; then
+        escaped_domain="${lab_infra_domain_name//./\\.}"
+        sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+    fi
+
+    # Remove system-wide SSH config
+    sudo rm -f /etc/ssh/ssh_config.d/999-tux2lab.conf 2>/dev/null || true
+
+    # Remove lab entries from user SSH config.custom
+    if [[ -f "$HOME/.ssh/config.custom" ]]; then
+        sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
+    fi
+    print_task_done
+    ((++completed_steps))
+else
+    print_task_skip
+    ((++skipped_steps))
 fi
-
-# Remove system-wide SSH config
-sudo rm -f /etc/ssh/ssh_config.d/999-tux2lab.conf 2>/dev/null || true
-
-# Remove lab entries from user SSH config.custom
-if [[ -f "$HOME/.ssh/config.custom" ]]; then
-    sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
-fi
-print_task_done
-((++completed_steps))
 
 # ====== STEP 7: DESTROY VIRTUAL NETWORK ======
 print_task "Destroying tux2lab virtual network..."
-sudo virsh net-destroy tux2lab &>/dev/null || true
-sudo virsh net-undefine tux2lab &>/dev/null || true
-if ip link show labbr0 &>/dev/null; then
-    sudo ip addr flush dev labbr0 2>/dev/null || true
+if sudo virsh net-info tux2lab &>/dev/null || ip link show labbr0 &>/dev/null; then
+    sudo virsh net-destroy tux2lab &>/dev/null || true
+    sudo virsh net-undefine tux2lab &>/dev/null || true
+    if ip link show labbr0 &>/dev/null; then
+        sudo ip addr flush dev labbr0 2>/dev/null || true
+    fi
+    print_task_done
+    ((++completed_steps))
+else
+    print_task_skip
+    ((++skipped_steps))
 fi
-print_task_done
-((++completed_steps))
 
 # ====== STEP 8: STOP AND DISABLE LIBVIRTD ======
 print_task "Stopping and disabling libvirtd..."
-if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
+if systemctl is-enabled libvirtd &>/dev/null || systemctl is-active libvirtd &>/dev/null; then
+    sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null || true
     sudo systemctl disable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null || true
     print_task_done
     ((++completed_steps))
 else
-    print_task_fail
-    print_warning "Could not stop libvirtd"
-    ((++failed_steps))
+    print_task_skip
+    ((++skipped_steps))
 fi
 
 # ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
