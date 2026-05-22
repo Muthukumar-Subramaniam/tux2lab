@@ -722,6 +722,21 @@ fn_get_iso_url() {
         print_error "No ISO URL configured for ${distro} ${version}."
         exit 1
     fi
+
+    # Ubuntu URLs point to a directory — resolve the actual ISO filename dynamically
+    if [[ "$distro" == "ubuntu-lts" ]]; then
+        local resolved_filename
+        resolved_filename=$(curl -sL "$url" | grep -oP "ubuntu-${version}(\\.[0-9]+)?-live-server-amd64\\.iso" | sort -V | tail -1)
+        if [[ -z "$resolved_filename" ]]; then
+            print_error "Could not detect Ubuntu ${version} ISO filename from ${url}"
+            print_info "The Ubuntu releases page may be temporarily unavailable."
+            exit 1
+        fi
+        print_info "Detected Ubuntu ISO: ${resolved_filename}"
+        echo "${url}${resolved_filename}"
+        return
+    fi
+
     echo "$url"
 }
 
