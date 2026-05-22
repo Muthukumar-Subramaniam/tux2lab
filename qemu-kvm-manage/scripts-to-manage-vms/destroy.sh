@@ -309,10 +309,10 @@ if [[ -f /etc/named.conf ]] && grep -q 'zones-are-managed-by-dnsbinder' /etc/nam
     ((++completed_steps))
 fi
 
-# Remove dnsbinder variables from /etc/environment
-if grep -q '^dnsbinder_' /etc/environment 2>/dev/null; then
-    print_task "Removing dnsbinder variables from /etc/environment..."
-    sudo sed -i '/^dnsbinder_/d' /etc/environment
+# Remove dnsbinder and tux2lab variables from /etc/environment
+if grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
+    print_task "Removing tux2lab variables from /etc/environment..."
+    sudo sed -i '/^dnsbinder_/d; /^mgmt_super_user/d; /^mgmt_interface_name/d' /etc/environment
     print_task_done
     ((++completed_steps))
 fi
