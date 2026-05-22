@@ -238,33 +238,10 @@ prepare_lab_infra_config() {
     # Print confirmation
     print_info "Lab Infra SSH public key is ready for user \033[1m${lab_infra_admin_username}\033[0m on domain \033[1m${lab_infra_domain_name}\033[0m"
 
-    # Ensure QEMU/KVM environment is ready
-    if $REBUILD_MODE; then
-        print_info "Restarting libvirtd to ensure clean state..."
-        sudo systemctl restart libvirtd
-    elif ! sudo virsh version &>/dev/null; then
-        print_info "libvirtd is not responding, restarting..."
-        sudo systemctl restart libvirtd
-    fi
-    local retries=0
-    while ! sudo virsh version &>/dev/null; do
-        retries=$((retries + 1))
-        if [[ $retries -ge 30 ]]; then
-            print_error "libvirtd failed to become ready"
-            exit 1
-        fi
-        sleep 1
-    done
-
-    # Ensure tux2lab network is defined and active
-    if ! sudo virsh net-info tux2lab &>/dev/null; then
-        print_info "Recreating tux2lab network..."
-        sudo virsh net-define /tux2lab/qemu-kvm-manage/labbr0.xml
-        sudo virsh net-start tux2lab
-        sudo virsh net-autostart tux2lab
-    elif ! sudo virsh net-list --name | grep -qw tux2lab; then
-        print_info "Starting tux2lab network..."
-        sudo virsh net-start tux2lab
+    # Ensure QEMU/KVM environment is ready (libvirtd + network)
+    if $REBUILD_MODE || ! sudo virsh net-info tux2lab &>/dev/null; then
+        print_info "Running QEMU/KVM setup to ensure environment is ready..."
+        bash /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh --yes
     fi
 
     # Capture network info from QEMU-KVM default bridge

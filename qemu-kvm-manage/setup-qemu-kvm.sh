@@ -7,6 +7,11 @@
 source /tux2lab/common-utils/color-functions.sh
 set -euo pipefail
 
+AUTO_YES=false
+if [[ "${1:-}" == "--yes" ]]; then
+    AUTO_YES=true
+fi
+
 if [[ "$EUID" -eq 0 ]]; then
     print_error "Running as root user is not allowed."
     print_info "This script should be run as a user with sudo privileges, not as root."
@@ -38,10 +43,12 @@ print_info "The following actions will be performed:
   - Set up custom labbr0 bridge network with dual-stack (IPv4/IPv6) support
   - Install custom VM management tool (tux2lab)"
 echo ""
-read -p "Are you sure you want to continue? (yes/no): " confirm
-if [[ "$confirm" != "yes" ]]; then
-    print_info "Setup cancelled by user."
-    exit 0
+if ! $AUTO_YES; then
+    read -p "Are you sure you want to continue? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+        print_info "Setup cancelled by user."
+        exit 0
+    fi
 fi
 echo ""
 
