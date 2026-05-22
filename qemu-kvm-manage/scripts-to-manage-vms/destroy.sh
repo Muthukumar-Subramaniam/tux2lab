@@ -232,6 +232,15 @@ if $lab_infra_server_mode_is_host; then
         ((++completed_steps))
     fi
 
+    # Clean bind mount fstab entry (/tux2lab → /tux2lab-data/tux2lab)
+    if grep -q '/tux2lab-data/tux2lab.*bind' /etc/fstab 2>/dev/null; then
+        print_task "Removing bind mount fstab entry..."
+        sudo sed -i '\|/tux2lab-data/tux2lab.*bind|d' /etc/fstab
+        sudo systemctl daemon-reload
+        print_task_done
+        ((++completed_steps))
+    fi
+
     # Remove chrony tux2lab drop-in config (chrony stays running)
     if [[ -f /etc/chrony.d/tux2lab.conf ]]; then
         print_task "Removing chrony tux2lab drop-in config..."
@@ -310,6 +319,16 @@ else
 fi
 
 # ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
+# First unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)
+if findmnt --list --output TARGET | grep -q '/tux2lab-data/'; then
+    print_task "Unmounting active mounts under /tux2lab-data/..."
+    findmnt --list --output TARGET | grep '/tux2lab-data/' | sort -r | while IFS= read -r mnt; do
+        sudo umount -l "$mnt" 2>/dev/null || true
+    done
+    print_task_done
+    ((++completed_steps))
+fi
+
 if [[ -d "/tux2lab-data" ]]; then
     if $wipe_iso_files; then
         print_task "Wiping /tux2lab-data/ contents (including ISOs)..."
