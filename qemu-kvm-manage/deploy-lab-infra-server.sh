@@ -1176,7 +1176,26 @@ EOF
     sudo systemctl enable tux2lab-lab-infra.service >/dev/null 2>&1
     print_success "tux2lab-lab-infra.service deployed and enabled."
 
-    print_success "Successfully deployed Lab Infra Server ${lab_infra_server_hostname} on your machine!"
+    echo
+    print_green "═══════════════════════════════════════════════════════════════════"
+    print_green "  Lab Infrastructure Server deployed successfully!"
+    print_green "═══════════════════════════════════════════════════════════════════"
+    print_green "  Hostname    : ${lab_infra_server_hostname}"
+    print_green "  Domain      : ${lab_infra_domain_name}"
+    print_green "  Admin       : ${lab_infra_admin_username}"
+    print_green "  IPv4        : ${lab_infra_server_ipv4_address}"
+    print_green "  IPv6        : ${lab_infra_server_ipv6_address}"
+    print_green "  IPv4 Subnet : ${lab_infra_server_ipv4_subnet}"
+    print_green "  IPv6 Subnet : ${lab_infra_server_ipv6_ula_subnet}"
+    print_green "  IPv4 Gateway: ${lab_infra_server_ipv4_gateway}"
+    print_green "  IPv6 Gateway: ${lab_infra_server_ipv6_gateway}"
+    print_green "═══════════════════════════════════════════════════════════════════"
+    echo
+
+    # Run health check to verify all services
+    print_info "Running health check..."
+    echo
+    /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh
 
 }
 
