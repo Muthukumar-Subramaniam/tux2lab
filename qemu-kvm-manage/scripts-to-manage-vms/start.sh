@@ -269,8 +269,10 @@ when_lab_infra_server_is_vm() {
     )
     
     while [[ $ssh_check_elapsed -lt $ssh_check_timeout ]]; do
-        if ssh "${ssh_connection_options[@]}" "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
-           'systemctl is-system-running' >/dev/null 2>&1 </dev/null; then
+        local sys_state
+        sys_state=$(ssh "${ssh_connection_options[@]}" "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
+           'systemctl is-system-running 2>/dev/null || true' 2>/dev/null </dev/null) || true
+        if [[ "$sys_state" == "running" || "$sys_state" == "degraded" ]]; then
             vm_is_ssh_accessible=true
             break
         fi
@@ -377,13 +379,12 @@ print_cyan "--------------------------------------------------------------"
 if $lab_infra_server_mode_is_host; then
     print_notify "Lab Infra Server Mode: HOST ( $lab_infra_server_hostname )"
     print_cyan "--------------------------------------------------------------"
-    when_lab_infra_server_is_host
+    when_lab_infra_server_is_host || exit_code=$?
 else
     print_notify "Lab Infra Server Mode: VM ( $lab_infra_server_hostname )"
     print_cyan "--------------------------------------------------------------"
-    when_lab_infra_server_is_vm
+    when_lab_infra_server_is_vm || exit_code=$?
 fi
 
-exit_code=$?
 print_cyan "--------------------------------------------------------------"
-exit $exit_code
+exit "${exit_code:-0}"

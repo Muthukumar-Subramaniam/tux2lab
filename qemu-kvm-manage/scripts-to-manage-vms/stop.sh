@@ -68,7 +68,7 @@ shutdown_all_vms() {
     local elapsed=0
     while [[ $elapsed -lt $vm_shutdown_timeout ]]; do
         local still_running
-        still_running=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+        still_running=$(timeout 10 sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
         if [[ -z "$still_running" ]]; then
             break
         fi
@@ -78,7 +78,7 @@ shutdown_all_vms() {
 
     # Force stop any VMs still running
     local remaining
-    remaining=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+    remaining=$(timeout 10 sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
     if [[ -n "$remaining" ]]; then
         print_task_fail
         print_warning "Some VMs did not shut down gracefully. Force stopping..."

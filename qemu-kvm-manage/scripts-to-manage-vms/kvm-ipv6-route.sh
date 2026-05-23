@@ -197,6 +197,24 @@ fn_enable_host_ipv6_forwarding() {
     print_task_done
 }
 
+fn_disable_host_ipv6_forwarding() {
+    print_task "Disabling IPv6 forwarding and NAT rules on host..."
+    
+    local primary_if=$(ip route | awk '/default/ {print $5; exit}')
+    
+    # Remove NAT66 and forwarding rules
+    if [[ -n "${lab_infra_server_ipv6_ula_subnet:-}" ]] && [[ -n "${primary_if}" ]]; then
+        sudo ip6tables -t nat -D POSTROUTING -s ${lab_infra_server_ipv6_ula_subnet} -o ${primary_if} -j MASQUERADE 2>/dev/null || true
+        sudo ip6tables -D FORWARD -i labbr0 -o ${primary_if} -j ACCEPT 2>/dev/null || true
+        sudo ip6tables -D FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+    fi
+    
+    # Disable IPv6 forwarding
+    sudo sysctl -w net.ipv6.conf.all.forwarding=0 &>/dev/null
+    
+    print_task_done
+}
+
 fn_enable_all() {
     print_notify "Enabling IPv6 default route on all running VMs..."
     echo ""
@@ -239,22 +257,24 @@ fn_disable_all() {
     
     if [[ -z "$vms" ]]; then
         print_warning "No running VMs found"
-        return 0
-    fi
-    
-    local removed=0
-    for vm in $vms; do
-        fn_disable_ipv6_route "$vm"
-        local rc=$?
-        [[ $rc -eq 0 ]] && ((++removed))
-    done
-    
-    echo ""
-    if [[ $removed -gt 0 ]]; then
-        print_success "IPv6 default route removal complete."
     else
-        print_info "No IPv6 default routes were active"
+        local removed=0
+        for vm in $vms; do
+            fn_disable_ipv6_route "$vm"
+            local rc=$?
+            [[ $rc -eq 0 ]] && ((++removed))
+        done
+        
+        echo ""
+        if [[ $removed -gt 0 ]]; then
+            print_success "IPv6 default route removal complete."
+        else
+            print_info "No IPv6 default routes were active"
+        fi
     fi
+
+    # Clean up host-level forwarding and NAT rules
+    fn_disable_host_ipv6_forwarding
 }
 
 fn_auto_configure() {

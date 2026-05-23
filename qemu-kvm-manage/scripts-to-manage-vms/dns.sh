@@ -117,11 +117,20 @@ else
         fi
 
         # Create secure temp file on remote server
-        remote_temp_file=$(ssh "${ssh_opts[@]}" "$ssh_target" "mktemp /tmp/dnsbinder-bulk.XXXXXXXXXX")
+        if ! remote_temp_file=$(ssh "${ssh_opts[@]}" "$ssh_target" "mktemp /tmp/dnsbinder-bulk.XXXXXXXXXX" 2>/dev/null); then
+            print_error "Failed to create temp file on lab infra server."
+            exit 1
+        fi
         if [[ -z "$remote_temp_file" ]]; then
             print_error "Failed to create temp file on lab infra server."
             exit 1
         fi
+
+        # Ensure remote temp file is cleaned up on exit or interrupt
+        cleanup_remote_temp() {
+            ssh "${ssh_opts[@]}" "$ssh_target" "rm -f '${remote_temp_file}'" >/dev/null 2>&1 || true
+        }
+        trap cleanup_remote_temp EXIT INT TERM
 
         print_task "Transferring file to lab infra server..."
         if scp "${ssh_opts[@]}" "$file_path" "${ssh_target}:${remote_temp_file}" >/dev/null 2>&1; then
@@ -129,16 +138,16 @@ else
         else
             print_task_fail
             print_error "Failed to transfer file to lab infra server"
-            ssh "${ssh_opts[@]}" "$ssh_target" "rm -f '${remote_temp_file}'" >/dev/null 2>&1 || true
             exit 1
         fi
 
         # Execute dnsbinder with remote temp file
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}'"
+        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}'" || true
         exit_code=$?
 
-        # Cleanup remote temp file
-        ssh "${ssh_opts[@]}" "$ssh_target" "rm -f '${remote_temp_file}'" >/dev/null 2>&1 || true
+        # Cleanup handled by trap, clear it
+        cleanup_remote_temp
+        trap - EXIT INT TERM
     else
         # Regular options - forward as-is
         args_escaped=$(printf '%q ' "$@")
