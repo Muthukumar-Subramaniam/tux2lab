@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: start.sh                                                             #
-# Description: Start the KVM lab infrastructure and verify essential services            #
+# Description: Start the tux2lab infrastructure and verify essential services            #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
@@ -16,7 +16,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab start
 
 DESCRIPTION:
-    Starts the KVM lab infrastructure, including libvirtd, the virtual
+    Starts the tux2lab infrastructure, including libvirtd, the virtual
     network, and the lab infra server (VM or host services).
     Verifies all essential services are reachable after startup."
     exit 0
@@ -190,9 +190,9 @@ when_lab_infra_server_is_host() {
     configure_dns_for_bridge || return 1
 
     if $all_services_active; then
-        print_success "kvm lab infra is started, and all essential services are live."
+        print_success "tux2lab Infra is started, and all essential services are live."
     else
-        print_warning "kvm lab infra is started, but some services need attention."
+        print_warning "tux2lab Infra is started, but some services need attention."
         print_info "Run 'sudo systemctl status <service>' for details."
     fi
 }
@@ -290,7 +290,7 @@ when_lab_infra_server_is_vm() {
         print_warning "'nc' (netcat) is not installed — skipping service connectivity checks."
         configure_dns_for_bridge || return 1
         print_cyan "--------------------------------------------------------------"
-        print_success "KVM Lab Infra is started (service checks skipped — install nc for full verification)."
+        print_success "tux2lab Infra is started (service checks skipped — install nc for full verification)."
         return 0
     fi
 
@@ -360,10 +360,10 @@ when_lab_infra_server_is_vm() {
 
     if $all_services_active; then
         print_cyan "--------------------------------------------------------------"
-        print_success "KVM Lab Infra is started, and all essential services are live."
+        print_success "tux2lab Infra is started, and all essential services are live."
     else
         print_cyan "--------------------------------------------------------------"
-        print_warning "KVM Lab Infra is started, but some services need attention."
+        print_warning "tux2lab Infra is started, but some services need attention."
         print_info "Total: ${#services_to_check[@]}, Active: $active_services, Inactive: $inactive_services"
     fi
 }
@@ -371,7 +371,7 @@ when_lab_infra_server_is_vm() {
 # ====== MAIN LOGIC ======
 
 print_cyan "--------------------------------------------------------------"
-print_info "KVM Lab Infrastructure Startup"
+print_info "tux2lab Infrastructure Startup"
 print_cyan "--------------------------------------------------------------"
 
 if $lab_infra_server_mode_is_host; then

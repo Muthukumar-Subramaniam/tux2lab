@@ -20,7 +20,7 @@ VERSION=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"
 
 # Show version
 show_version() {
-    print_cyan "tux2lab vm - QEMU/KVM Lab VM Management Tool
+    print_cyan "tux2lab vm - Lab VM Management Tool
 ├─ Version    : $VERSION
 ├─ Repository : https://github.com/Muthukumar-Subramaniam/tux2lab
 └─ Issues     : https://github.com/Muthukumar-Subramaniam/tux2lab/issues"

@@ -314,6 +314,7 @@ if [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] || [[ -f /etc/ssh/ssh_config.d/999-tux2l
 
     # Remove lab entries from user SSH config.custom
     if [[ -f "$HOME/.ssh/config.custom" ]]; then
+        sed -i '/# tux2lab SSH Config - Start/,/# tux2lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
         sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
     fi
     print_task_done

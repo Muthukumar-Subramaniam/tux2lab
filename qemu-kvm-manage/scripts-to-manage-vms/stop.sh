@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: stop.sh                                                                   #
-# Description: Stop the entire KVM lab — all VMs, services, and infrastructure            #
+# Description: Stop the entire tux2lab — all VMs, services, and infrastructure            #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#
@@ -184,7 +184,7 @@ when_lab_infra_server_is_vm() {
 # ====== MAIN LOGIC ======
 
 print_cyan "--------------------------------------------------------------"
-print_info "KVM Lab Infrastructure Shutdown"
+print_info "tux2lab Infrastructure Shutdown"
 print_cyan "--------------------------------------------------------------"
 
 if $lab_infra_server_mode_is_host; then

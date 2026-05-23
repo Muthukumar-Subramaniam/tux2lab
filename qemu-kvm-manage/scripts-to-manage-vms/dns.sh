@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: dns.sh                                                               #
-# Description: Manage DNS records for the KVM lab infrastructure                         #
+# Description: Manage DNS records for the tux2lab infrastructure                         #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#

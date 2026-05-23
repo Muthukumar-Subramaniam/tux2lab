@@ -212,28 +212,28 @@ prepare_lab_infra_config() {
 
     # Check if SSH public key exists
     if [[ ! -f "$SSH_PUB_KEY_FILE" ]]; then
-        print_info "SSH keys for the kvm lab not found on this local workstation."
+        print_info "SSH keys for tux2lab not found on this local workstation."
         print_info "Generating a new RSA key pair..."
         ssh-keygen -t rsa -b 4096 -N "" -f "$SSH_PRIVATE_KEY_FILE" -C "${lab_infra_domain_name}" &>/dev/null
         print_success "New SSH keys generated successfully:"
         print_info "Private Key: $SSH_PRIVATE_KEY_FILE" nskip
         print_info "Public Key : $SSH_PUB_KEY_FILE"
     else
-        print_info "SSH keys for the kvm lab found on this local workstation."
+        print_info "SSH keys for tux2lab found on this local workstation."
     fi
     # Read the public key into an explanatory variable
     lab_infra_ssh_public_key=$(<"$SSH_PUB_KEY_FILE")
     lab_infra_ssh_private_key=$(<"$SSH_PRIVATE_KEY_FILE")
     # Update authorized_keys for current user
-    print_info "Ensuring KVM Lab Infra SSH public key is in authorized_keys of user '${lab_infra_admin_username}'..."
+    print_info "Ensuring tux2lab Infra SSH public key is in authorized_keys of user '${lab_infra_admin_username}'..."
     AUTHORIZED_KEYS_FILE="$SSH_DIR/authorized_keys"
     touch "$AUTHORIZED_KEYS_FILE"
     chmod 600 "$AUTHORIZED_KEYS_FILE"
     if ! grep -qF "$lab_infra_ssh_public_key" "$AUTHORIZED_KEYS_FILE"; then
         echo "$lab_infra_ssh_public_key" >> "$AUTHORIZED_KEYS_FILE"
-        print_success "KVM Lab Infra SSH public key added to authorized_keys."
+        print_success "tux2lab Infra SSH public key added to authorized_keys."
     else
-        print_info "KVM Lab Infra SSH public key already present in authorized_keys."
+        print_info "tux2lab Infra SSH public key already present in authorized_keys."
     fi
     # Print confirmation
     print_info "Lab Infra SSH public key is ready for user \033[1m${lab_infra_admin_username}\033[0m on domain \033[1m${lab_infra_domain_name}\033[0m"
@@ -358,18 +358,19 @@ EOF
   
     # Remove old lab config entries if they exist
     if [[ -f "$USER_SSH_CONFIG_CUSTOM" ]]; then
+        sed -i '/# tux2lab SSH Config - Start/,/# tux2lab SSH Config - End/d' "$USER_SSH_CONFIG_CUSTOM"
         sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$USER_SSH_CONFIG_CUSTOM"
     fi
   
     # Append new lab config
     cat >> "$USER_SSH_CONFIG_CUSTOM" <<EOF
-# KVM Lab SSH Config - Start
+# tux2lab SSH Config - Start
 Host *.${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${subnets_to_allow_ssh_pub_access}
         IdentityFile ~/.ssh/tux2lab_id_rsa
         StrictHostKeyChecking no
         UserKnownHostsFile /dev/null
         LogLevel QUIET
-# KVM Lab SSH Config - End
+# tux2lab SSH Config - End
 EOF
   
     # Ensure main config includes config.custom
@@ -526,16 +527,17 @@ EOF
     USER_SSH_DIR="${HOME}/.ssh"
     USER_SSH_CONFIG_CUSTOM="${USER_SSH_DIR}/config.custom"
     if [[ -f "$USER_SSH_CONFIG_CUSTOM" ]]; then
+        sed -i '/# tux2lab SSH Config - Start/,/# tux2lab SSH Config - End/d' "$USER_SSH_CONFIG_CUSTOM"
         sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$USER_SSH_CONFIG_CUSTOM"
     fi
     cat >> "$USER_SSH_CONFIG_CUSTOM" <<EOF
-# KVM Lab SSH Config - Start
+# tux2lab SSH Config - Start
 Host *.${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${subnets_to_allow_ssh_pub_access}
         IdentityFile ~/.ssh/tux2lab_id_rsa
         StrictHostKeyChecking no
         UserKnownHostsFile /dev/null
         LogLevel QUIET
-# KVM Lab SSH Config - End
+# tux2lab SSH Config - End
 EOF
 
     USER_SSH_CONFIG="${USER_SSH_DIR}/config"

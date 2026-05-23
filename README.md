@@ -168,7 +168,7 @@ tux2lab health
 ```
 
 ```
-KVM Lab Infra Health Check
+tux2lab Infra Health Check
 Lab Infra Server Mode: VM
 Lab Infra Server     : tux2lab-engine.user.internal
 
