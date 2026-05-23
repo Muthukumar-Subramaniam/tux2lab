@@ -2546,7 +2546,7 @@ Use one of the following Options :
 Note: All host record operations automatically create/manage both IPv4 (A) and IPv6 (AAAA) records
 
 [ Or ]
-Run dnsbinder utility without any arguements to get menu driven actions."
+Run dnsbinder utility without any arguments to get menu driven actions."
 }
 
 if [[ -n "${1}" ]]
@@ -2556,7 +2556,7 @@ then
         -c)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '-c' option takes only 1 arguement as hostname ! "
+                print_error "Invalid Option! '-c' option takes only 1 argument as hostname ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2566,7 +2566,7 @@ then
         -d|-dy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error " Invalid Option! ${1} option takes only 1 arguement as hostname ! "
+                print_error " Invalid Option! ${1} option takes only 1 argument as hostname ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2580,7 +2580,7 @@ then
         -r|-ry)
             fn_check_existence_of_domain
             if [[ -n "${4}" ]];then
-                print_error "Invalid Option! ${1} option takes only 2 arguements [ existing host record and new host record ] ! "
+                print_error "Invalid Option! ${1} option takes only 2 arguments [ existing host record and new host record ] ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2594,7 +2594,7 @@ then
         -cf|-cfy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '${1}' option takes only 1 arguement as file containing list of hostnames ! "
+                print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2608,7 +2608,7 @@ then
         -cif|-cify)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '${1}' option takes only 1 arguement as file containing list of 'hostname ipv4' pairs ! "
+                print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of 'hostname ipv4' pairs ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2622,7 +2622,7 @@ then
         -df|-dfy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '${1}' option takes only 1 arguement as file containing list of hostnames ! "
+                print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2636,7 +2636,7 @@ then
         -ci)    
             fn_check_existence_of_domain 
             if [[ -n "${4}" ]];then
-                print_error "Invalid Option! '-ci' option takes only 2 arguements [ hostname and required ipv4 address ] ! "
+                print_error "Invalid Option! '-ci' option takes only 2 arguments [ hostname and required ipv4 address ] ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2647,7 +2647,7 @@ then
         -cc)    
             fn_check_existence_of_domain 
             if [[ -n "${4}" ]];then
-                print_error "Invalid Option! '-cc' option takes only 2 arguements [ cname and hostname ] ! "
+                print_error "Invalid Option! '-cc' option takes only 2 arguments [ cname and hostname ] ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2657,7 +2657,7 @@ then
         -dc|-dcy)   
             fn_check_existence_of_domain 
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! ${1} option takes only 1 arguement as cname ! "
+                print_error "Invalid Option! ${1} option takes only 1 argument as cname ! "
                 fn_usage_message
                 exit 1
             fi

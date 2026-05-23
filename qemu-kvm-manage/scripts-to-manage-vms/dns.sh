@@ -34,7 +34,8 @@ OPTIONS (passed to dnsbinder):
     -ci             Create a host record with a specific IPv4
     -cc             Create a CNAME/Alias record
     -dc             Delete a CNAME/Alias record
-    -dcy            Delete CNAME without confirmation"
+    -dcy            Delete CNAME without confirmation
+    --setup         Configure DNS domain and server (admin/internal)"
     exit 0
 fi
 
@@ -63,7 +64,7 @@ if ! ip link show labbr0 &>/dev/null; then
 fi
 
 # ====== CONFIGURE DNS RESOLUTION ======
-print_task "Enabling DNS of lab infra with resolvectl"
+print_task "Configuring DNS resolution for lab infra via resolvectl..."
 
 current_dns_servers="$(resolvectl dns labbr0 2>/dev/null || true)"
 current_dns_domains="$(resolvectl domain labbr0 2>/dev/null || true)"
@@ -117,6 +118,10 @@ else
 
         # Create secure temp file on remote server
         remote_temp_file=$(ssh "${ssh_opts[@]}" "$ssh_target" "mktemp /tmp/dnsbinder-bulk.XXXXXXXXXX")
+        if [[ -z "$remote_temp_file" ]]; then
+            print_error "Failed to create temp file on lab infra server."
+            exit 1
+        fi
 
         print_task "Transferring file to lab infra server..."
         if scp "${ssh_opts[@]}" "$file_path" "${ssh_target}:${remote_temp_file}" >/dev/null 2>&1; then
@@ -136,7 +141,8 @@ else
         ssh "${ssh_opts[@]}" "$ssh_target" "rm -f '${remote_temp_file}'" >/dev/null 2>&1 || true
     else
         # Regular options - forward as-is
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh $(printf '%q ' "$@")"
+        args_escaped=$(printf '%q ' "$@")
+        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${args_escaped% }"
         exit_code=$?
     fi
 fi

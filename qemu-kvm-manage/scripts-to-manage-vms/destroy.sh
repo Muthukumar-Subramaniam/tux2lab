@@ -289,8 +289,9 @@ fi
 # ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
 print_task "Cleaning lab entries from /etc/hosts..."
 if [[ -n "$lab_infra_domain_name" ]] && grep -q "${lab_infra_domain_name}" /etc/hosts 2>/dev/null; then
+    # Escape dots for regex (sufficient for valid domain names)
     escaped_domain="${lab_infra_domain_name//./\\.}"
-    sudo sed -i.bak "/${escaped_domain}/d" /etc/hosts 2>/dev/null || true
+    sudo sed -i "/${escaped_domain}/d" /etc/hosts 2>/dev/null || true
     print_task_done
     ((++completed_steps))
 else

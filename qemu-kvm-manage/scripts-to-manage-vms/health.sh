@@ -5,6 +5,7 @@
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+# Note: -e is intentionally omitted — health checks must run to completion
 set -uo pipefail
 
 # Source color functions and environment defaults

@@ -15,6 +15,28 @@ fi
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/ks-manage/distro-versions.conf
 
+# ====== HELP ======
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    print_cyan "USAGE:
+    ksmanager <hostname> [options]
+
+DESCRIPTION:
+    Kickstart Manager — provisions PXE boot configurations for lab VMs.
+    Creates iPXE configs, kickstart/autoinst files, DHCP reservations,
+    and DNS records for the specified hostname.
+
+OPTIONS:
+    --create-golden-image   Create a golden image for the specified distro
+    --remove-host           Remove all provisioning artifacts for a host
+    --qemu-kvm              Invoked via tux2lab vm deploy (internal)
+    --golden-image          Invoked for golden image builds (internal)
+    --distro <name>         Specify distribution (e.g., alma, rocky, ubuntu)
+    --version <ver>         Specify version (e.g., 10, 24.04)
+    --mac <address>         Specify MAC address for DHCP reservation
+    -h, --help              Show this help message"
+    exit 0
+fi
+
 if [[ -z "$mgmt_super_user" ]]; then
     print_error "Critical: mgmt_super_user is not defined in /etc/environment."
     print_error "Please ensure the environment is properly configured."
@@ -23,7 +45,7 @@ fi
 
 if [[ "$USER" != "$mgmt_super_user" ]]; then
     print_error "Access denied. Only infra management super user '${mgmt_super_user}' is authorized to run this tool."
-    print_error "Also if the user itself is ${mgmt_super_user}, Please do not elevate access again with sudo.\n"
+    print_error "If you are already ${mgmt_super_user}, do not elevate with sudo."
     exit 1
 fi
 
@@ -397,8 +419,8 @@ fn_remove_hosts_json_entry() {
 
 golden_image_creation_not_requested=true
 
-for input_arguement in "$@"; do
-    if [[ "$input_arguement" == "--create-golden-image" ]]; then
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--create-golden-image" ]]; then
     golden_image_creation_not_requested=false
         break
     fi
@@ -406,8 +428,8 @@ done
 
 # Check for --remove-host flag
 remove_host_requested=false
-for input_arguement in "$@"; do
-    if [[ "$input_arguement" == "--remove-host" ]]; then
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--remove-host" ]]; then
         remove_host_requested=true
         break
     fi
@@ -721,16 +743,16 @@ fi
 
 # Parse flags early (before any state changes like DNS creation)
 invoked_with_qemu_kvm=false
-for input_arguement in "$@"; do
-    if [[ "$input_arguement" == "--qemu-kvm" ]]; then
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--qemu-kvm" ]]; then
         invoked_with_qemu_kvm=true
         break
     fi
 done
 
 invoked_with_golden_image=false
-for input_arguement in "$@"; do
-    if [[ "$input_arguement" == "--golden-image" ]]; then
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--golden-image" ]]; then
         invoked_with_golden_image=true
         break
     fi
