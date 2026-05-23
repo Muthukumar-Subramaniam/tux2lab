@@ -1116,13 +1116,8 @@ done
 
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
     os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.disk/info")
-    # Map Ubuntu version to codename for APT sources
-    case "${version}" in
-        22.04) ubuntu_codename="jammy" ;;
-        24.04) ubuntu_codename="noble" ;;
-        26.04) ubuntu_codename="resolute" ;;
-        *)     ubuntu_codename="" ;;
-    esac
+    # Codename mapping centralized in distro-versions.conf
+    ubuntu_codename="${UBUNTU_CODENAMES[${version}]:-}"
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     if [[ -f "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo" ]]; then
         os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo")
