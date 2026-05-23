@@ -169,7 +169,7 @@ when_lab_infra_server_is_host() {
     done
     
     if [[ ${#failed_services_list[@]} -eq 0 ]]; then
-        print_success "All lab services restarted successfully"
+        print_success "All lab services restarted successfully."
     else
         print_warning "Some services failed: ${failed_services_list[*]}"
     fi
@@ -179,7 +179,7 @@ when_lab_infra_server_is_host() {
     local all_services_active=true
     for service_name in libvirtd named "${lab_essential_services[@]}"; do
         if sudo systemctl is-active --quiet "$service_name"; then
-            print_success "  $service_name is active"
+            print_success "  $service_name is active."
         else
             print_error "  $service_name is not active"
             all_services_active=false

@@ -13,18 +13,20 @@ source /tux2lab/common-utils/color-functions.sh
 if [[ -f /tux2lab-data/lab_environment_vars ]]; then
     source /tux2lab-data/lab_environment_vars
 else
-    print_error "Lab environment not configured. Run deploy-lab-infra-server.sh first."
+    print_error "Lab environment not configured. Run 'tux2lab deploy' first."
     exit 1
 fi
 
 # Validate required variables
 if [[ -z "${lab_infra_server_ipv6_gateway:-}" ]]; then
     print_error "IPv6 gateway not configured in lab environment."
+    print_info "Redeploy with: tux2lab rebuild"
     exit 1
 fi
 
 if [[ -z "${lab_infra_admin_username:-}" ]]; then
     print_error "Admin username not configured in lab environment."
+    print_info "Redeploy with: tux2lab rebuild"
     exit 1
 fi
 
@@ -44,39 +46,40 @@ ssh_options=(
 )
 
 fn_usage() {
-    cat << EOF
-$(print_notify "IPv6 Default Route Manager")
+    print_cyan "USAGE:
+    tux2lab ipv6-route <subcommand>
 
-Usage: tux2lab ipv6-route [OPTION]
+DESCRIPTION:
+    Manage IPv6 default routes on running lab VMs.
+    Enable or disable IPv6 internet access based on host connectivity.
 
-Options:
+SUBCOMMANDS:
     enable      Enable IPv6 default route on all running VMs
     disable     Disable IPv6 default route on all running VMs
     check       Check IPv6 internet connectivity and current route status
-    auto        Automatically enable/disable based on host IPv6 connectivity
+    auto        Automatically enable/disable based on host connectivity
     status      Show IPv6 route status for all VMs
 
-Examples:
+EXAMPLES:
     tux2lab ipv6-route enable      # Enable IPv6 default route
     tux2lab ipv6-route disable     # Remove IPv6 default route
     tux2lab ipv6-route check       # Test connectivity and show status
     tux2lab ipv6-route auto        # Auto-configure based on connectivity
 
-Note: This script manages the default IPv6 route. Local IPv6 subnet routes
-      are always present regardless of this setting.
-EOF
+NOTE:
+    Local IPv6 subnet routes are always present regardless of this setting."
 }
 
 fn_test_ipv6_connectivity() {
-    print_task "Testing IPv6 internet connectivity from QEMU host..."
+    print_task "Testing IPv6 internet connectivity from host..."
     
     if ping6 -c 2 -W 3 "$IPV6_TEST_HOST" &>/dev/null; then
         print_task_done
-        print_success "IPv6 internet connectivity available"
+        print_success "IPv6 internet connectivity available."
         return 0
     else
         print_task_fail
-        print_warning "No IPv6 internet connectivity"
+        print_warning "No IPv6 internet connectivity."
         return 1
     fi
 }
@@ -163,7 +166,7 @@ fn_check_vm_ipv6_route() {
 }
 
 fn_enable_host_ipv6_forwarding() {
-    print_task "Enabling IPv6 forwarding on QEMU host..."
+    print_task "Enabling IPv6 forwarding on host..."
     
     # Enable IPv6 forwarding
     sudo sysctl -w net.ipv6.conf.all.forwarding=1 &>/dev/null
@@ -225,7 +228,7 @@ fn_enable_all() {
     done
     
     echo ""
-    print_success "IPv6 default route configuration complete"
+    print_success "IPv6 default route configuration complete."
 }
 
 fn_disable_all() {
@@ -248,7 +251,7 @@ fn_disable_all() {
     
     echo ""
     if [[ $removed -gt 0 ]]; then
-        print_success "IPv6 default route removal complete"
+        print_success "IPv6 default route removal complete."
     else
         print_info "No IPv6 default routes were active"
     fi
@@ -274,7 +277,7 @@ fn_show_status() {
     echo ""
     
     # Test host connectivity
-    print_task "QEMU Host IPv6 Internet:" "nskip"
+    print_info "Host IPv6 Internet:" "nskip"
     if ping6 -c 2 -W 3 "$IPV6_TEST_HOST" &>/dev/null; then
         print_green " [AVAILABLE]"
     else
@@ -282,7 +285,7 @@ fn_show_status() {
     fi
     
     echo ""
-    print_task "VM IPv6 Default Routes:"
+    print_info "VM IPv6 Default Routes:"
     echo ""
     
     local vms=$(fn_get_running_vms)
@@ -338,9 +341,8 @@ case "${1}" in
         fn_usage
         ;;
     *)
-        print_error "Invalid option: $1"
-        echo ""
-        fn_usage
+        print_error "Unknown argument: $1"
+        echo "Run 'tux2lab ipv6-route --help' for usage information."
         exit 1
         ;;
 esac

@@ -84,7 +84,7 @@ shutdown_all_vms() {
         print_warning "Some VMs did not shut down gracefully. Force stopping..."
         while IFS= read -r vm_name; do
             [[ -z "$vm_name" ]] && continue
-            print_task "Force stopping VM \"$vm_name\"..." nskip
+            print_task "Force stopping VM \"$vm_name\"..."
             if sudo virsh destroy "$vm_name" >/dev/null 2>&1; then
                 print_task_done
             else
@@ -107,7 +107,7 @@ when_lab_infra_server_is_host() {
     print_info "Stopping lab services..."
     local failed_services_list=()
     for service_name in "${lab_essential_services[@]}"; do
-        print_task "Stopping $service_name..." nskip
+        print_task "Stopping $service_name..."
         if sudo systemctl stop "$service_name" 2>/dev/null; then
             print_task_done
         else
@@ -117,7 +117,7 @@ when_lab_infra_server_is_host() {
     done
 
     # ====== STEP 3: Stop named ======
-    print_task "Stopping named service..." nskip
+    print_task "Stopping named service..."
     if sudo systemctl stop named 2>/dev/null; then
         print_task_done
     else
@@ -127,14 +127,14 @@ when_lab_infra_server_is_host() {
 
     # ====== STEP 4: Remove dummy interface ======
     if ip link show "$lab_bridge_dummy_interface_name" &>/dev/null; then
-        print_task "Removing dummy interface $lab_bridge_dummy_interface_name..." nskip
+        print_task "Removing dummy interface $lab_bridge_dummy_interface_name..."
         sudo ip link set "$lab_bridge_dummy_interface_name" down 2>/dev/null || true
         sudo ip link del "$lab_bridge_dummy_interface_name" 2>/dev/null || true
         print_task_done
     fi
 
     # ====== STEP 5: Destroy virtual network and flush IPs from labbr0 ======
-    print_task "Destroying tux2lab virtual network..." nskip
+    print_task "Destroying tux2lab virtual network..."
     sudo virsh net-destroy tux2lab &>/dev/null || true
     if ip link show "$lab_bridge_interface_name" &>/dev/null; then
         sudo ip addr flush dev "$lab_bridge_interface_name" 2>/dev/null || true
@@ -142,7 +142,7 @@ when_lab_infra_server_is_host() {
     print_task_done
 
     # ====== STEP 6: Stop libvirtd ======
-    print_task "Stopping libvirtd..." nskip
+    print_task "Stopping libvirtd..."
     if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
         print_task_done
     else
@@ -162,7 +162,7 @@ when_lab_infra_server_is_vm() {
     shutdown_all_vms
 
     # ====== STEP 2: Destroy virtual network and flush IPs from labbr0 ======
-    print_task "Destroying tux2lab virtual network..." nskip
+    print_task "Destroying tux2lab virtual network..."
     sudo virsh net-destroy tux2lab &>/dev/null || true
     if ip link show "$lab_bridge_interface_name" &>/dev/null; then
         sudo ip addr flush dev "$lab_bridge_interface_name" 2>/dev/null || true
@@ -170,7 +170,7 @@ when_lab_infra_server_is_vm() {
     print_task_done
 
     # ====== STEP 3: Stop libvirtd ======
-    print_task "Stopping libvirtd..." nskip
+    print_task "Stopping libvirtd..."
     if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
         print_task_done
     else

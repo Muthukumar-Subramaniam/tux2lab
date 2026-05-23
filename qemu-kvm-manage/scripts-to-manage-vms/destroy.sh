@@ -451,7 +451,7 @@ if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
     print_info "ISO files preserved at /tux2lab-data/iso-files/"
 fi
 echo
-print_info "To rebuild your lab, start from: /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh"
+print_info "To rebuild your lab, run: tux2lab deploy"
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
 exit 0

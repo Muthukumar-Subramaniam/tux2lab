@@ -50,8 +50,8 @@ if [[ $# -gt 0 ]]; then
         fi
     done
     if ! $option_is_valid; then
-        print_error "Invalid option \"$1\"!"
-        print_info "Run 'tux2lab dns --help' for usage info."
+        print_error "Unknown option: $1"
+        echo "Run 'tux2lab dns --help' for usage information."
         exit 1
     fi
 fi

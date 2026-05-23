@@ -169,7 +169,7 @@ fi
 
 print_cyan "═══════════════════════════════════════════════════════════════════"
 print_info "Phase 1: Tearing down existing lab..."
-print_cyan "---------------------------------------------------------------"
+print_cyan "--------------------------------------------------------------"
 
 # ====== STEP 1: FORCE STOP ALL RUNNING VMs ======
 running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
@@ -324,9 +324,9 @@ fi
 print_success "Teardown complete."
 
 # ====== PHASE 2: REDEPLOY ======
-print_cyan "---------------------------------------------------------------"
+print_cyan "--------------------------------------------------------------"
 print_info "Phase 2: Redeploying lab infrastructure server..."
-print_cyan "---------------------------------------------------------------"
+print_cyan "--------------------------------------------------------------"
 
 if $clean_state; then
     # Clean state: launch fresh interactive deployment

@@ -38,7 +38,7 @@ fi
 if sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
     print_info "${SERVICE_NAME} auto-start is already enabled."
 else
-    print_task "Enabling ${SERVICE_NAME}..." nskip
+    print_task "Enabling ${SERVICE_NAME}..."
     if sudo systemctl enable "$SERVICE_NAME" >/dev/null 2>&1; then
         print_task_done
     else
@@ -52,7 +52,7 @@ fi
 if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
     print_info "libvirtd auto-start is already enabled."
 else
-    print_task "Enabling libvirtd..." nskip
+    print_task "Enabling libvirtd..."
     if sudo systemctl enable libvirtd >/dev/null 2>&1; then
         print_task_done
     else

@@ -81,7 +81,7 @@ else
     lab_infra_server_mode="VM"
 fi
 
-print_cyan "-------------------------------------------------------------
+print_cyan "--------------------------------------------------------------
 tux2lab Health Check
 Lab Infra Server Mode: ${lab_infra_server_mode}
 Lab Infra Server     : ${lab_infra_server_hostname}
@@ -128,7 +128,7 @@ done
 # Summary
 # -------------------------------------------------------------
 total_services=${#services_to_check[@]}
-print_cyan "-------------------------------------------------------------
+print_cyan "--------------------------------------------------------------
 Health Check Summary of tux2lab:
 Total Services    : $total_services
 Active Services   : $active_services

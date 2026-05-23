@@ -50,7 +50,7 @@ if [[ "${confirmation}" != "CONFIRM" ]]; then
 fi
 
 # ====== Disable the service ======
-print_task "Disabling ${SERVICE_NAME}..." nskip
+print_task "Disabling ${SERVICE_NAME}..."
 if sudo systemctl disable "$SERVICE_NAME" >/dev/null 2>&1; then
     print_task_done
 else
@@ -61,7 +61,7 @@ fi
 
 # ====== Disable libvirtd ======
 if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
-    print_task "Disabling libvirtd..." nskip
+    print_task "Disabling libvirtd..."
     if sudo systemctl disable libvirtd >/dev/null 2>&1; then
         print_task_done
     else
