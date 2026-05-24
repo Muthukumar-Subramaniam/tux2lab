@@ -44,34 +44,6 @@ if ! $lab_infra_server_mode_is_host; then
     fi
 fi
 
-# Define port numbers
-PORT_DNS=53
-PORT_DHCPV4=67
-PORT_NTP=123
-PORT_TFTP=69
-PORT_NFS=2049
-PORT_WEB=80
-
-# Define lab infra services (service_name:port:protocol:address)
-# DNS is checked first so we can detect hostname resolution failures early
-services_to_check=(
-  "DNS Server:$PORT_DNS:tcp:$lab_infra_server_hostname"
-  "DHCP Server:$PORT_DHCPV4:udp:$lab_infra_server_ipv4_address"
-  "NTP Server:$PORT_NTP:udp:$lab_infra_server_hostname"
-  "TFTP Server:$PORT_TFTP:udp:$lab_infra_server_hostname"
-  "NFS Server:$PORT_NFS:tcp:$lab_infra_server_hostname"
-  "Web Server:$PORT_WEB:tcp:$lab_infra_server_hostname"
-)
-
-# -------------------------------------------------------------
-# Calculate the max length of service names for proper alignment
-# -------------------------------------------------------------
-max_len=0
-for entry in "${services_to_check[@]}"; do
-    IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
-    (( ${#service_name} > max_len )) && max_len=${#service_name}
-done
-
 # -------------------------------------------------------------
 # Header
 # -------------------------------------------------------------
@@ -87,49 +59,25 @@ Lab Infra Server Mode: ${lab_infra_server_mode}
 Lab Infra Server     : ${lab_infra_server_hostname}
 IPv4 Address         : ${lab_infra_server_ipv4_address}
 IPv6 Address         : ${lab_infra_server_ipv6_address}
--------------------------------------------------------------"
+--------------------------------------------------------------"
 
-active_services=0
-inactive_services=0
-dns_is_down=false
+# Helper: run command on infra server (locally with sudo or via SSH)
+ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
+ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
 
-# -------------------------------------------------------------
-# Service checks
-# -------------------------------------------------------------
-for entry in "${services_to_check[@]}"; do
-    IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
-
-    # If DNS is down, fall back to IP address for hostname-based checks
-    if $dns_is_down && [[ "$service_address" == "$lab_infra_server_hostname" ]]; then
-        service_address="$lab_infra_server_ipv4_address"
-    fi
-
-    check_result=1
-    if [[ "$service_proto" == "udp" ]]; then
-        nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
+fn_run_on_infra() {
+    if $lab_infra_server_mode_is_host; then
+        sudo bash -c "$1" 2>/dev/null
     else
-        nc -z -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
+        ssh "${ssh_opts[@]}" "$ssh_target" "sudo bash -c '$1'" 2>/dev/null
     fi
-
-    if [[ $check_result -eq 0 ]]; then
-        printf "\033[0;36m[ \033[0;32m✓\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
-        ((active_services++))
-    else
-        printf "\033[0;36m[ \033[0;31m✗\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
-        ((inactive_services++))
-        # Track DNS failure to avoid cascade
-        if [[ "$service_name" == "DNS Server" ]]; then
-            dns_is_down=true
-        fi
-    fi
-done
+}
 
 # -------------------------------------------------------------
-# Deep Validation of Services
+# Deep Validation of Services (runs on infra server)
 # -------------------------------------------------------------
-print_cyan "--------------------------------------------------------------
-Deep Validation of Services:
--------------------------------------------------------------"
+print_cyan "Deep Validation of Services:
+--------------------------------------------------------------"
 
 deep_pass=0
 deep_fail=0
@@ -142,18 +90,6 @@ fn_deep_pass() {
 fn_deep_fail() {
     printf "  \033[0;31m[FAIL]\033[0m %s\n" "$1"
     ((deep_fail++))
-}
-
-# Helper: run command on infra server (locally with sudo or via SSH)
-ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
-ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
-
-fn_run_on_infra() {
-    if $lab_infra_server_mode_is_host; then
-        sudo bash -c "$1" 2>/dev/null
-    else
-        ssh "${ssh_opts[@]}" "$ssh_target" "sudo bash -c '$1'" 2>/dev/null
-    fi
 }
 
 # --- DNS: Forward + Reverse lookup ---
@@ -233,33 +169,121 @@ else
     fn_deep_fail "Nginx HTTPS response (got ${https_code:-timeout}, cert may not be in trust store)"
 fi
 
+# --- Grab DHCPv6 socket binding for port check section ---
+dhcpv6_socket_bound=$(fn_run_on_infra "ss -ulnp 2>/dev/null | grep -q ':547 ' && echo yes")
+
+# -------------------------------------------------------------
+# Port Reachability (dual-stack: IPv4 + IPv6)
+# -------------------------------------------------------------
+print_cyan "--------------------------------------------------------------
+Port Reachability (dual-stack):
+--------------------------------------------------------------"
+
+# Prerequisite: nc must be available
+if ! command -v nc &>/dev/null; then
+    print_warning "'nc' (netcat) is not installed — skipping port reachability checks."
+    total_port_checks=0
+    port_pass=0
+    port_fail=0
+else
+
+    # service_name:ipv4_port:ipv6_port:protocol:has_ipv6
+    # DHCPv6 uses socket check (ss) instead of nc, indicated by ipv6_port=ss
+    services_port_check=(
+        "DNS Server:53:53:tcp:yes"
+        "DHCP Server:67:ss:udp:yes"
+        "NTP Server:123:123:udp:yes"
+        "TFTP Server:69:69:udp:yes"
+        "NFS Server:2049:2049:tcp:yes"
+        "Web Server:80:80:tcp:yes"
+    )
+
+    max_svc_len=0
+    for entry in "${services_port_check[@]}"; do
+        IFS=':' read -r svc_name _ _ _ _ <<< "$entry"
+        (( ${#svc_name} > max_svc_len )) && max_svc_len=${#svc_name}
+    done
+
+    port_pass=0
+    port_fail=0
+
+    for entry in "${services_port_check[@]}"; do
+        IFS=':' read -r svc_name ipv4_port ipv6_port proto has_ipv6 <<< "$entry"
+
+        # IPv4 check
+        ipv4_ok=false
+        if [[ "$proto" == "udp" ]]; then
+            nc -z -u -w 3 "$lab_infra_server_ipv4_address" "$ipv4_port" &>/dev/null && ipv4_ok=true
+        else
+            nc -z -w 3 "$lab_infra_server_ipv4_address" "$ipv4_port" &>/dev/null && ipv4_ok=true
+        fi
+
+        # IPv6 check
+        ipv6_ok=false
+        if [[ "$has_ipv6" == "yes" ]]; then
+            if [[ "$ipv6_port" == "ss" ]]; then
+                # DHCPv6: use pre-fetched socket check result
+                [[ "$dhcpv6_socket_bound" == "yes" ]] && ipv6_ok=true
+            elif [[ "$proto" == "udp" ]]; then
+                nc -z -u -w 3 "$lab_infra_server_ipv6_address" "$ipv6_port" &>/dev/null && ipv6_ok=true
+            else
+                nc -z -w 3 "$lab_infra_server_ipv6_address" "$ipv6_port" &>/dev/null && ipv6_ok=true
+            fi
+        fi
+
+        # Determine overall status
+        if $ipv4_ok && $ipv6_ok; then
+            local_symbol="\033[0;32m✓\033[0;36m"
+            ((port_pass++))
+        else
+            local_symbol="\033[0;31m✗\033[0;36m"
+            ((port_fail++))
+        fi
+
+        # Format IPv4/IPv6 indicators
+        if $ipv4_ok; then
+            ipv4_indicator="\033[0;32m✓\033[0m"
+        else
+            ipv4_indicator="\033[0;31m✗\033[0m"
+        fi
+        if $ipv6_ok; then
+            ipv6_indicator="\033[0;32m✓\033[0m"
+        else
+            ipv6_indicator="\033[0;31m✗\033[0m"
+        fi
+
+        printf "\033[0;36m[ ${local_symbol} ] %-*s  IPv4 ${ipv4_indicator}  IPv6 ${ipv6_indicator}\033[0m\n" "$max_svc_len" "$svc_name"
+    done
+
+    total_port_checks=${#services_port_check[@]}
+fi
+
 # -------------------------------------------------------------
 # Summary
 # -------------------------------------------------------------
-total_services=${#services_to_check[@]}
 total_deep=$((deep_pass + deep_fail))
 print_cyan "--------------------------------------------------------------
 Health Check Summary of tux2lab:
-Port Reachability : $active_services/$total_services services reachable
 Deep Validation   : $deep_pass/$total_deep checks passed
--------------------------------------------------------------"
-if [[ $active_services -eq 0 ]]; then
+Port Reachability : $port_pass/$total_port_checks services fully reachable (dual-stack)
+--------------------------------------------------------------"
+if [[ $total_port_checks -gt 0 ]] && [[ $port_pass -eq 0 ]] && [[ $deep_pass -eq 0 ]]; then
     print_error "tux2lab health is CRITICAL."
     print_info "All services are down. Try: tux2lab start"
-    print_cyan "-------------------------------------------------------------"
+    print_cyan "--------------------------------------------------------------"
     exit 2
-elif [[ $total_services -eq $active_services ]] && [[ $deep_fail -eq 0 ]]; then
+elif [[ $deep_fail -eq 0 ]] && [[ $port_fail -eq 0 ]]; then
     print_success "tux2lab health is STABLE."
-    print_cyan "-------------------------------------------------------------"
+    print_cyan "--------------------------------------------------------------"
     exit 0
 else
     print_warning "tux2lab health is DEGRADED."
-    if [[ $inactive_services -gt 0 ]]; then
-        print_info "Some services are unreachable. Try: tux2lab start"
+    if [[ $port_fail -gt 0 ]]; then
+        print_info "$port_fail service(s) not fully reachable on both stacks. Try: tux2lab start"
     fi
     if [[ $deep_fail -gt 0 ]]; then
         print_info "$deep_fail deep validation check(s) failed."
     fi
-    print_cyan "-------------------------------------------------------------"
+    print_cyan "--------------------------------------------------------------"
     exit 1
 fi
