@@ -357,7 +357,70 @@ when_lab_infra_server_is_vm() {
         fi
     done
 
-    # ====== STEP 6: Configure DNS for labbr0 ======
+    # ====== STEP 6: Attempt to recover failed services ======
+    if ! $all_services_active; then
+        print_info "Attempting to recover inactive services..."
+
+        # Map service display names to systemd unit names
+        declare -A service_unit_map=(
+            ["DNS Server"]="named"
+            ["DHCP Server"]="kea-dhcp4"
+            ["NTP Server"]="chronyd"
+            ["TFTP Server"]="tftp.socket"
+            ["NFS Server"]="nfs-server"
+            ["Web Server"]="nginx"
+        )
+
+        local ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
+        local ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
+
+        local recovered=0
+        for entry in "${services_to_check[@]}"; do
+            IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
+
+            # Only attempt recovery for services that failed the port check
+            local recheck_result=1
+            if [[ "$service_proto" == "udp" ]]; then
+                nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && recheck_result=0
+            else
+                nc -z -w 3 "$service_address" "$service_port" &>/dev/null && recheck_result=0
+            fi
+            [[ $recheck_result -eq 0 ]] && continue
+
+            local unit_name="${service_unit_map[$service_name]:-}"
+            [[ -z "$unit_name" ]] && continue
+
+            print_task "Restarting $unit_name on lab infra server..."
+            if ssh "${ssh_opts[@]}" "$ssh_target" "sudo systemctl restart $unit_name" &>/dev/null; then
+                sleep 2
+                # Verify the port is now reachable
+                local verify_result=1
+                if [[ "$service_proto" == "udp" ]]; then
+                    nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && verify_result=0
+                else
+                    nc -z -w 3 "$service_address" "$service_port" &>/dev/null && verify_result=0
+                fi
+                if [[ $verify_result -eq 0 ]]; then
+                    print_task_done
+                    ((++recovered))
+                else
+                    print_task_fail
+                fi
+            else
+                print_task_fail
+            fi
+        done
+
+        if [[ $recovered -gt 0 ]]; then
+            active_services=$((active_services + recovered))
+            inactive_services=$((inactive_services - recovered))
+            if [[ $inactive_services -eq 0 ]]; then
+                all_services_active=true
+            fi
+        fi
+    fi
+
+    # ====== STEP 7: Configure DNS for labbr0 ======
     configure_dns_for_bridge || return 1
 
     if $all_services_active; then
