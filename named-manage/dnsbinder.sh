@@ -2522,26 +2522,27 @@ IPv6 Net : ${v_ipv6_if_present}
 
 Usage: dnsbinder [ option ] [ arguments ]
 Use one of the following Options :
-    -c      To create a host record (dual-stack: A + AAAA records)
-    -d      To delete a host record (removes both A and AAAA records)
-    -dy     caution ! To do the above without any confirmation
-    -r      To rename an existing host record (updates A and AAAA records)
-    -ry     caution ! To do the above without any confirmation
-    -cf     To create multiple host records provided in a file (dual-stack)
-    -cfy    caution ! To do the above without any confirmation
-    -cif    To create multiple host records with specific IPs from a file (hostname ipv4)
-    -cify   caution ! To do the above without any confirmation
-    -df     To delete multiple host records provided in a file (dual-stack)
-    -dfy    caution ! To do the above without any confirmation
-    -ci     To create a host record with specific IPv4 Address (auto-generates IPv6)
-    -cc     To create a CNAME/Alias record for an existing host record
-    -dc     To delete a CNAME/Alias record for an existing host record
-    -dcy    caution ! To do the above without any confirmation
-    --setup To configure local dns server and domain (dual-stack IPv4/IPv6)
-            Both IPv4 and IPv6 networks are auto-detected from system
-            Usage: dnsbinder --setup <domain>
-            Example: dnsbinder --setup tux2lab.internal
-    -h (or) --help To print this usage info 
+    -c,    --create              To create a host record (dual-stack: A + AAAA records)
+    -d,    --delete              To delete a host record (removes both A and AAAA records)
+    -dy                          caution ! To do the above without any confirmation
+    -r,    --rename              To rename an existing host record (updates A and AAAA records)
+    -ry                          caution ! To do the above without any confirmation
+    -cf,   --create-from-file    To create multiple host records provided in a file (dual-stack)
+    -cfy                         caution ! To do the above without any confirmation
+    -cif,  --create-with-ip-file To create multiple host records with specific IPs from a file (hostname ipv4)
+    -cify                        caution ! To do the above without any confirmation
+    -df,   --delete-from-file    To delete multiple host records provided in a file (dual-stack)
+    -dfy                         caution ! To do the above without any confirmation
+    -ci,   --create-with-ip      To create a host record with specific IPv4 Address (auto-generates IPv6)
+    -cc,   --create-cname        To create a CNAME/Alias record for an existing host record
+    -dc,   --delete-cname        To delete a CNAME/Alias record for an existing host record
+    -dcy                         caution ! To do the above without any confirmation
+    --setup                      To configure local dns server and domain (dual-stack IPv4/IPv6)
+                                 Both IPv4 and IPv6 networks are auto-detected from system
+                                 Usage: dnsbinder --setup <domain>
+                                 Example: dnsbinder --setup tux2lab.internal
+    -y,    --yes                 Append to any command to skip confirmation prompts
+    -h,    --help                To print this usage info 
 
 Note: All host record operations automatically create/manage both IPv4 (A) and IPv6 (AAAA) records
 
@@ -2551,92 +2552,102 @@ Run dnsbinder utility without any arguments to get menu driven actions."
 
 if [[ -n "${1}" ]]
 then
+    # Check for standalone --yes / -y flag (can appear as last argument)
+    auto_confirm=""
+    args=("$@")
+    for i in "${!args[@]}"; do
+        if [[ "${args[$i]}" == "--yes" || "${args[$i]}" == "-y" ]] && [[ $i -gt 0 ]]; then
+            auto_confirm="-y"
+            unset 'args[$i]'
+        fi
+    done
+    set -- "${args[@]}"
 
     case "${1}" in
-        -c)
+        -c|--create)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
-                print_error "Invalid Option! '-c' option takes only 1 argument as hostname ! "
+                print_error "Invalid Option! '${1}' option takes only 1 argument as hostname ! "
                 fn_usage_message
                 exit 1
             fi
             fn_create_host_record "${2}"
             exit
             ;;
-        -d|-dy)
+        -d|--delete|-dy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
                 print_error " Invalid Option! ${1} option takes only 1 argument as hostname ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-d" ]];then
-                fn_delete_host_record "${2}"
-            elif [[ "${1}" == "-dy" ]];then
+            if [[ "${1}" == "-dy" || -n "$auto_confirm" ]];then
                 fn_delete_host_record "${2}" "-y"
+            else
+                fn_delete_host_record "${2}"
             fi
             exit
             ;;
-        -r|-ry)
+        -r|--rename|-ry)
             fn_check_existence_of_domain
             if [[ -n "${4}" ]];then
                 print_error "Invalid Option! ${1} option takes only 2 arguments [ existing host record and new host record ] ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-r" ]];then
-                fn_rename_host_record "${2}" "${3}"
-            elif [[ "${1}" == "-ry" ]];then
+            if [[ "${1}" == "-ry" || -n "$auto_confirm" ]];then
                 fn_rename_host_record "${2}" "${3}" "-y"
+            else
+                fn_rename_host_record "${2}" "${3}"
             fi
             exit
             ;;
-        -cf|-cfy)
+        -cf|--create-from-file|-cfy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
                 print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-cf" ]]; then
-                fn_handle_multiple_host_record "${2}" "create"
-            elif [[ "${1}" == "-cfy" ]]; then
+            if [[ "${1}" == "-cfy" || -n "$auto_confirm" ]]; then
                 fn_handle_multiple_host_record "${2}" "create" "-y"
+            else
+                fn_handle_multiple_host_record "${2}" "create"
             fi
             exit
             ;;
-        -cif|-cify)
+        -cif|--create-with-ip-file|-cify)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
                 print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of 'hostname ipv4' pairs ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-cif" ]]; then
-                fn_handle_multiple_host_record_with_ip "${2}"
-            elif [[ "${1}" == "-cify" ]]; then
+            if [[ "${1}" == "-cify" || -n "$auto_confirm" ]]; then
                 fn_handle_multiple_host_record_with_ip "${2}" "-y"
+            else
+                fn_handle_multiple_host_record_with_ip "${2}"
             fi
             exit
             ;;
-        -df|-dfy)
+        -df|--delete-from-file|-dfy)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
                 print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of hostnames ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-df" ]]; then
-                fn_handle_multiple_host_record "${2}" "delete"
-            elif [[ "${1}" == "-dfy" ]]; then
+            if [[ "${1}" == "-dfy" || -n "$auto_confirm" ]]; then
                 fn_handle_multiple_host_record "${2}" "delete" "-y"
+            else
+                fn_handle_multiple_host_record "${2}" "delete"
             fi
             exit
             ;;
-        -ci)    
+        -ci|--create-with-ip)
             fn_check_existence_of_domain 
             if [[ -n "${4}" ]];then
-                print_error "Invalid Option! '-ci' option takes only 2 arguments [ hostname and required ipv4 address ] ! "
+                print_error "Invalid Option! '${1}' option takes only 2 arguments [ hostname and required ipv4 address ] ! "
                 fn_usage_message
                 exit 1
             fi
@@ -2644,27 +2655,27 @@ then
             fn_create_host_record "${2}" "${3}"
             exit
             ;;
-        -cc)    
+        -cc|--create-cname)
             fn_check_existence_of_domain 
             if [[ -n "${4}" ]];then
-                print_error "Invalid Option! '-cc' option takes only 2 arguments [ cname and hostname ] ! "
+                print_error "Invalid Option! '${1}' option takes only 2 arguments [ cname and hostname ] ! "
                 fn_usage_message
                 exit 1
             fi
             fn_create_cname_record "${2}" "${3}"
             exit
             ;;
-        -dc|-dcy)   
+        -dc|--delete-cname|-dcy)
             fn_check_existence_of_domain 
             if [[ -n "${3}" ]];then
                 print_error "Invalid Option! ${1} option takes only 1 argument as cname ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-dc" ]];then
-                fn_delete_cname_record "${2}"
-            elif [[ "${1}" == "-dcy" ]];then
+            if [[ "${1}" == "-dcy" || -n "$auto_confirm" ]];then
                 fn_delete_cname_record "${2}" "-y"
+            else
+                fn_delete_cname_record "${2}"
             fi
             exit
             ;;

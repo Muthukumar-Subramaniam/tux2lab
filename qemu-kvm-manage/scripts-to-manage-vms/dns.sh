@@ -12,7 +12,11 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # ====== HELP ======
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    print_cyan "USAGE:
+    print_cyan "Domain   : ${lab_infra_domain_name}
+IPv4 Net : ${lab_infra_server_ipv4_subnet}
+IPv6 Net : ${lab_infra_server_ipv6_ula_subnet}
+
+USAGE:
     tux2lab dns [options] [arguments]
 
 DESCRIPTION:
@@ -20,28 +24,35 @@ DESCRIPTION:
     Run without arguments for an interactive menu.
 
 OPTIONS (passed to dnsbinder):
-    -c              Create a host record (dual-stack: A + AAAA)
-    -d              Delete a host record (removes A + AAAA)
-    -dy             Delete without confirmation
-    -r              Rename an existing host record
-    -ry             Rename without confirmation
-    -cf <file>      Create multiple host records from a file
-    -cfy <file>     Create multiple host records without confirmation
-    -cif <file>     Create host records with specific IPs from a file
-    -cify <file>    Create with specific IPs without confirmation
-    -df <file>      Delete multiple host records from a file
-    -dfy <file>     Delete multiple host records without confirmation
-    -ci             Create a host record with a specific IPv4
-    -cc             Create a CNAME/Alias record
-    -dc             Delete a CNAME/Alias record
-    -dcy            Delete CNAME without confirmation
-    --setup         Configure DNS domain and server (admin/internal)"
+    -c,    --create              Create a host record (dual-stack: A + AAAA)
+    -d,    --delete              Delete a host record (removes A + AAAA)
+    -dy                          Delete without confirmation
+    -r,    --rename              Rename an existing host record
+    -ry                          Rename without confirmation
+    -cf,   --create-from-file    Create multiple host records from a file
+    -cfy                         Create multiple host records without confirmation
+    -cif,  --create-with-ip-file Create host records with specific IPs from a file
+    -cify                        Create with specific IPs without confirmation
+    -df,   --delete-from-file    Delete multiple host records from a file
+    -dfy                         Delete multiple host records without confirmation
+    -ci,   --create-with-ip      Create a host record with specific IPv4 (auto-generates IPv6)
+    -cc,   --create-cname        Create a CNAME/Alias record
+    -dc,   --delete-cname        Delete a CNAME/Alias record
+    -dcy                         Delete CNAME without confirmation
+    --setup                      Configure DNS domain and server (admin/internal)
+    -y,    --yes                 Append to any command to skip confirmation prompts"
     exit 0
 fi
 
 # ====== VALIDATE OPTION ======
 if [[ $# -gt 0 ]]; then
-    valid_options=(-c -d -dy -r -ry -cf -cfy -cif -cify -df -dfy -ci -cc -dc -dcy --setup)
+    valid_options=(-c --create -d --delete -dy -r --rename -ry
+                   -cf --create-from-file -cfy
+                   -cif --create-with-ip-file -cify
+                   -df --delete-from-file -dfy
+                   -ci --create-with-ip -cc --create-cname
+                   -dc --delete-cname -dcy
+                   --setup -y --yes)
     option_is_valid=false
     for opt in "${valid_options[@]}"; do
         if [[ "$1" == "$opt" ]]; then
@@ -102,11 +113,11 @@ else
         exit 1
     fi
 
-    # Check if this is a file-based operation (-cf, -cfy, -df, -dfy, -cif, or -cify)
+    # Check if this is a file-based operation
     file_based_option=""
     file_path=""
 
-    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "-cify" ]]; }; then
+    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "--create-from-file" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "--delete-from-file" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "--create-with-ip-file" ]] || [[ "$1" == "-cify" ]]; }; then
         file_based_option="$1"
         file_path="$2"
 
