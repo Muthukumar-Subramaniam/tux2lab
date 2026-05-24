@@ -100,8 +100,8 @@ if [[ -n "$hosts_list" ]]; then
     done
     target_vms=("${VALIDATED_HOSTS[@]}")
 else
-    # All running VMs
-    mapfile -t target_vms < <(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" | grep -v "^${lab_infra_server_hostname%%.*}$" || true)
+    # All running VMs (exclude lab infra server)
+    mapfile -t target_vms < <(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" | grep -v "^${lab_infra_server_hostname}$" || true)
 
     if [[ ${#target_vms[@]} -eq 0 ]]; then
         print_warning "No running VMs found to validate."
