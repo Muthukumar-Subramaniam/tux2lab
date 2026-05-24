@@ -104,7 +104,7 @@ else
     mapfile -t target_vms < <(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" | grep -v "^${lab_infra_server_hostname}$" || true)
 
     if [[ ${#target_vms[@]} -eq 0 ]]; then
-        print_warning "No running VMs found to validate."
+        print_warning "No VMs running other than lab infra server VM ${lab_infra_server_hostname}"
         exit 0
     fi
 fi
