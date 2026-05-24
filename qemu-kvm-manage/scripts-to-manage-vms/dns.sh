@@ -116,6 +116,14 @@ else
     # Check if this is a file-based operation
     file_based_option=""
     file_path=""
+    yes_flag=""
+
+    # Detect trailing --yes / -y modifier
+    for arg in "$@"; do
+        if [[ "$arg" == "--yes" || "$arg" == "-y" ]]; then
+            yes_flag="--yes"
+        fi
+    done
 
     if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "--create-from-file" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "--delete-from-file" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "--create-with-ip-file" ]] || [[ "$1" == "-cify" ]]; }; then
         file_based_option="$1"
@@ -153,7 +161,7 @@ else
         fi
 
         # Execute dnsbinder with remote temp file
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}'" || true
+        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag}" || true
         exit_code=$?
 
         # Cleanup handled by trap, clear it
