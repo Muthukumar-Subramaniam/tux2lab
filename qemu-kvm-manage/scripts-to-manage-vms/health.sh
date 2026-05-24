@@ -170,7 +170,7 @@ else
 fi
 
 # --- Grab DHCPv6 socket binding for port check section ---
-dhcpv6_socket_bound=$(fn_run_on_infra "ss -ulnp 2>/dev/null | grep -q ':547 ' && echo yes")
+dhcpv6_socket_bound=$(fn_run_on_infra "ss -ulnp 2>/dev/null | grep -q ':547\b' && echo yes")
 
 # -------------------------------------------------------------
 # Port Reachability (dual-stack: IPv4 + IPv6)
