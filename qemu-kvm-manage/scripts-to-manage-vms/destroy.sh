@@ -35,7 +35,9 @@ DESCRIPTION:
 
     Downloaded ISO files are preserved by default.
 
-    After destruction, start fresh from setup-qemu-kvm.sh to rebuild your lab.
+    If you wish to rebuild your lab after destruction:
+      1. Run /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh
+      2. Run tux2lab deploy
 
 OPTIONS:
     --wipe-iso-files-too    Also delete downloaded ISO files
@@ -466,7 +468,9 @@ if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
     print_info "ISO files preserved at /tux2lab-data/iso-files/"
 fi
 echo
-print_info "To rebuild your lab, run: tux2lab deploy"
+print_info "If you wish to rebuild your lab:"
+print_info "  1. Run /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh"
+print_info "  2. Run tux2lab deploy"
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
 exit 0
