@@ -207,6 +207,7 @@ _tux2lab_completions() {
                 local found_distro
                 found_distro=$(_find_distro_in_words)
                 if [[ -n "$found_distro" ]]; then
+                    compopt -o nosort 2>/dev/null
                     COMPREPLY=( $(compgen -W "${DISTRO_AVAILABLE_VERSIONS[$found_distro]}" -- "${cur}") )
                 fi
                 return 0
@@ -253,6 +254,7 @@ _tux2lab_completions() {
                 local found_distro
                 found_distro=$(_find_distro_in_words)
                 if [[ -n "$found_distro" ]]; then
+                    compopt -o nosort 2>/dev/null
                     COMPREPLY=( $(compgen -W "${DISTRO_AVAILABLE_VERSIONS[$found_distro]}" -- "${cur}") )
                 fi
                 return 0
