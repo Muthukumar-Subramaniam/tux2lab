@@ -287,156 +287,18 @@ when_lab_infra_server_is_vm() {
         return 1
     fi
     print_task_done
-    # ====== STEP 5: Check essential services connectivity ======
-    if ! command -v nc &>/dev/null; then
-        print_warning "'nc' (netcat) is not installed — skipping service connectivity checks."
-        configure_dns_for_bridge || return 1
-        print_cyan "--------------------------------------------------------------"
-        print_success "tux2lab Infra is started (service checks skipped — install nc for full verification)."
-        return 0
-    fi
-
-    print_info "Checking essential services connectivity..."
-    
-    # Define port numbers
-    local port_dns=53
-    local port_dhcpv4=67
-    local port_ntp=123
-    local port_tftp=69
-    local port_nfs=2049
-    local port_web=80
-    
-    # Define lab infra services (service_name:port:protocol:address)
-    local services_to_check=(
-        "DNS Server:$port_dns:tcp:$lab_infra_server_hostname"
-        "DHCP Server:$port_dhcpv4:udp:$lab_infra_server_ipv4_address"
-        "NTP Server:$port_ntp:udp:$lab_infra_server_hostname"
-        "TFTP Server:$port_tftp:udp:$lab_infra_server_hostname"
-        "NFS Server:$port_nfs:tcp:$lab_infra_server_hostname"
-        "Web Server:$port_web:tcp:$lab_infra_server_hostname"
-    )
-    
-    # Calculate max length for alignment
-    local max_len=0
-    for entry in "${services_to_check[@]}"; do
-        IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
-        (( ${#service_name} > max_len )) && max_len=${#service_name}
-    done
-    
-    local active_services=0
-    local inactive_services=0
-    local all_services_active=true
-    local dns_is_down=false
-    
-    for entry in "${services_to_check[@]}"; do
-        IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
-
-        # If DNS is down, fall back to IP address for hostname-based checks
-        if $dns_is_down && [[ "$service_address" == "$lab_infra_server_hostname" ]]; then
-            service_address="$lab_infra_server_ipv4_address"
-        fi
-        
-        local check_result=1
-        if [[ "$service_proto" == "udp" ]]; then
-            nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
-        else
-            nc -z -w 3 "$service_address" "$service_port" &>/dev/null && check_result=0
-        fi
-        
-        if [[ $check_result -eq 0 ]]; then
-            printf "\033[0;36m[ \033[0;32m✓\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
-            ((++active_services))
-        else
-            printf "\033[0;36m[ \033[0;31m✗\033[0;36m ] %-*s [ %s/%s ]\033[0m\n" "$max_len" "$service_name" "$service_port" "$service_proto"
-            ((++inactive_services))
-            all_services_active=false
-            # Track DNS failure to avoid cascade
-            if [[ "$service_name" == "DNS Server" ]]; then
-                dns_is_down=true
-            fi
-        fi
-    done
-
-    # ====== STEP 6: Attempt to recover failed services ======
-    if ! $all_services_active; then
-        print_info "Attempting to recover inactive services..."
-
-        # Map service display names to systemd unit names
-        declare -A service_unit_map=(
-            ["DNS Server"]="named"
-            ["DHCP Server"]="kea-dhcp4"
-            ["NTP Server"]="chronyd"
-            ["TFTP Server"]="tftp.socket"
-            ["NFS Server"]="nfs-server"
-            ["Web Server"]="nginx"
-        )
-
-        local ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
-        local ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
-
-        local recovered=0
-        for entry in "${services_to_check[@]}"; do
-            IFS=':' read -r service_name service_port service_proto service_address <<< "$entry"
-
-            # Only attempt recovery for services that failed the port check
-            local recheck_result=1
-            if [[ "$service_proto" == "udp" ]]; then
-                nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && recheck_result=0
-            else
-                nc -z -w 3 "$service_address" "$service_port" &>/dev/null && recheck_result=0
-            fi
-            [[ $recheck_result -eq 0 ]] && continue
-
-            local unit_name="${service_unit_map[$service_name]:-}"
-            [[ -z "$unit_name" ]] && continue
-
-            print_task "Restarting $unit_name on lab infra server..."
-            if ssh "${ssh_opts[@]}" "$ssh_target" "sudo systemctl restart $unit_name" &>/dev/null; then
-                sleep 2
-                # Verify the port is now reachable
-                local verify_result=1
-                if [[ "$service_proto" == "udp" ]]; then
-                    nc -z -u -w 3 "$service_address" "$service_port" &>/dev/null && verify_result=0
-                else
-                    nc -z -w 3 "$service_address" "$service_port" &>/dev/null && verify_result=0
-                fi
-                if [[ $verify_result -eq 0 ]]; then
-                    print_task_done
-                    ((++recovered))
-                else
-                    print_task_fail
-                fi
-            else
-                print_task_fail
-            fi
-        done
-
-        if [[ $recovered -gt 0 ]]; then
-            active_services=$((active_services + recovered))
-            inactive_services=$((inactive_services - recovered))
-            if [[ $inactive_services -eq 0 ]]; then
-                all_services_active=true
-            fi
-        fi
-    fi
-
-    # ====== STEP 7: Configure DNS for labbr0 ======
+    # ====== STEP 5: Configure DNS for labbr0 ======
     configure_dns_for_bridge || return 1
 
-    if $all_services_active; then
-        print_cyan "--------------------------------------------------------------"
-        print_success "tux2lab Infra is started, and all essential services are live."
-    else
-        print_cyan "--------------------------------------------------------------"
-        print_warning "tux2lab Infra is started, but some services need attention."
-        print_info "Total: ${#services_to_check[@]}, Active: $active_services, Inactive: $inactive_services"
-    fi
+    print_cyan "--------------------------------------------------------------"
+    print_success "tux2lab Infra is started."
+    print_info "Run 'tux2lab health' for full deep validation."
 }
     
 # ====== MAIN LOGIC ======
 
 print_cyan "--------------------------------------------------------------"
-print_info "tux2lab Infrastructure Startup"
+print_cyan "tux2lab Infrastructure Startup"
 print_cyan "--------------------------------------------------------------"
 
 if $lab_infra_server_mode_is_host; then
