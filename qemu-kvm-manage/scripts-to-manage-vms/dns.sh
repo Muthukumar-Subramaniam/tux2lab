@@ -98,9 +98,10 @@ fi
 # ====== INVOKE DNSBINDER ======
 print_info "Invoking dnsbinder utility from lab infra server..."
 
+exit_code=0
+
 if $lab_infra_server_mode_is_host; then
-    sudo /tux2lab/named-manage/dnsbinder.sh "$@"
-    exit_code=$?
+    sudo /tux2lab/named-manage/dnsbinder.sh "$@" || exit_code=$?
 else
     # SSH connection options
     ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
@@ -161,8 +162,7 @@ else
         fi
 
         # Execute dnsbinder with remote temp file
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag}" || true
-        exit_code=$?
+        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag}" || exit_code=$?
 
         # Cleanup handled by trap, clear it
         cleanup_remote_temp
@@ -170,8 +170,7 @@ else
     else
         # Regular options - forward as-is
         args_escaped=$(printf '%q ' "$@")
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${args_escaped% }"
-        exit_code=$?
+        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${args_escaped% }" || exit_code=$?
     fi
 fi
 
