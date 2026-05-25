@@ -12,7 +12,13 @@ source /tux2lab/common-utils/color-functions.sh
 # ====== FLAG PARSING ======
 clean_state=false
 
+declare -A _seen_args
 for arg in "$@"; do
+    if [[ -n "${_seen_args[$arg]:-}" ]]; then
+        print_error "Duplicate argument: $arg"
+        exit 1
+    fi
+    _seen_args["$arg"]=1
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
@@ -102,40 +108,40 @@ fi
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
 echo
-print_info "Current lab configuration:"
-print_info "  Hostname  : ${lab_infra_server_hostname}"
-print_info "  Domain    : ${lab_infra_domain_name}"
-print_info "  Mode      : ${mode_label}"
-print_info "  Admin User: ${lab_infra_admin_username}"
-print_info "  IPv4      : ${lab_infra_server_ipv4_address}"
-print_info "  IPv6      : ${lab_infra_server_ipv6_address}"
+print_cyan "Current lab configuration:
+  Hostname  : ${lab_infra_server_hostname}
+  Domain    : ${lab_infra_domain_name}
+  Mode      : ${mode_label}
+  Admin User: ${lab_infra_admin_username}
+  IPv4      : ${lab_infra_server_ipv4_address}
+  IPv6      : ${lab_infra_server_ipv6_address}"
 
 echo
-print_warning "This operation will DESTROY:"
-print_warning "  • ALL guest virtual machines and their data"
-print_warning "  • The lab infrastructure server (${lab_infra_server_hostname})"
+print_warning "This operation will DESTROY:
+  • ALL guest virtual machines and their data
+  • The lab infrastructure server (${lab_infra_server_hostname})"
 if $clean_state; then
-    print_warning "  • Saved lab configuration (environment file)"
-    print_warning "  • SSH keys for lab access"
-    print_warning "  • All golden images"
+    print_warning "  • Saved lab configuration (environment file)
+  • SSH keys for lab access
+  • All golden images"
 fi
 
 echo
 if $clean_state; then
-    print_info "After teardown, a FRESH interactive deployment will launch."
-    print_info "You will be prompted for hostname, domain, and credentials."
+    print_cyan "After teardown, a FRESH interactive deployment will launch.
+You will be prompted for hostname, domain, and credentials."
     echo
-    print_info "The following will be PRESERVED:"
-    print_info "  • Downloaded ISO files"
-    print_info "  • Network bridge definitions"
+    print_cyan "The following will be PRESERVED:
+  • Downloaded ISO files
+  • Network bridge definitions"
 else
-    print_info "After teardown, the lab will be redeployed using saved configuration."
+    print_cyan "After teardown, the lab will be redeployed using saved configuration."
     echo
-    print_info "The following will be PRESERVED:"
-    print_info "  • Lab environment configuration"
-    print_info "  • SSH keys"
-    print_info "  • Downloaded ISO files"
-    print_info "  • Network bridge definitions"
+    print_cyan "The following will be PRESERVED:
+  • Lab environment configuration
+  • SSH keys
+  • Downloaded ISO files
+  • Network bridge definitions"
 fi
 
 # ====== LIST VMs THAT WILL BE DESTROYED ======
@@ -151,20 +157,11 @@ if [[ -n "$all_vms" ]]; then
 fi
 
 echo
-if $clean_state; then
-    echo -n "Type REBUILD-THE-LAB-INFRA-SERVER to confirm: "
-    read -r confirmation
-    if [[ "${confirmation}" != "REBUILD-THE-LAB-INFRA-SERVER" ]]; then
-        print_info "Operation cancelled. Your lab is safe."
-        exit 0
-    fi
-else
-    echo -n "Type REBUILD-THE-LAB-INFRA-SERVER to confirm: "
-    read -r confirmation
-    if [[ "${confirmation}" != "REBUILD-THE-LAB-INFRA-SERVER" ]]; then
-        print_info "Operation cancelled. Your lab is safe."
-        exit 0
-    fi
+echo -n "Type REBUILD-THE-LAB-INFRA-SERVER to confirm: "
+read -r confirmation
+if [[ "${confirmation}" != "REBUILD-THE-LAB-INFRA-SERVER" ]]; then
+    print_info "Operation cancelled. Your lab is safe."
+    exit 0
 fi
 
 print_cyan "═══════════════════════════════════════════════════════════════════"
