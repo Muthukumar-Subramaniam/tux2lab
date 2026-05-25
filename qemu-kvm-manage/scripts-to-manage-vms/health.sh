@@ -30,11 +30,6 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # ====== PREREQUISITE CHECKS ======
-if ! command -v nc &>/dev/null; then
-    print_error "Required command 'nc' (netcat) is not installed."
-    exit 1
-fi
-
 # In VM mode, verify the infra server VM is running
 if ! $lab_infra_server_mode_is_host; then
     if ! sudo virsh list --state-running --name 2>/dev/null | grep -Fxq "$lab_infra_server_hostname"; then
@@ -158,15 +153,19 @@ fi
 http_code=$(fn_run_on_infra "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://${lab_infra_server_hostname}/")
 if [[ "$http_code" == "200" ]]; then
     fn_deep_pass "Nginx HTTP response (200 OK)"
+elif [[ "$http_code" == "000" ]]; then
+    fn_deep_fail "Nginx HTTP (connection refused or timeout)"
 else
-    fn_deep_fail "Nginx HTTP response (got ${http_code:-timeout})"
+    fn_deep_fail "Nginx HTTP response (got HTTP ${http_code})"
 fi
 
 https_code=$(fn_run_on_infra "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 https://${lab_infra_server_hostname}/")
 if [[ "$https_code" == "200" ]]; then
     fn_deep_pass "Nginx HTTPS response (200 OK, cert trusted by system CA)"
+elif [[ "$https_code" == "000" ]]; then
+    fn_deep_fail "Nginx HTTPS response (SSL handshake failed — cert not in trust store or service unreachable)"
 else
-    fn_deep_fail "Nginx HTTPS response (got ${https_code:-timeout}, cert may not be in trust store)"
+    fn_deep_fail "Nginx HTTPS response (got HTTP ${https_code})"
 fi
 
 # --- Grab DHCPv6 socket binding for port check section ---
