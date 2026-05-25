@@ -463,14 +463,14 @@ else
     print_warning "Lab destruction completed with ${failed_steps} failed step(s)."
 fi
 echo
-print_info "Summary: ${completed_steps} completed, ${skipped_steps} skipped, ${failed_steps} failed"
+print_cyan "Summary: ${completed_steps} completed, ${skipped_steps} skipped, ${failed_steps} failed"
 if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
-    print_info "ISO files preserved at /tux2lab-data/iso-files/"
+    print_cyan "ISO files preserved at /tux2lab-data/iso-files/"
 fi
-echo
-print_info "If you wish to rebuild your lab:"
-print_info "  1. Run /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh"
-print_info "  2. Run tux2lab deploy"
-print_cyan "═══════════════════════════════════════════════════════════════════"
+print_cyan "
+If you wish to rebuild your lab:
+  1. Run /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh
+  2. Run tux2lab deploy
+═══════════════════════════════════════════════════════════════════"
 
 exit 0
