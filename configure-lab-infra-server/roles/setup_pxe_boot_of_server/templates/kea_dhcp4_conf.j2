@@ -1,13 +1,13 @@
 {
   "Dhcp4": {
-    "service-sockets-max-retries": 10,
-    "service-sockets-retry-wait-time": 5000,
     "control-socket": {
       "socket-type": "unix",
       "socket-name": "{{ kea_run_dir }}/kea4-ctrl-socket"
     },
     "interfaces-config": {
-      "interfaces": [ "{{ ansible_facts.env.mgmt_interface_name }}" ]
+      "interfaces": [ "{{ ansible_facts.env.mgmt_interface_name }}" ],
+      "service-sockets-max-retries": 10,
+      "service-sockets-retry-wait-time": 5000
     },
     "lease-database": {
       "type": "memfile"
