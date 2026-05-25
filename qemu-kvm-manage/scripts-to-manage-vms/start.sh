@@ -283,10 +283,41 @@ when_lab_infra_server_is_vm() {
     
     if [[ "$vm_is_ssh_accessible" != "true" ]]; then
         print_task_fail
-        print_error "VM did not become SSH accessible within ${ssh_check_timeout} seconds"
-        return 1
+        print_warning "VM did not respond within ${ssh_check_timeout} seconds. Attempting force restart..."
+
+        # Force destroy and restart the VM (one attempt only)
+        sudo virsh destroy "$lab_infra_server_hostname" &>/dev/null || true
+        sleep 2
+        if ! sudo virsh start "$lab_infra_server_hostname" &>/dev/null; then
+            print_error "Failed to restart lab infra server VM"
+            return 1
+        fi
+
+        print_task "Waiting for VM to become SSH accessible after restart..."
+        ssh_check_elapsed=0
+        vm_is_ssh_accessible=false
+        while [[ $ssh_check_elapsed -lt $ssh_check_timeout ]]; do
+            local sys_state
+            sys_state=$(ssh "${ssh_connection_options[@]}" "${lab_infra_admin_username}@${lab_infra_server_hostname}" \
+               'systemctl is-system-running 2>/dev/null || true' 2>/dev/null </dev/null) || true
+            if [[ "$sys_state" == "running" || "$sys_state" == "degraded" ]]; then
+                vm_is_ssh_accessible=true
+                break
+            fi
+            sleep "$ssh_check_interval"
+            ssh_check_elapsed=$((ssh_check_elapsed + ssh_check_interval))
+            echo -n "."
+        done
+
+        if [[ "$vm_is_ssh_accessible" != "true" ]]; then
+            print_task_fail
+            print_error "VM did not become SSH accessible after restart. Manual intervention required."
+            return 1
+        fi
+        print_task_done
+    else
+        print_task_done
     fi
-    print_task_done
     # ====== STEP 5: Configure DNS for labbr0 ======
     configure_dns_for_bridge || return 1
 
