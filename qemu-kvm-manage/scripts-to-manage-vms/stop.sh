@@ -151,9 +151,9 @@ when_lab_infra_server_is_host() {
     fi
 
     if [[ ${#failed_services_list[@]} -eq 0 ]]; then
-        print_success "All lab services stopped successfully."
+        print_success "tux2lab infrastructure stopped. All services stopped successfully."
     else
-        print_warning "Some services failed to stop: ${failed_services_list[*]}"
+        print_warning "tux2lab infrastructure stopped, but some services failed: ${failed_services_list[*]}"
     fi
 }
 
@@ -182,9 +182,10 @@ when_lab_infra_server_is_vm() {
 }
 
 # ====== MAIN LOGIC ======
+exit_code=0
 
 print_cyan "--------------------------------------------------------------"
-print_info "tux2lab Infrastructure Shutdown"
+print_cyan "tux2lab Infrastructure Shutdown"
 print_cyan "--------------------------------------------------------------"
 
 if $lab_infra_server_mode_is_host; then
@@ -216,12 +217,10 @@ fi
 print_cyan "--------------------------------------------------------------"
 
 if $lab_infra_server_mode_is_host; then
-    when_lab_infra_server_is_host
+    when_lab_infra_server_is_host || exit_code=$?
 else
-    when_lab_infra_server_is_vm
+    when_lab_infra_server_is_vm || exit_code=$?
 fi
-
-exit_code=$?
 
 # Sync systemd service state after interactive stop
 if systemctl list-unit-files tux2lab.service &>/dev/null; then
