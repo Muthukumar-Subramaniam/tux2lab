@@ -178,7 +178,7 @@ when_lab_infra_server_is_vm() {
         print_warning "Failed to stop libvirtd"
     fi
 
-    print_success "Lab infrastructure stopped."
+    print_success "tux2lab infrastructure stopped."
 }
 
 # ====== MAIN LOGIC ======

@@ -190,9 +190,9 @@ when_lab_infra_server_is_host() {
     configure_dns_for_bridge || return 1
 
     if $all_services_active; then
-        print_success "tux2lab Infra is started, and all essential services are live."
+        print_success "tux2lab infrastructure started. All essential services are live."
     else
-        print_warning "tux2lab Infra is started, but some services need attention."
+        print_warning "tux2lab infrastructure started, but some services need attention."
         print_info "Run 'sudo systemctl status <service>' for details."
     fi
 }
@@ -322,7 +322,7 @@ when_lab_infra_server_is_vm() {
     configure_dns_for_bridge || return 1
 
     print_cyan "--------------------------------------------------------------"
-    print_success "tux2lab Infra is started."
+    print_success "tux2lab infrastructure started."
     print_info "Run 'tux2lab health' for full deep validation."
 }
     
