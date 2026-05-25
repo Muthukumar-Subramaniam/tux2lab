@@ -227,24 +227,23 @@ _tux2lab_completions() {
 
         local gi_subcmd="${COMP_WORDS[2]}"
 
-        # Complete distro names after -d/--distro flag for build/cleanup
-        if [[ "${gi_subcmd}" == "build" || "${gi_subcmd}" == "create" || "${gi_subcmd}" == "cleanup" ]] && [[ "${prev}" == "-d" || "${prev}" == "--distro" ]]; then
-            COMPREPLY=( $(compgen -W "${all_distros}" -- "${cur}") )
-            return 0
-        fi
-
-        # Complete flags after build/create subcommand
-        if [[ "${gi_subcmd}" == "build" || "${gi_subcmd}" == "create" ]]; then
+        # Complete distro names as positional argument for build/cleanup
+        if [[ "${gi_subcmd}" == "build" || "${gi_subcmd}" == "create" || "${gi_subcmd}" == "cleanup" ]]; then
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=( $(compgen -W "-d --distro -v --version -h --help" -- "${cur}") )
+                local gi_opts="-v --version -h --help"
+                [[ "${gi_subcmd}" == "cleanup" ]] && gi_opts="-v --version -f --force -h --help"
+                COMPREPLY=( $(compgen -W "${gi_opts}" -- "${cur}") )
                 return 0
             fi
-        fi
-
-        # Complete flags after cleanup subcommand
-        if [[ "${gi_subcmd}" == "cleanup" ]]; then
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=( $(compgen -W "-d --distro -v --version -f --force -h --help" -- "${cur}") )
+            # Offer distro names if one hasn't been provided yet
+            local distro_given=false
+            for word in "${COMP_WORDS[@]:3}"; do
+                for d in ${all_distros}; do
+                    [[ "$word" == "$d" ]] && distro_given=true && break 2
+                done
+            done
+            if ! $distro_given; then
+                COMPREPLY=( $(compgen -W "${all_distros}" -- "${cur}") )
                 return 0
             fi
         fi

@@ -20,17 +20,14 @@ show_golden_image_help() {
     tux2lab golden-image <subcommand> [options]
 
 SUBCOMMANDS:
-    build [OPTIONS]         Build a golden image by installing a VM via PXE boot
-    list                    List all available golden images
-    cleanup                 Remove golden image(s)
+    build [distro] [OPTIONS]    Build a golden image by installing a VM via PXE boot
+    list                        List all available golden images
+    cleanup [distro] [OPTIONS]  Remove golden image(s)
 
-BUILD OPTIONS:
-    -d, --distro <distro>   Specify OS distribution
+BUILD/CLEANUP OPTIONS:
     -v, --version <ver>     Specify OS version number
 
 CLEANUP OPTIONS:
-    -d, --distro <distro>   Specify OS distribution to remove
-    -v, --version <ver>     Specify OS version number to remove
     -f, --force             Skip confirmation prompt
 
 OPTIONS:
@@ -39,10 +36,11 @@ OPTIONS:
 EXAMPLES:
     tux2lab golden-image list
     tux2lab golden-image build                             # Interactive mode
-    tux2lab golden-image build -d almalinux -v 10          # Non-interactive mode
+    tux2lab golden-image build almalinux --version 10      # Non-interactive mode
+    tux2lab golden-image build almalinux -v 10             # Short form
     tux2lab golden-image cleanup                            # Interactive cleanup
-    tux2lab golden-image cleanup -d almalinux -v 10        # Remove specific golden image
-    tux2lab golden-image cleanup -f -d rocky -v 9          # Remove without confirmation"
+    tux2lab golden-image cleanup almalinux --version 10    # Remove specific golden image
+    tux2lab golden-image cleanup rocky -v 9 --force        # Remove without confirmation"
 }
 
 # ====== LIST ======
@@ -107,22 +105,20 @@ golden_image_list() {
 # ====== CLEANUP ======
 
 show_cleanup_help() {
-    print_cyan "Usage: tux2lab golden-image cleanup [OPTIONS]
+    print_cyan "Usage: tux2lab golden-image cleanup [distro] [OPTIONS]
 Description:
     Remove golden image disk(s) from the golden images disk store.
     Run without options for an interactive menu.
 
 Options:
-    -d, --distro <distro>   Specify OS distribution to remove
-                                            (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
     -v, --version <ver>     Specify OS version number to remove
     -f, --force             Skip confirmation prompt
     -h, --help              Show this help message
 
 Examples:
     tux2lab golden-image cleanup                            # Interactive cleanup
-    tux2lab golden-image cleanup -d almalinux -v 10        # Remove specific golden image
-    tux2lab golden-image cleanup -f -d rocky -v 9          # Remove without confirmation
+    tux2lab golden-image cleanup almalinux --version 10     # Remove specific golden image
+    tux2lab golden-image cleanup rocky -v 9 --force         # Remove without confirmation
 "
 }
 
@@ -133,15 +129,6 @@ golden_image_cleanup() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -d|--distro)
-                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                    print_error "--distro/-d requires a distribution name."
-                    show_cleanup_help
-                    exit 1
-                fi
-                cleanup_distro="$2"
-                shift 2
-                ;;
             -v|--version)
                 if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     print_error "--version/-v requires a version number."
@@ -165,9 +152,14 @@ golden_image_cleanup() {
                 exit 1
                 ;;
             *)
-                print_error "'tux2lab golden-image cleanup' does not accept positional arguments."
-                show_cleanup_help
-                exit 1
+                if [[ -z "$cleanup_distro" ]]; then
+                    cleanup_distro="$1"
+                else
+                    print_error "Unexpected argument: $1"
+                    show_cleanup_help
+                    exit 1
+                fi
+                shift
                 ;;
         esac
     done

@@ -14,22 +14,20 @@ VERSION_TYPE=""
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab golden-image build [OPTIONS]
+    print_cyan "Usage: tux2lab golden-image build [distro] [OPTIONS]
 Description:
     Creates a golden image disk by installing a VM via PXE boot.
     The VM will be automatically removed after the disk is created.
 
 Options:
-    -d, --distro         Specify OS distribution
-                                            (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
     -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
     -h, --help           Show this help message
 
 Examples:
     tux2lab golden-image build                             # Build golden image (will prompt for distro/version)
-    tux2lab golden-image build -d almalinux                # Build AlmaLinux golden image (will prompt for version)
-    tux2lab golden-image build -d rocky -v 9               # Build Rocky Linux 9 golden image
-    tux2lab golden-image build -d ubuntu-lts -v 26.04      # Build Ubuntu LTS 26.04 golden image
+    tux2lab golden-image build almalinux                   # Build AlmaLinux golden image (will prompt for version)
+    tux2lab golden-image build rocky --version 9           # Build Rocky Linux 9 golden image
+    tux2lab golden-image build ubuntu-lts -v 26.04         # Build Ubuntu LTS 26.04 golden image
 "
 }
 
@@ -39,15 +37,6 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             fn_show_help
             exit 0
-            ;;
-        -d|--distro)
-            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "--distro/-d requires a distribution name."
-                fn_show_help
-                exit 1
-            fi
-            OS_DISTRO="$2"
-            shift 2
             ;;
         -v|--version)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
@@ -64,9 +53,14 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            print_error "'tux2lab golden-image build' does not accept positional arguments."
-            fn_show_help
-            exit 1
+            if [[ -z "$OS_DISTRO" ]]; then
+                OS_DISTRO="$1"
+            else
+                print_error "Unexpected argument: $1"
+                fn_show_help
+                exit 1
+            fi
+            shift
             ;;
     esac
 done
