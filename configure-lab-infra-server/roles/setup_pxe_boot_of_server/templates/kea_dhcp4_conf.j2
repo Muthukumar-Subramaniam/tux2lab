@@ -1,5 +1,7 @@
 {
   "Dhcp4": {
+    "service-sockets-max-retries": 10,
+    "service-sockets-retry-wait-time": 5000,
     "control-socket": {
       "socket-type": "unix",
       "socket-name": "{{ kea_run_dir }}/kea4-ctrl-socket"
