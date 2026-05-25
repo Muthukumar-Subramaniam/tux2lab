@@ -32,9 +32,19 @@ _tux2lab_completions() {
     # IPv6 route subcommands
     local ipv6_route_subcommands="enable disable check auto status"
 
-    # Distro names
-    local all_distros="almalinux rocky oraclelinux centos-stream rhel ubuntu-lts opensuse-leap"
+    # Distro names and versions (sourced from single source of truth)
+    source /tux2lab/ks-manage/distro-versions.conf 2>/dev/null || true
+    local all_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
     local rhel_distros="almalinux rocky oraclelinux centos-stream rhel"
+
+    # Helper: find distro from COMP_WORDS
+    _find_distro_in_words() {
+        for word in "${COMP_WORDS[@]}"; do
+            for d in ${all_distros}; do
+                [[ "$word" == "$d" ]] && echo "$d" && return
+            done
+        done
+    }
 
     # DNS options
     local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy --setup -y --yes -h --help"
@@ -192,6 +202,15 @@ _tux2lab_completions() {
 
         # Complete --version/-v flag after distro name for setup/cleanup
         if [[ "${distro_subcmd}" == "setup" || "${distro_subcmd}" == "cleanup" ]]; then
+            # Offer versions after -v/--version
+            if [[ "${prev}" == "-v" || "${prev}" == "--version" ]]; then
+                local found_distro
+                found_distro=$(_find_distro_in_words)
+                if [[ -n "$found_distro" ]]; then
+                    COMPREPLY=( $(compgen -W "${DISTRO_AVAILABLE_VERSIONS[$found_distro]}" -- "${cur}") )
+                fi
+                return 0
+            fi
             COMPREPLY=( $(compgen -W "-v --version -h --help" -- "${cur}") )
             return 0
         fi
@@ -229,6 +248,15 @@ _tux2lab_completions() {
         if [[ "${gi_subcmd}" == "build" || "${gi_subcmd}" == "create" || "${gi_subcmd}" == "cleanup" ]]; then
             local gi_opts="-v --version -h --help"
             [[ "${gi_subcmd}" == "cleanup" ]] && gi_opts="-v --version -f --force -h --help"
+            # Offer versions after -v/--version
+            if [[ "${prev}" == "-v" || "${prev}" == "--version" ]]; then
+                local found_distro
+                found_distro=$(_find_distro_in_words)
+                if [[ -n "$found_distro" ]]; then
+                    COMPREPLY=( $(compgen -W "${DISTRO_AVAILABLE_VERSIONS[$found_distro]}" -- "${cur}") )
+                fi
+                return 0
+            fi
             # Offer distro names if one hasn't been provided yet
             local distro_given=false
             for word in "${COMP_WORDS[@]:3}"; do
