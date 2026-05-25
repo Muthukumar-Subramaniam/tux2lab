@@ -291,11 +291,12 @@ _tux2lab_completions() {
 
     # ===== DESTROY COMMAND =====
     if [[ "${cmd}" == "destroy" ]]; then
-        if [[ ${cur} == -* ]]; then
-            COMPREPLY=( $(compgen -W "--wipe-iso-files-too -h --help" -- "${cur}") )
-        else
-            COMPREPLY=( $(compgen -W "--wipe-iso-files-too" -- "${cur}") )
-        fi
+        local opts="--wipe-iso-files-too -h --help"
+        # Remove already-used flags from completions
+        for word in "${words[@]}"; do
+            opts=${opts//$word/}
+        done
+        COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
         return 0
     fi
 

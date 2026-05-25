@@ -12,7 +12,13 @@ source /tux2lab/common-utils/color-functions.sh
 # ====== FLAG PARSING ======
 wipe_iso_files=false
 
+declare -A _seen_args
 for arg in "$@"; do
+    if [[ -n "${_seen_args[$arg]:-}" ]]; then
+        print_error "Duplicate argument: $arg"
+        exit 1
+    fi
+    _seen_args["$arg"]=1
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
