@@ -25,7 +25,7 @@ DESCRIPTION:
       - Lab network configuration
       - Lab data files (/tux2lab-data/ contents, excluding ISOs)
       - SSH keys and configuration for lab access
-      - tux2lab-lab-infra systemd service
+      - tux2lab systemd service
 
     Downloaded ISO files are preserved by default.
 
@@ -85,7 +85,7 @@ fi
 print_warning "  • Lab network bridge and virtual network"
 print_warning "  • Lab data in /tux2lab-data/ (env vars, VM disks, ksmanager data)"
 print_warning "  • SSH keys and config for lab access"
-print_warning "  • tux2lab-lab-infra systemd service"
+print_warning "  • tux2lab systemd service"
 
 if $wipe_iso_files; then
     print_warning "  • Downloaded ISO files (--wipe-iso-files-too)"
@@ -174,17 +174,26 @@ else
 fi
 
 # ====== STEP 3: STOP AND REMOVE SYSTEMD SERVICE ======
-print_task "Stopping and removing tux2lab-lab-infra.service..."
-if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
-    sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
-    sudo systemctl disable tux2lab-lab-infra.service 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/tux2lab-lab-infra.service
+print_task "Stopping and removing tux2lab.service..."
+if systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
+    sudo systemctl stop tux2lab.service --no-block 2>/dev/null || true
+    sudo systemctl disable tux2lab.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
     print_task_done
     ((++completed_steps))
 else
     print_task_skip
     ((++skipped_steps))
+fi
+# Clean up legacy service name if still present
+if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
+    print_task "Removing legacy tux2lab-lab-infra.service..."
+    sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
+    sudo systemctl disable tux2lab-lab-infra.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/tux2lab-lab-infra.service
+    sudo systemctl daemon-reload
+    print_task_done
 fi
 
 # ====== STEP 4: STOP HOST-MODE LAB SERVICES ======

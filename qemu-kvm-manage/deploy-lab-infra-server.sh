@@ -735,10 +735,10 @@ deploy_lab_infra_server_vm() {
     # Further deployment logic goes here
     # -------------------------
     # -----------------------------
-    # Deploy tux2lab-lab-infra.service
+    # Deploy tux2lab.service
     # -----------------------------
-    print_info "Deploying tux2lab-lab-infra.service..."
-    sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
+    print_info "Deploying tux2lab.service..."
+    sudo tee /etc/systemd/system/tux2lab.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
 After=network-online.target libvirtd.service
@@ -753,10 +753,10 @@ ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo chmod 644 /etc/systemd/system/tux2lab-lab-infra.service
+    sudo chmod 644 /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
-    sudo systemctl enable tux2lab-lab-infra.service >/dev/null 2>&1
-    print_success "tux2lab-lab-infra.service deployed and enabled."
+    sudo systemctl enable tux2lab.service >/dev/null 2>&1
+    print_success "tux2lab.service deployed and enabled."
 
     # -----------------------------
     # Launch VM via virt-install
@@ -1165,10 +1165,10 @@ deploy_lab_infra_server_host() {
     fi
 
     # -----------------------------
-    # Deploy tux2lab-lab-infra.service
+    # Deploy tux2lab.service
     # -----------------------------
-    print_info "Deploying tux2lab-lab-infra.service..."
-    sudo tee /etc/systemd/system/tux2lab-lab-infra.service > /dev/null <<EOF
+    print_info "Deploying tux2lab.service..."
+    sudo tee /etc/systemd/system/tux2lab.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
 After=network-online.target libvirtd.service
@@ -1183,10 +1183,10 @@ ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo chmod 644 /etc/systemd/system/tux2lab-lab-infra.service
+    sudo chmod 644 /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
-    sudo systemctl enable tux2lab-lab-infra.service >/dev/null 2>&1
-    print_success "tux2lab-lab-infra.service deployed and enabled."
+    sudo systemctl enable tux2lab.service >/dev/null 2>&1
+    print_success "tux2lab.service deployed and enabled."
 
     echo
     print_green "═══════════════════════════════════════════════════════════════════"

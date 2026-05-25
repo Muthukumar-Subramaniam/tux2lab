@@ -27,7 +27,7 @@ if [[ $# -gt 0 ]]; then
     exit 1
 fi
 
-readonly SERVICE_NAME="tux2lab-lab-infra.service"
+readonly SERVICE_NAME="tux2lab.service"
 
 if ! systemctl list-unit-files "$SERVICE_NAME" &>/dev/null; then
     print_error "$SERVICE_NAME is not installed."

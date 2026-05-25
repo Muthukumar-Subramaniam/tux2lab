@@ -224,8 +224,8 @@ fi
 exit_code=$?
 
 # Sync systemd service state after interactive stop
-if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null; then
-    sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
+if systemctl list-unit-files tux2lab.service &>/dev/null; then
+    sudo systemctl stop tux2lab.service --no-block 2>/dev/null || true
 fi
 
 print_cyan "--------------------------------------------------------------"

@@ -220,11 +220,11 @@ else
 fi
 
 # ====== STEP 3: STOP AND REMOVE SYSTEMD SERVICE ======
-if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
-    print_task "Stopping and removing tux2lab-lab-infra.service..."
-    sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
-    sudo systemctl disable tux2lab-lab-infra.service 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/tux2lab-lab-infra.service
+if systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
+    print_task "Stopping and removing tux2lab.service..."
+    sudo systemctl stop tux2lab.service --no-block 2>/dev/null || true
+    sudo systemctl disable tux2lab.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
     print_task_done
 fi
