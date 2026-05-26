@@ -10,12 +10,12 @@ source /tux2lab/common-utils/color-functions.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm resize [-f] [memory <GiB>] [cpu <count>] [disk <GiB>] [-H hostname]
+    print_cyan "Usage: tux2lab vm resize [-f] [-m <GiB>] [-c <count>] [-d <GiB>] [-H hostname]
 
 Resources (can be combined in any order):
-  memory <GiB>         Set VM memory — power of 2 (1, 2, 4, 8, 16...), less than host memory
-  cpu <count>          Set VM vCPUs — power of 2 (1, 2, 4, 8...)
-  disk <GiB>           Set OS disk to target size — must be larger than current size,
+  -m, --memory <GiB>   Set VM memory — power of 2 (1, 2, 4, 8, 16...), less than host memory
+  -c, --cpu <count>    Set VM vCPUs — power of 2 (1, 2, 4, 8...)
+  -d, --disk <GiB>     Set OS disk to target size — must be larger than current size,
                        multiple of 5, max increase of 100 GiB per operation
 
 Options:
@@ -25,11 +25,11 @@ Options:
 
 Examples:
   tux2lab vm resize -H vm1                              # Interactive mode
-  tux2lab vm resize -f memory 8 -H vm1                  # Set memory to 8 GiB
-  tux2lab vm resize -f cpu 4 -H vm1                     # Set vCPUs to 4
-  tux2lab vm resize -f disk 50 -H vm1                   # Set OS disk to 50 GiB
-  tux2lab vm resize -f memory 8 cpu 4 -H vm1            # Set memory and CPU together
-  tux2lab vm resize -f disk 50 memory 8 cpu 4 -H vm1    # Resize all three at once
+  tux2lab vm resize -f -m 8 -H vm1                     # Set memory to 8 GiB
+  tux2lab vm resize -f -c 4 -H vm1                     # Set vCPUs to 4
+  tux2lab vm resize -f -d 50 -H vm1                    # Set OS disk to 50 GiB
+  tux2lab vm resize -f -m 8 -c 4 -H vm1               # Set memory and CPU together
+  tux2lab vm resize -f -d 50 -m 8 -c 4 -H vm1         # Resize all three at once
 "
 }
 
@@ -51,27 +51,27 @@ while [[ $# -gt 0 ]]; do
             force_poweroff=true
             shift
             ;;
-        memory)
+        -m|--memory)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "'memory' requires a size value in GiB."
+                print_error "'-m/--memory' requires a size value in GiB."
                 exit 1
             fi
             memory_arg="$2"
             resize_order+=(memory)
             shift 2
             ;;
-        cpu)
+        -c|--cpu)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "'cpu' requires a vCPU count value."
+                print_error "'-c/--cpu' requires a vCPU count value."
                 exit 1
             fi
             cpu_arg="$2"
             resize_order+=(cpu)
             shift 2
             ;;
-        disk)
+        -d|--disk)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "'disk' requires a size value in GiB."
+                print_error "'-d/--disk' requires a size value in GiB."
                 exit 1
             fi
             disk_arg="$2"

@@ -100,9 +100,9 @@ _tux2lab_completions() {
             esac
         fi
 
-        # Complete positional keywords for resize
+        # Complete positional keywords and flags for resize
         if [[ "${vm_subcmd}" == "resize" ]]; then
-            COMPREPLY=( $(compgen -W "memory cpu disk" -- "${cur}") )
+            COMPREPLY=( $(compgen -W "-m --memory -c --cpu -d --disk -H --host -f --force -h --help" -- "${cur}") )
             return 0
         fi
 
@@ -133,7 +133,7 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "-H --host -h --help" -- "${cur}") )
                 ;;
             resize)
-                COMPREPLY=( $(compgen -W "-H --host -f --force -h --help" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-m --memory -c --cpu -d --disk -H --host -f --force -h --help" -- "${cur}") )
                 ;;
             disk-add)
                 COMPREPLY=( $(compgen -W "-H --host -f --force -n --count -s --size -h --help" -- "${cur}") )
