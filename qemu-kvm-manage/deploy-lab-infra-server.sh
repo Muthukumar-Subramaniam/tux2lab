@@ -784,7 +784,7 @@ EOF
         --network network=tux2lab,model=virtio \
         --initrd-inject="${KS_FILE}" \
         --location "$iso_mount_dir" \
-        --extra-args "inst.ks=file:/${lab_infra_server_hostname}_ks.cfg console=ttyS0 nomodeset inst.text quiet" \
+        --extra-args "inst.ks=file:/${lab_infra_server_hostname}_ks.cfg inst.stage2=cdrom inst.repo=cdrom console=ttyS0 nomodeset inst.text quiet" \
         --graphics none \
         --noreboot \
         --watchdog none \
