@@ -85,77 +85,19 @@ _tux2lab_completions() {
             esac
         fi
 
-        # Complete options per vm subcommand
-        if [[ ${cur} == -* ]]; then
+        # Complete version values after -v/--version
+        if [[ "${prev}" == "-v" || "${prev}" == "--version" ]]; then
             case "${vm_subcmd}" in
-                install-golden|install-pxe)
-                    COMPREPLY=( $(compgen -W "-H --hosts -c --console -d --distro -v --version -h --help" -- "${cur}") )
-                    ;;
-                reimage-golden|reimage-pxe)
-                    COMPREPLY=( $(compgen -W "-H --hosts -c --console -C --clean-install -d --distro -v --version -f --force -h --help" -- "${cur}") )
-                    ;;
-                start)
-                    COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
-                    ;;
-                stop|shutdown|restart|reboot)
-                    COMPREPLY=( $(compgen -W "-H --hosts -f --force -h --help" -- "${cur}") )
-                    ;;
-                remove)
-                    COMPREPLY=( $(compgen -W "-H --hosts -f --force --ignore-ksmanager-cleanup -h --help" -- "${cur}") )
-                    ;;
-                list)
-                    COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
-                    ;;
-                info|validate)
-                    COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
-                    ;;
-                console)
-                    COMPREPLY=( $(compgen -W "-H --host -h --help" -- "${cur}") )
-                    ;;
-                resize)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -h --help" -- "${cur}") )
-                    ;;
-                disk-add)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -n --count -s --size -h --help" -- "${cur}") )
-                    ;;
-                disk-resize)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -d --disk -g --gib -h --help" -- "${cur}") )
-                    ;;
-                disk-attach)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -d --disks -h --help" -- "${cur}") )
-                    ;;
-                disk-detach)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -d --disks -h --help" -- "${cur}") )
-                    ;;
-                disk-delete)
-                    COMPREPLY=( $(compgen -W "-d --disks -h --help" -- "${cur}") )
-                    ;;
-                nic-add)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -c --count -n --network -h --help" -- "${cur}") )
-                    ;;
-                nic-remove)
-                    COMPREPLY=( $(compgen -W "-H --host -f --force -m --macs -h --help" -- "${cur}") )
-                    ;;
-                snapshot-create)
-                    COMPREPLY=( $(compgen -W "-H --hosts -l --label -d --desc -f --force -h --help" -- "${cur}") )
-                    ;;
-                snapshot-list)
-                    COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
-                    ;;
-                snapshot-info)
-                    COMPREPLY=( $(compgen -W "-H --hosts -n --name -h --help" -- "${cur}") )
-                    ;;
-                snapshot-delete)
-                    COMPREPLY=( $(compgen -W "-H --hosts -n --name -f --force -h --help" -- "${cur}") )
-                    ;;
-                snapshot-revert)
-                    COMPREPLY=( $(compgen -W "-H --hosts -n --name -f --force -h --help" -- "${cur}") )
-                    ;;
-                *)
-                    COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+                install-golden|install-pxe|reimage-golden|reimage-pxe)
+                    local found_distro
+                    found_distro=$(_find_distro_in_words)
+                    if [[ -n "$found_distro" ]]; then
+                        compopt -o nosort 2>/dev/null
+                        COMPREPLY=( $(compgen -W "${DISTRO_AVAILABLE_VERSIONS[$found_distro]}" -- "${cur}") )
+                    fi
+                    return 0
                     ;;
             esac
-            return 0
         fi
 
         # Complete positional keywords for resize
@@ -164,6 +106,75 @@ _tux2lab_completions() {
             return 0
         fi
 
+        # Complete options per vm subcommand
+        case "${vm_subcmd}" in
+            install-golden|install-pxe)
+                COMPREPLY=( $(compgen -W "-H --hosts -c --console -d --distro -v --version -h --help" -- "${cur}") )
+                ;;
+            reimage-golden|reimage-pxe)
+                COMPREPLY=( $(compgen -W "-H --hosts -c --console -C --clean-install -d --distro -v --version -f --force -h --help" -- "${cur}") )
+                ;;
+            start)
+                COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
+                ;;
+            stop|shutdown|restart|reboot)
+                COMPREPLY=( $(compgen -W "-H --hosts -f --force -h --help" -- "${cur}") )
+                ;;
+            remove)
+                COMPREPLY=( $(compgen -W "-H --hosts -f --force --ignore-ksmanager-cleanup -h --help" -- "${cur}") )
+                ;;
+            list)
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+                ;;
+            info|validate)
+                COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
+                ;;
+            console)
+                COMPREPLY=( $(compgen -W "-H --host -h --help" -- "${cur}") )
+                ;;
+            resize)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -h --help" -- "${cur}") )
+                ;;
+            disk-add)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -n --count -s --size -h --help" -- "${cur}") )
+                ;;
+            disk-resize)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -d --disk -g --gib -h --help" -- "${cur}") )
+                ;;
+            disk-attach)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -d --disks -h --help" -- "${cur}") )
+                ;;
+            disk-detach)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -d --disks -h --help" -- "${cur}") )
+                ;;
+            disk-delete)
+                COMPREPLY=( $(compgen -W "-d --disks -h --help" -- "${cur}") )
+                ;;
+            nic-add)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -c --count -n --network -h --help" -- "${cur}") )
+                ;;
+            nic-remove)
+                COMPREPLY=( $(compgen -W "-H --host -f --force -m --macs -h --help" -- "${cur}") )
+                ;;
+            snapshot-create)
+                COMPREPLY=( $(compgen -W "-H --hosts -l --label -d --desc -f --force -h --help" -- "${cur}") )
+                ;;
+            snapshot-list)
+                COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
+                ;;
+            snapshot-info)
+                COMPREPLY=( $(compgen -W "-H --hosts -n --name -h --help" -- "${cur}") )
+                ;;
+            snapshot-delete)
+                COMPREPLY=( $(compgen -W "-H --hosts -n --name -f --force -h --help" -- "${cur}") )
+                ;;
+            snapshot-revert)
+                COMPREPLY=( $(compgen -W "-H --hosts -n --name -f --force -h --help" -- "${cur}") )
+                ;;
+            *)
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+                ;;
+        esac
         return 0
     fi
 

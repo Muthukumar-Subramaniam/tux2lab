@@ -22,6 +22,11 @@ run_ksmanager() {
             ksmanager_exit_code=$?
         fi
     else
+        if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o ConnectTimeout=5 "${lab_infra_admin_username}@${lab_infra_server_hostname}" true 2>/dev/null; then
+            print_error "Cannot reach the lab infra server (${lab_infra_server_hostname})."
+            return 1
+        fi
         if [[ -z "$hostname" ]]; then
             ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${ksmanager_options}"
             ksmanager_exit_code=$?
