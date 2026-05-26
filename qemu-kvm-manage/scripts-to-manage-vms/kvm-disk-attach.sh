@@ -224,6 +224,12 @@ if [[ -n "$disks_arg" ]]; then
         # Remove whitespace
         disk="${disk#"${disk%%[![:space:]]*}"}"  # Trim leading
         disk="${disk%"${disk##*[![:space:]]}"}"  # Trim trailing
+
+        # Reject path separators to prevent path traversal
+        if [[ "$disk" == */* ]]; then
+            print_error "Invalid disk name '$disk': must not contain path separators."
+            exit 1
+        fi
         
         # Check if disk exists in detached directory
         if [[ ! -f "$DETACHED_DIR/$disk" ]]; then

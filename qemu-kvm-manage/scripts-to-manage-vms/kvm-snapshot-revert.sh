@@ -91,6 +91,11 @@ if [[ -z "$snapshot_name" ]]; then
     fi
 fi
 
+# Validate snapshot name format
+if ! fn_validate_snapshot_name "$snapshot_name"; then
+    exit 1
+fi
+
 # Parse and validate hostnames
 IFS=',' read -ra hosts_array <<< "$hosts_list"
 

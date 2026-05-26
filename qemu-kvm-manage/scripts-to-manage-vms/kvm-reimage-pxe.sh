@@ -158,7 +158,10 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Shut down VM if running
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
-    POWEROFF_VM_CONTEXT="Powering off before reimaging" poweroff_vm "$qemu_kvm_hostname"
+    if ! POWEROFF_VM_CONTEXT="Powering off before reimaging" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname"; then
+        FAILED_VMS+=("$qemu_kvm_hostname")
+        continue
+    fi
 
     # If --clean-install is specified, destroy and reinstall VM with default specs
     if [[ "$CLEAN_INSTALL" == "yes" ]]; then

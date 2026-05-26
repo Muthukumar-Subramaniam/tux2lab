@@ -52,6 +52,27 @@ fn_generate_snapshot_name() {
     SNAPSHOT_NAME="$(date +%Y%m%d-%H%M%S)_${label}"
 }
 
+# Validate a snapshot name (timestamp_label format)
+# Usage: fn_validate_snapshot_name "name"
+# Returns: 0 on success, 1 on failure (with error printed)
+fn_validate_snapshot_name() {
+    local name="$1"
+
+    if [[ -z "$name" ]]; then
+        print_error "Snapshot name cannot be empty."
+        return 1
+    fi
+
+    # Must match: YYYYMMDD-HHMMSS_label (no slashes, no path traversal)
+    if [[ ! "$name" =~ ^[0-9]{8}-[0-9]{6}_[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+        print_error "Invalid snapshot name: '$name'"
+        print_info "Expected format: YYYYMMDD-HHMMSS_label (e.g., 20260515-143022_pre-update)"
+        return 1
+    fi
+
+    return 0
+}
+
 # Get all disk files for a VM (boot disk + additional disks)
 # Usage: fn_get_vm_disk_files "hostname"
 # Sets: VM_DISK_FILES (array)

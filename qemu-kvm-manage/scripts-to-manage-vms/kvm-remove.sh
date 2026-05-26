@@ -61,7 +61,7 @@ remove_vm() {
         read -r -p "If you know what you are doing, confirm by typing 'delete-lab-infra-server': " confirmation
         if [[ "$confirmation" != "delete-lab-infra-server" ]]; then
             print_info "Operation cancelled by user."
-            return 1
+            return 3
         fi
     elif [[ "$skip_confirmation" == false ]]; then
         # Regular confirmation for other VMs
@@ -69,7 +69,7 @@ remove_vm() {
         read -rp "Are you sure you want to proceed? (YES/NO): " confirmation
         if [[ "$confirmation" != "YES" ]]; then
             print_info "Operation cancelled by user."
-            return 1
+            return 3
         fi
     fi
     
@@ -137,7 +137,7 @@ remove_vm() {
                 print_warning "Could not clean up ksmanager databases."
             fi
         else
-            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $vm_name --remove-host"; then
+            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh '${vm_name}' --remove-host"; then
                 print_warning "Could not clean up ksmanager databases."
             fi
         fi
@@ -187,7 +187,7 @@ if [[ -n "$hosts_list" ]]; then
         remove_vm "$vm_name" true || exit_code=$?
         if [[ $exit_code -eq 0 ]]; then
             successful_vms+=("$vm_name")
-        elif [[ $exit_code -eq 2 ]]; then
+        elif [[ $exit_code -eq 2 || $exit_code -eq 3 ]]; then
             skipped_vms+=("$vm_name")
         else
             failed_vms+=("$vm_name")
@@ -228,8 +228,13 @@ fi
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
 # Remove the VM
-if remove_vm "$qemu_kvm_hostname" "$force_remove"; then
+exit_code=0
+remove_vm "$qemu_kvm_hostname" "$force_remove" || exit_code=$?
+if [[ $exit_code -eq 0 ]]; then
     print_success "VM '$qemu_kvm_hostname' removed successfully."
+    exit 0
+elif [[ $exit_code -eq 2 || $exit_code -eq 3 ]]; then
+    # VM doesn't exist (2) or user cancelled (3) — already printed info
     exit 0
 else
     exit 1
