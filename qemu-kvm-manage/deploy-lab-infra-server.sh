@@ -815,7 +815,6 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
     fi
 
     # Wait for SSH to become reachable
-    print_info "Waiting for SSH to become available on ${lab_infra_server_hostname}..." "nskip"
     local ssh_opts="-i ${HOME}/.ssh/tux2lab_id_rsa -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
     local max_ssh_wait=300  # 5 minutes
     local elapsed=0
@@ -827,15 +826,14 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
             print_info "You can check manually: ssh ${lab_infra_admin_username}@${lab_infra_server_ipv4_address}"
             exit 1
         fi
-        printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for SSH to become available on ${lab_infra_server_hostname} [%dm %ds]...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+        printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for SSH to become available on ${lab_infra_server_hostname} [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
         sleep 5
         elapsed=$((elapsed + 5))
     done
-    printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for SSH to become available on ${lab_infra_server_hostname} [%dm %ds]...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for SSH to become available on ${lab_infra_server_hostname} [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
     print_success ""
 
     # Wait for bootstrap to complete
-    print_info "Waiting for lab infrastructure bootstrap to complete (this may take 5-10 minutes)..." "nskip"
     local max_bootstrap_wait=900  # 15 minutes
     elapsed=0
 
@@ -848,11 +846,11 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
             print_info "  ssh ${lab_infra_admin_username}@${lab_infra_server_ipv4_address} 'journalctl -u tux2lab-bootstrap -f'"
             exit 1
         fi
-        printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+        printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
         sleep 10
         elapsed=$((elapsed + 10))
     done
-    printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
     print_success ""
 
     # Configure DNS resolution on the KVM host to use the lab's DNS server
