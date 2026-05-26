@@ -387,7 +387,18 @@ else
     ((++skipped_steps))
 fi
 
-# ====== STEP 8: STOP AND DISABLE LIBVIRTD ======
+# ====== STEP 8: REMOVE STORAGE POOLS AND STOP LIBVIRTD ======
+# Remove all tux2lab storage pools (metadata only — does not delete files on disk)
+if systemctl is-active libvirtd &>/dev/null; then
+    for pool_name in $(sudo virsh pool-list --all --name 2>/dev/null | grep -v "^$"); do
+        print_task "Removing storage pool \"${pool_name}\"..."
+        sudo virsh pool-destroy "$pool_name" &>/dev/null || true
+        sudo virsh pool-undefine "$pool_name" &>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    done
+fi
+
 print_task "Stopping and disabling libvirtd..."
 if systemctl is-enabled libvirtd &>/dev/null || systemctl is-active libvirtd &>/dev/null; then
     sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null || true
