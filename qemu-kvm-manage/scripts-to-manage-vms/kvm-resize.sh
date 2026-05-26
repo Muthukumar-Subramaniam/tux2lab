@@ -424,9 +424,9 @@ resize_vm_disk() {
             vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
 
             if [[ ! -f "$vm_qcow2_disk_path" ]]; then
-print_error "OS disk image not found at $vm_qcow2_disk_path"
-            exit 1
-        fi
+                print_error "OS disk image not found at $vm_qcow2_disk_path"
+                exit 1
+            fi
 
             current_disk_gib=$(sudo qemu-img info "${vm_qcow2_disk_path}" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
         fi

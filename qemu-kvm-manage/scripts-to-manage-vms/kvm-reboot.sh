@@ -37,24 +37,28 @@ vm_hostname_arg="$VM_HOSTNAME_ARG"
 reboot_vm() {
     local vm_name="$1"
     
+    print_task "Rebooting VM '$vm_name'..."
+    
     # Check if VM exists in 'virsh list --all'
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then
-        print_error "VM \"$vm_name\" does not exist."
+        print_task_fail
+        print_error "VM does not exist"
         return 1
     fi
     
-    # Check if VM exists in 'virsh list'
+    # Check if VM is running
     if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$vm_name"; then
-        print_error "VM \"$vm_name\" is not running."
+        print_task_fail
+        print_error "VM is not running"
         return 1
     fi
     
-    # Proceed with Reboot
+    # Send reboot signal
     if error_msg=$(sudo virsh reboot "$vm_name" 2>&1); then
-        print_success "VM \"$vm_name\" reboot signal sent successfully."
+        print_task_done
         return 0
     else
-        print_error "Could not reboot VM \"$vm_name\"."
+        print_task_fail
         print_error "$error_msg"
         return 1
     fi
