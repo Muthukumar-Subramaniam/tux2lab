@@ -100,6 +100,11 @@ _tux2lab_completions() {
             esac
         fi
 
+        # Suppress completion after flags that expect a user-provided value
+        if [[ "${prev}" == "-H" || "${prev}" == "--hosts" || "${prev}" == "--host" ]]; then
+            return 0
+        fi
+
         # Complete positional keywords and flags for resize
         if [[ "${vm_subcmd}" == "resize" ]]; then
             COMPREPLY=( $(compgen -W "-m --memory -c --cpu -d --disk -H --host -f --force -h --help" -- "${cur}") )
