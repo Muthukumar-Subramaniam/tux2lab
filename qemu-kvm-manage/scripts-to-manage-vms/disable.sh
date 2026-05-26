@@ -59,10 +59,10 @@ else
     exit 1
 fi
 
-# ====== Disable libvirtd ======
+# ====== Disable libvirtd and sockets ======
 if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
-    print_task "Disabling libvirtd..."
-    if sudo systemctl disable libvirtd >/dev/null 2>&1; then
+    print_task "Disabling libvirtd and sockets..."
+    if sudo systemctl disable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket >/dev/null 2>&1; then
         print_task_done
     else
         print_task_fail

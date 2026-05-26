@@ -48,12 +48,12 @@ else
     fi
 fi
 
-# ====== Enable libvirtd ======
+# ====== Enable libvirtd and sockets ======
 if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
     print_info "libvirtd auto-start is already enabled."
 else
-    print_task "Enabling libvirtd..."
-    if sudo systemctl enable libvirtd >/dev/null 2>&1; then
+    print_task "Enabling libvirtd and sockets..."
+    if sudo systemctl enable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket >/dev/null 2>&1; then
         print_task_done
     else
         print_task_fail
