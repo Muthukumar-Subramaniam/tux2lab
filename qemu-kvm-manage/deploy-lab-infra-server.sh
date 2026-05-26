@@ -606,12 +606,13 @@ validate_infra_server_iso() {
 }
 
 deploy_lab_infra_server_vm() {
+    # Check for infra server ISO early — before any setup work
+    validate_infra_server_iso
     if $REBUILD_MODE; then
         prepare_lab_infra_config_for_rebuild
     else
         prepare_lab_infra_config
     fi
-    validate_infra_server_iso
     print_info "Starting deployment of lab infra server on a dedicated VM..."
 
     # VM directory and disk path
