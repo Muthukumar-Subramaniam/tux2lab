@@ -77,6 +77,34 @@ if [[ -f "$LAB_ENV_VARS_FILE" ]]; then
     source "$LAB_ENV_VARS_FILE"
 fi
 
+# ====== EARLY EXIT IF NO LAB EXISTS ======
+lab_exists=false
+if [[ -f "$LAB_ENV_VARS_FILE" ]]; then
+    lab_exists=true
+elif sudo virsh list --all --name 2>/dev/null | grep -q .; then
+    lab_exists=true
+elif sudo virsh net-info tux2lab &>/dev/null 2>&1; then
+    lab_exists=true
+elif ip link show labbr0 &>/dev/null 2>&1; then
+    lab_exists=true
+elif systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
+    lab_exists=true
+# Host-mode specific artifacts
+elif systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
+    lab_exists=true
+elif ip link show dummy-vnet &>/dev/null 2>&1; then
+    lab_exists=true
+elif [[ -f /etc/chrony.d/tux2lab.conf ]]; then
+    lab_exists=true
+elif grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
+    lab_exists=true
+fi
+
+if ! $lab_exists; then
+    print_info "No lab detected — nothing to destroy."
+    exit 0
+fi
+
 # ====== HEADER ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
 print_red  "              DESTROY LAB — COMPLETE LAB TEARDOWN"
@@ -125,6 +153,13 @@ if [[ "${confirmation}" != "DESTROY-THE-LAB-AND-ALL-ITS-DATA" ]]; then
 fi
 
 print_cyan "═══════════════════════════════════════════════════════════════════"
+
+# Display detected mode
+if [[ "${lab_infra_server_mode_is_host:-false}" == "true" ]]; then
+    print_info "Detected mode: HOST (services run directly on KVM host)"
+else
+    print_info "Detected mode: VM (services run inside infra server VM)"
+fi
 
 # ====== STEP 1: FORCE STOP ALL RUNNING VMs ======
 running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
@@ -205,27 +240,22 @@ if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
 fi
 
 # ====== STEP 4: STOP HOST-MODE LAB SERVICES ======
-# Detect if any host-mode artifacts exist on this machine
+# Use the authoritative mode variable from lab_environment_vars (set during deploy).
+# If the env file is already gone, only check for tux2lab-specific artifacts
+# (never probe generic services — they may be running for non-lab purposes).
 host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
-host_mode_detected=false
-for service_name in "${host_services[@]}"; do
-    if systemctl is-enabled "$service_name" &>/dev/null || systemctl is-active "$service_name" &>/dev/null; then
-        host_mode_detected=true
-        break
-    fi
-done
-if ! $host_mode_detected; then
-    # Also check for other host-mode artifacts
+host_mode_detected="${lab_infra_server_mode_is_host:-false}"
+if [[ "$host_mode_detected" != "true" ]]; then
+    # Check only tux2lab-specific artifacts (safe — these only exist if tux2lab created them)
     if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1 || \
        ip link show dummy-vnet &>/dev/null 2>&1 || \
        [[ -f /etc/chrony.d/tux2lab.conf ]] || \
-       [[ -f /etc/named.conf ]] || \
        grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
         host_mode_detected=true
     fi
 fi
 
-if $host_mode_detected; then
+if [[ "$host_mode_detected" == "true" ]]; then
     print_info "Stopping and disabling host-mode lab services..."
     for service_name in "${host_services[@]}"; do
         print_task "Stopping and disabling ${service_name}..."
@@ -371,7 +401,7 @@ fi
 
 # ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
 # Remove host-mode config artifacts (named.conf, /etc/environment)
-if $host_mode_detected; then
+if [[ "$host_mode_detected" == "true" ]]; then
     print_task "Removing named.conf..."
     if [[ -f /etc/named.conf ]]; then
         sudo rm -f /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
