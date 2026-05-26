@@ -164,12 +164,7 @@ golden_image_cleanup() {
         esac
     done
 
-    if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
-        print_info "No golden images found. Nothing to clean up."
-        return 0
-    fi
-
-    # Non-interactive mode: -d and -v specified
+    # Validate distro and version early before checking the store
     if [[ -n "$cleanup_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$cleanup_distro]:-}" ]]; then
             print_error "Unknown distribution: $cleanup_distro"
@@ -180,6 +175,28 @@ golden_image_cleanup() {
             print_error "--version/-v is required when --distro/-d is specified."
             exit 1
         fi
+        local valid_versions="${DISTRO_AVAILABLE_VERSIONS[$cleanup_distro]}"
+        local ver_found=false
+        for v in $valid_versions; do
+            if [[ "$v" == "$cleanup_version" ]]; then
+                ver_found=true
+                break
+            fi
+        done
+        if [[ "$ver_found" != true ]]; then
+            print_error "Invalid version '$cleanup_version' for ${DISTRO_DISPLAY_NAMES[$cleanup_distro]}."
+            print_info "Available versions: $valid_versions"
+            exit 1
+        fi
+    fi
+
+    if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
+        print_info "No golden images found. Nothing to clean up."
+        return 0
+    fi
+
+    # Non-interactive mode: -d and -v specified
+    if [[ -n "$cleanup_distro" ]]; then
         local version_dashed="${cleanup_version//./-}"
         local pattern="${GOLDEN_IMAGE_DIR}/${cleanup_distro}-${version_dashed}-golden-image.*.qcow2"
         local -a matched_files=()

@@ -8,6 +8,7 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-ovmf.sh
+source /tux2lab/ks-manage/distro-versions.conf
 
 OS_DISTRO=""
 VERSION_TYPE=""
@@ -72,8 +73,30 @@ if [[ -n "$VERSION_TYPE" && -z "$OS_DISTRO" ]]; then
     exit 1
 fi
 
-# Default VERSION_TYPE if --distro is provided but --version is not
-# (ksmanager will prompt for version interactively)
+# Validate distro name and version locally before generating MAC or invoking ksmanager
+if [[ -n "$OS_DISTRO" ]]; then
+    if [[ -z "${DISTRO_AVAILABLE_VERSIONS[$OS_DISTRO]:-}" ]]; then
+        print_error "Invalid distro: $OS_DISTRO"
+        valid_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
+        print_info "Valid options: ${valid_distros// /, }"
+        exit 1
+    fi
+    if [[ -n "$VERSION_TYPE" ]]; then
+        local_valid_versions="${DISTRO_AVAILABLE_VERSIONS[$OS_DISTRO]}"
+        version_found=false
+        for v in $local_valid_versions; do
+            if [[ "$v" == "$VERSION_TYPE" ]]; then
+                version_found=true
+                break
+            fi
+        done
+        if [[ "$version_found" != true ]]; then
+            print_error "Invalid version '$VERSION_TYPE' for ${DISTRO_DISPLAY_NAMES[$OS_DISTRO]:-$OS_DISTRO}."
+            print_info "Available versions: $local_valid_versions"
+            exit 1
+        fi
+    fi
+fi
 
 # Generate unique MAC address for the VM
 print_task "Generating MAC address for golden image VM..."
