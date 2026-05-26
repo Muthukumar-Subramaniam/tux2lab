@@ -56,7 +56,7 @@ while [[ $# -gt 0 ]]; do
                 print_error "'-m/--memory' requires a size value in GiB."
                 exit 1
             fi
-            memory_arg="$2"
+            memory_arg="${2%[gG]}"
             resize_order+=(memory)
             shift 2
             ;;
@@ -74,7 +74,7 @@ while [[ $# -gt 0 ]]; do
                 print_error "'-d/--disk' requires a size value in GiB."
                 exit 1
             fi
-            disk_arg="$2"
+            disk_arg="${2%[gG]}"
             resize_order+=(disk)
             shift 2
             ;;

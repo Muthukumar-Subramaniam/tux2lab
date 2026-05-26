@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
                 print_error "Option -g/--gib requires a value."
                 exit 1
             fi
-            gib_arg="$2"
+            gib_arg="${2%[gG]}"
             shift 2
             ;;
         -*)

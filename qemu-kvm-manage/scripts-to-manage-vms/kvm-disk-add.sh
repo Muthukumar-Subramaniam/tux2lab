@@ -63,7 +63,7 @@ while [[ $# -gt 0 ]]; do
                 print_error "Option -s/--size requires a value."
                 exit 1
             fi
-            disk_size_arg="$2"
+            disk_size_arg="${2%[gG]}"
             shift 2
             ;;
         -*)
