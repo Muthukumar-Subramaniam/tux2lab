@@ -668,6 +668,14 @@ deploy_lab_infra_server_vm() {
 
     print_task "Mounting ISO ${ISO_DIR}/${ISO_NAME} for VM installation"
 
+    # Clean up stale mount from a previously interrupted deploy
+    if [[ -d "/mnt/iso-for-${lab_infra_server_hostname}" ]]; then
+        if mountpoint -q "/mnt/iso-for-${lab_infra_server_hostname}" 2>/dev/null; then
+            sudo umount -l "/mnt/iso-for-${lab_infra_server_hostname}" 2>/dev/null || true
+        fi
+        sudo rmdir "/mnt/iso-for-${lab_infra_server_hostname}" 2>/dev/null || true
+    fi
+
     sudo mkdir -p "/mnt/iso-for-${lab_infra_server_hostname}"
     
     # Check if ISO is already mounted
@@ -675,9 +683,11 @@ deploy_lab_infra_server_vm() {
         print_task_skip
         print_warning "ISO already mounted at /mnt/iso-for-${lab_infra_server_hostname}, skipping mount..."
     else
-        if ! sudo mount -o loop "${ISO_DIR}/${ISO_NAME}" "/mnt/iso-for-${lab_infra_server_hostname}" 2>/dev/null; then
+        local mount_err
+        if ! mount_err=$(sudo mount -o loop "${ISO_DIR}/${ISO_NAME}" "/mnt/iso-for-${lab_infra_server_hostname}" 2>&1); then
             print_task_fail
             print_error "Failed to mount ISO: ${ISO_DIR}/${ISO_NAME}"
+            print_error "${mount_err}"
             exit 1
         fi
         print_task_done
