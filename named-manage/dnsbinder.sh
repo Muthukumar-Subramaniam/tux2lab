@@ -1173,11 +1173,17 @@ fn_get_ipv4_address() {
     while :
     do
         if [[ -z "${ipv4_provided}" ]]; then
+            if ! ${v_if_autorun_false:-true}; then
+                return 7
+            fi
             read -p "Provide the required IPv4 Address ( within ${dnsbinder_network} ) : " ipv4_provided
         fi
 
         if ! fn_validate_ipv4_address "${ipv4_provided}"; then
             print_error "Invalid input provided for IPv4 Address ! "
+            if ! ${v_if_autorun_false:-true}; then
+                return 7
+            fi
             ipv4_provided=""
             continue
         fi
@@ -1186,6 +1192,9 @@ fn_get_ipv4_address() {
             break
         else
             print_error "Provided IPv4 address doesn't reside within the network ${dnsbinder_network} ! "
+            if ! ${v_if_autorun_false:-true}; then
+                return 7
+            fi
             ipv4_provided=""
             continue
         fi
@@ -1217,6 +1226,11 @@ fn_create_host_record() {
 
     if [[ -n "${specific_ipv4_requested}" ]] ; then
         fn_get_ipv4_address "${2}"
+        local v_ipv4_status=$?
+        if [[ ${v_ipv4_status} -ne 0 ]]; then
+            ${v_if_autorun_false} && fn_release_zone_lock
+            return ${v_ipv4_status}
+        fi
     fi
 
     fn_check_free_ip() {
@@ -1305,7 +1319,11 @@ fn_create_host_record() {
                     print_error "Record already exists for provided IPv4 address ${ipv4_provided} !"
                     dig @"${dnsbinder_server_ipv4_address}" +short -x ${ipv4_provided} 2>/dev/null | sed 's/\.$//' || true
                     print_warning "Please try again with another IPv4 address ! "
-                    exit 1
+                    if ${v_if_autorun_false}; then
+                        exit 1
+                    else
+                        return 7
+                    fi
                 else
                     mapfile -t v_list_of_ips_in_zone < <(sed -n 's/^\([0-9]\+\).*/\1/p' "${v_current_ptr_zone_file}" | sort -n)
                     v_host_part_of_current_ip="${host_part_of_ipv4_provided}"
@@ -1835,6 +1853,7 @@ fn_handle_multiple_host_record_with_ip() {
     local v_count_successfull=0
     local v_count_failed=0
     local v_count_invalid_host=0
+    local v_count_invalid_ipv4=0
     local v_count_already_exists=0
     local v_count_ip_exhausted=0
     local v_count_other_failures=0
@@ -1895,6 +1914,11 @@ fn_handle_multiple_host_record_with_ip() {
             print_task_fail
             ((v_count_failed++))
             ((v_count_invalid_host++))
+        elif [[ ${var_exit_status} -eq 7 ]]; then
+            print_red "Invalid-IPv4     ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
+            print_task_fail
+            ((v_count_failed++))
+            ((v_count_invalid_ipv4++))
         elif [[ ${var_exit_status} -eq 8 ]]; then
             print_yellow "Already-Exists   ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
             print_task_fail
@@ -1963,6 +1987,9 @@ fn_handle_multiple_host_record_with_ip() {
         print_white "Failure Breakdown:"
         if [[ ${v_count_invalid_host} -gt 0 ]]; then
             print_red "  Invalid Host    : ${v_count_invalid_host}"
+        fi
+        if [[ ${v_count_invalid_ipv4} -gt 0 ]]; then
+            print_red "  Invalid IPv4    : ${v_count_invalid_ipv4}"
         fi
         if [[ ${v_count_already_exists} -gt 0 ]]; then
             print_yellow "  Already Exists  : ${v_count_already_exists}"
