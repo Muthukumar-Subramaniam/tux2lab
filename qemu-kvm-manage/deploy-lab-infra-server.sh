@@ -1253,7 +1253,8 @@ check_existing_lab_deployment
 #-------------------------------------------------------------
 # Deployment selection prompt
 #-------------------------------------------------------------
-print_info "-------------------------------------------------------------
+echo
+print_yellow "-------------------------------------------------------------
 Lab Infra Server Deployment Mode Selection
 -------------------------------------------------------------
 Choose where to deploy your lab infra server:
