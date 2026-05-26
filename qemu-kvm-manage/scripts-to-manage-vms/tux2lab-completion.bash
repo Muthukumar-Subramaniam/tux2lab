@@ -358,10 +358,17 @@ _tux2lab_completions() {
 
     # ===== DESTROY COMMAND =====
     if [[ "${cmd}" == "destroy" ]]; then
-        local opts="--wipe-iso-files-too -h --help"
-        # Remove already-used flags from completions
-        for word in "${words[@]}"; do
-            opts=${opts//$word/}
+        local all_opts="--wipe-iso-files-too -h --help"
+        local opts=""
+        for opt in $all_opts; do
+            local already_used=false
+            for i in $(seq 2 $((COMP_CWORD - 1))); do
+                if [[ "${COMP_WORDS[i]}" == "$opt" ]]; then
+                    already_used=true
+                    break
+                fi
+            done
+            $already_used || opts="$opts $opt"
         done
         COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
         return 0
