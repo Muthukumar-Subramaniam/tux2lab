@@ -37,6 +37,10 @@ _tux2lab_completions() {
     local all_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
     local rhel_distros="almalinux rocky oraclelinux centos-stream rhel"
 
+    # Existing VM names (from filesystem — instant, no virsh overhead)
+    local existing_vms
+    existing_vms=$(ls /tux2lab-data/vms/ 2>/dev/null || true)
+
     # Helper: find distro from COMP_WORDS
     _find_distro_in_words() {
         for word in "${COMP_WORDS[@]}"; do
@@ -105,6 +109,18 @@ _tux2lab_completions() {
         # already handled above with their own completion handlers.
         case "${prev}" in
             -f|--force|-C|--clean-install|--ignore-ksmanager-cleanup|-h|--help) ;;
+            -H|--hosts|--host)
+                # Offer existing VM names for commands that operate on existing VMs
+                case "${vm_subcmd}" in
+                    install-golden|install-pxe) return 0 ;;
+                    *)
+                        if [[ -n "$existing_vms" ]]; then
+                            COMPREPLY=( $(compgen -W "${existing_vms}" -- "${cur}") )
+                        fi
+                        return 0
+                        ;;
+                esac
+                ;;
             -c|--console)
                 case "${vm_subcmd}" in
                     install-golden|install-pxe|reimage-golden|reimage-pxe) ;;
