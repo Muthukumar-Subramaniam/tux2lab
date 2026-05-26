@@ -100,10 +100,19 @@ _tux2lab_completions() {
             esac
         fi
 
-        # Suppress completion after flags that expect a user-provided value
-        if [[ "${prev}" == "-H" || "${prev}" == "--hosts" || "${prev}" == "--host" ]]; then
-            return 0
-        fi
+        # After a non-boolean flag, suppress completion (it expects a user value).
+        # Distro (-d/--distro) and version (-v/--version) for install/reimage are
+        # already handled above with their own completion handlers.
+        case "${prev}" in
+            -f|--force|-C|--clean-install|--ignore-ksmanager-cleanup|-h|--help) ;;
+            -c|--console)
+                case "${vm_subcmd}" in
+                    install-golden|install-pxe|reimage-golden|reimage-pxe) ;;
+                    *) return 0 ;;
+                esac
+                ;;
+            -*) return 0 ;;
+        esac
 
         # Complete positional keywords and flags for resize
         if [[ "${vm_subcmd}" == "resize" ]]; then
