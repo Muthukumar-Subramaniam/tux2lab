@@ -369,10 +369,17 @@ _tux2lab_completions() {
 
     # ===== REBUILD COMMAND =====
     if [[ "${cmd}" == "rebuild" ]]; then
-        local opts="--clean-state -h --help"
-        # Remove options already on the command line
-        for word in "${COMP_WORDS[@]}"; do
-            opts="${opts//$word/}"
+        local all_opts="--clean-state -h --help"
+        local opts=""
+        for opt in $all_opts; do
+            local already_used=false
+            for i in $(seq 2 $((COMP_CWORD - 1))); do
+                if [[ "${COMP_WORDS[i]}" == "$opt" ]]; then
+                    already_used=true
+                    break
+                fi
+            done
+            $already_used || opts="$opts $opt"
         done
         COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
         return 0
