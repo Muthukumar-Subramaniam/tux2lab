@@ -667,6 +667,30 @@ deploy_lab_infra_server_vm() {
     fi
 
     # -----------------------------
+    # Mount ISO for kernel/initrd extraction
+    # -----------------------------
+    print_task "Mounting ISO for kernel/initrd extraction..."
+    local iso_mount_dir="/mnt/iso-for-${lab_infra_server_hostname}"
+
+    # Clean up stale mount from a previously interrupted deploy
+    if [[ -d "$iso_mount_dir" ]]; then
+        if mountpoint -q "$iso_mount_dir" 2>/dev/null; then
+            sudo umount -l "$iso_mount_dir" 2>/dev/null || true
+        fi
+        sudo rmdir "$iso_mount_dir" 2>/dev/null || true
+    fi
+
+    sudo mkdir -p "$iso_mount_dir"
+    local mount_err
+    if ! mount_err=$(sudo mount -o loop,ro "${ISO_DIR}/${ISO_NAME}" "$iso_mount_dir" 2>&1); then
+        print_task_fail
+        print_error "Failed to mount ISO: ${ISO_DIR}/${ISO_NAME}"
+        print_error "${mount_err}"
+        exit 1
+    fi
+    print_task_done
+
+    # -----------------------------
     # Kickstart file preparation
     # -----------------------------
     print_info "Preparing Kickstart file for unattended installation of Lab Infra VM..."
@@ -759,7 +783,7 @@ EOF
         --os-variant detect=on,require=off \
         --network network=tux2lab,model=virtio \
         --initrd-inject="${KS_FILE}" \
-        --location "${ISO_DIR}/${ISO_NAME}" \
+        --location "$iso_mount_dir" \
         --extra-args "inst.ks=file:/${lab_infra_server_hostname}_ks.cfg console=ttyS0 nomodeset inst.text quiet" \
         --graphics none \
         --noreboot \
@@ -770,6 +794,10 @@ EOF
         --boot loader=${OVMF_CODE_PATH},\
 nvram.template=${OVMF_VARS_PATH},\
 nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
+
+    # Cleanup ISO mount
+    sudo umount -l "$iso_mount_dir" 2>/dev/null || true
+    sudo rmdir "$iso_mount_dir" 2>/dev/null || true
 
     # -----------------------------
     # Post-install: start VM and wait for bootstrap to complete
