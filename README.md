@@ -15,9 +15,6 @@ of creating something of my own and sharing it with anyone with similar interest
 > [!WARNING]
 > This project is intended for testing, development, and experimentation purposes only.
 
-> [!NOTE]
-> This project is in pre-release stabilization. No structural or functional changes — only hardened testing, bug fixes, and improvements.
-
 ---
 
 ## What You'll Get
@@ -96,7 +93,7 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 
 ### Step 1 — Get tux2lab
 
-**Download the latest [![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=orange&include_prereleases)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest):**
+**Download the latest release tarball:**
 
 ```bash
 sudo mkdir -p /tux2lab
@@ -202,8 +199,8 @@ tux2lab distro list                              # Show setup status
 Golden images let you deploy VMs in seconds instead of running a full PXE install:
 
 ```bash
-tux2lab golden-image build                      # Interactive
-tux2lab golden-image build -d almalinux -v 10   # Non-interactive
+tux2lab golden-image build                       # Interactive
+tux2lab golden-image build almalinux -v 10       # Non-interactive
 tux2lab golden-image list                        # Show available images
 ```
 
@@ -229,12 +226,16 @@ tux2lab vm install-pxe -H vm1 --console
 
 ## CLI Reference
 
+> Most commands accept `-H vm1,vm2,vm3` for multi-VM operations.
+
 ### VM Operations
 
 ```
 tux2lab vm list                   List all VMs and their status
 tux2lab vm info                   Detailed VM information (all VMs)
 tux2lab vm info -H <hostname>     Detailed VM information (specific VM)
+tux2lab vm validate               Validate post-install config (all running VMs)
+tux2lab vm validate -H <hostname> Validate specific VM(s)
 tux2lab vm console -H <hostname>  Attach to serial console (Ctrl+] to exit)
 tux2lab vm start -H <hostname>    Power on
 tux2lab vm stop -H <hostname>     Force power off
@@ -261,7 +262,7 @@ tux2lab vm disk-add -H <hostname>    Add a new storage disk
 tux2lab vm disk-resize -H <hostname> Resize an additional disk
 tux2lab vm disk-attach -H <hostname> Re-attach a previously detached disk
 tux2lab vm disk-detach -H <hostname> Detach a disk (preserved in storage)
-tux2lab vm disk-delete -H <hostname> Permanently delete a detached disk
+tux2lab vm disk-delete               Permanently delete detached disk(s)
 tux2lab vm nic-add -H <hostname>     Add a network interface
 tux2lab vm nic-remove -H <hostname>  Remove a network interface
 ```
@@ -281,7 +282,7 @@ tux2lab vm snapshot-delete -H <hostname>  Delete a snapshot
 ```
 tux2lab golden-image build        Build a reusable base image via PXE
 tux2lab golden-image list         List available golden images
-tux2lab golden-image cleanup      Remove unused golden images
+tux2lab golden-image cleanup      Remove golden image(s)
 ```
 
 ### Infrastructure & Network
@@ -353,4 +354,4 @@ This project is open source and licensed under the [GNU General Public License v
 
 ---
 
-Built with ❤️ for the home lab community
+Built for the home lab community.
