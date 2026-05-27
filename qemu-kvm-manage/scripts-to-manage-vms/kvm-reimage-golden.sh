@@ -61,6 +61,10 @@ fi
 CMDLINE_OS_DISTRO="$OS_DISTRO"
 CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 
+# Validate distro and version locally before any work
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
+validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+
 # Main reimage loop
 CURRENT_VM=0
 FAILED_VMS=()
@@ -139,7 +143,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             else
                 echo "  (none)"
             fi
-            print_info "Use 'tux2lab golden-image build --distro ${OS_DISTRO} --version ${VERSION_TYPE}' to create it"
+            print_info "Use 'tux2lab golden-image build ${OS_DISTRO} -v ${VERSION_TYPE}' to create it"
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi

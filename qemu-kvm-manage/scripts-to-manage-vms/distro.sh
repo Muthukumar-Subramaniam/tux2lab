@@ -113,6 +113,17 @@ case "$subcommand" in
             show_distro_help
             exit 0
         fi
+        # Validate distro/version locally before SSH to infra server
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
+        _distro="" _version="" _prev=""
+        for _arg in "$@"; do
+            if [[ "$_prev" == "-v" || "$_prev" == "--version" ]]; then
+                _version="$_arg"; _prev="$_arg"; continue
+            fi
+            _prev="$_arg"
+            case "$_arg" in -v|--version|-*) continue ;; *) [[ -z "$_distro" ]] && _distro="$_arg" ;; esac
+        done
+        validate_distro_version "$_distro" "$_version"
         run_on_infra_server --setup "$@"
         ;;
     cleanup)
@@ -120,6 +131,17 @@ case "$subcommand" in
             show_distro_help
             exit 0
         fi
+        # Validate distro/version locally before SSH to infra server
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
+        _distro="" _version="" _prev=""
+        for _arg in "$@"; do
+            if [[ "$_prev" == "-v" || "$_prev" == "--version" ]]; then
+                _version="$_arg"; _prev="$_arg"; continue
+            fi
+            _prev="$_arg"
+            case "$_arg" in -v|--version|-*) continue ;; *) [[ -z "$_distro" ]] && _distro="$_arg" ;; esac
+        done
+        validate_distro_version "$_distro" "$_version"
         run_on_infra_server --cleanup "$@"
         ;;
     *)

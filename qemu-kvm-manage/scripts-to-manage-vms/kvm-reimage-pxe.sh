@@ -53,6 +53,10 @@ parse_vm_command_args "$@"
 CMDLINE_OS_DISTRO="$OS_DISTRO"
 CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 
+# Validate distro and version locally before any work
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
+validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+
 # Main reimage loop
 CURRENT_VM=0
 FAILED_VMS=()

@@ -45,6 +45,10 @@ parse_vm_command_args "$@"
 CMDLINE_OS_DISTRO="$OS_DISTRO"
 CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 
+# Validate distro and version locally before any work
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
+validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+
 # If no distro/version specified on cmdline, select from available golden images
 if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
     source /tux2lab/ks-manage/distro-versions.conf
@@ -130,6 +134,16 @@ if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
         done
         print_info "Selected: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
     fi
+fi
+
+# Verify golden image exists before any state-changing operations
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
+normalize_os_distro "${CMDLINE_OS_DISTRO}" || { print_error "Invalid distro: $CMDLINE_OS_DISTRO"; exit 1; }
+GOLDEN_IMAGE_CHECK_PATH="/tux2lab-data/golden-images-disk-store/${NORMALIZED_OS_DISTRO}-${CMDLINE_VERSION_TYPE//\./-}-golden-image.${lab_infra_domain_name}.qcow2"
+if [[ ! -f "$GOLDEN_IMAGE_CHECK_PATH" ]]; then
+    print_error "Golden image not found: ${NORMALIZED_OS_DISTRO}-${CMDLINE_VERSION_TYPE//\./-}-golden-image.${lab_infra_domain_name}.qcow2"
+    print_info "Build one first: tux2lab golden-image build ${CMDLINE_OS_DISTRO} -v ${CMDLINE_VERSION_TYPE}"
+    exit 1
 fi
 
 # Main installation loop

@@ -72,10 +72,12 @@ fi
 validated_hosts=("${VALIDATED_HOSTS[@]}")
 
 # List snapshots for each VM
+has_errors=false
 for vm_name in "${validated_hosts[@]}"; do
     # Check if VM exists
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then
         print_error "VM \"$vm_name\" does not exist."
+        has_errors=true
         continue
     fi
 
@@ -116,3 +118,7 @@ for vm_name in "${validated_hosts[@]}"; do
         fi
     done
 done
+
+if [[ "$has_errors" == "true" ]]; then
+    exit 1
+fi
