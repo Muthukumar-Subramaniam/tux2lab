@@ -848,7 +848,7 @@ fn_get_host_record() {
             then 
                 print_error "Conflict ! Existing host record found for ${v_rename_record}.${v_domain_name} ! "
                 print_error "Nothing to do ! Exiting !  "
-                exit
+                exit 1
             fi
         fi
 
@@ -858,7 +858,7 @@ fn_get_host_record() {
         then
             print_error "Host record for ${v_host_record}.${v_domain_name} doesn't exist ! "
             print_error "Nothing to do ! Exiting ! "
-            exit
+            exit 1
         else
             return 8
         fi
@@ -2819,6 +2819,42 @@ then
         fi
     done
     set -- "${args[@]}"
+
+    # Handle comma-separated records by re-invoking self per item
+    if [[ "${2:-}" == *,* ]] && [[ "${1}" =~ ^(-c|--create|-d|--delete|-dy|-dc|--delete-cname|-dcy|-q|--query)$ ]]; then
+        IFS=',' read -ra _items <<< "${2}"
+        _flag="${1}"
+
+        # For delete operations (not already auto-confirmed), prompt once for the batch
+        if [[ "${_flag}" =~ ^(-d|--delete|-dc|--delete-cname)$ ]] && [[ -z "${auto_confirm}" ]]; then
+            echo ""
+            print_info "Records to be deleted:"
+            for _item in "${_items[@]}"; do
+                [[ -z "${_item}" ]] && continue
+                echo "  - ${_item}.${v_domain_name}"
+            done
+            echo ""
+            while :; do
+                read -p "Please confirm deletion of the above records (y/n) : " _confirm
+                case "${_confirm}" in
+                    y|Y) break ;;
+                    n|N) print_warning "Cancelled without any changes ! "; exit 0 ;;
+                    *) print_error "Select only either (y/n) ! " ;;
+                esac
+            done
+        fi
+
+        # Convert -d → -dy and -dc → -dcy for self-invocations (already confirmed)
+        [[ "${_flag}" == "-d" || "${_flag}" == "--delete" ]] && _flag="-dy"
+        [[ "${_flag}" == "-dc" || "${_flag}" == "--delete-cname" ]] && _flag="-dcy"
+
+        _rc=0
+        for _item in "${_items[@]}"; do
+            [[ -z "${_item}" ]] && continue
+            "$0" "${_flag}" "${_item}" || _rc=1
+        done
+        exit ${_rc}
+    fi
 
     case "${1}" in
         -c|--create)
