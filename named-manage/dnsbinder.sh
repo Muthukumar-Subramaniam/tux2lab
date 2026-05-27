@@ -1087,6 +1087,235 @@ fn_reload_named_dns_service() {
     fi
 }
 
+fn_query_record() {
+    local query_input="${1:-}"
+    local found=false
+
+    if [[ -z "${query_input}" ]]; then
+        read -p "Enter hostname or IP address to look up: " query_input
+        if [[ -z "${query_input}" ]]; then
+            print_error "No input provided."
+            return 1
+        fi
+    fi
+
+    # Validate input: only allow characters valid in hostnames and IP addresses
+    if [[ ! "${query_input}" =~ ^[a-zA-Z0-9.:/-]+$ ]]; then
+        print_error "Invalid input: contains characters not allowed in hostnames or IP addresses."
+        return 1
+    fi
+
+    # Strip domain suffix if provided
+    query_input="${query_input%.${v_domain_name}.}"
+    query_input="${query_input%.${v_domain_name}}"
+
+    # Determine input type: IPv4, IPv6, or hostname
+    if [[ "${query_input}" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+        # IPv4 address — reverse lookup in PTR zone files
+        local ipv4="${query_input}"
+
+        # Validate each octet is in range 0-255 and has no leading zeros
+        local o1 o2 o3 o4
+        IFS='.' read -r o1 o2 o3 o4 <<< "${ipv4}"
+        # Reject leading zeros (ambiguous: could be interpreted as octal)
+        if [[ "${o1}" =~ ^0[0-9] || "${o2}" =~ ^0[0-9] || "${o3}" =~ ^0[0-9] || "${o4}" =~ ^0[0-9] ]]; then
+            print_error "Invalid IPv4 address: ${ipv4} (leading zeros not allowed)"
+            return 1
+        fi
+        if (( o1 > 255 || o2 > 255 || o3 > 255 || o4 > 255 )); then
+            print_error "Invalid IPv4 address: ${ipv4}"
+            return 1
+        fi
+
+        local host_octet="${o4}"
+        local subnet_prefix="${o1}.${o2}.${o3}"
+
+        # Verify the address belongs to the configured IPv4 network
+        local in_network
+        in_network=$(python3 -c "import ipaddress; print(ipaddress.ip_address('${ipv4}') in ipaddress.ip_network('${dnsbinder_network_cidr}', strict=False))" 2>/dev/null || true)
+        if [[ "${in_network}" != "True" ]]; then
+            print_error "IPv4 address ${ipv4} is not in the configured network ${dnsbinder_network_cidr}"
+            return 1
+        fi
+
+        local ptr_zone_file="${var_zone_dir}/${subnet_prefix}.${v_domain_name}-reverse.db"
+
+        if [[ ! -f "${ptr_zone_file}" ]]; then
+            print_error "No reverse zone file found for subnet ${subnet_prefix}.0/24"
+            return 1
+        fi
+
+        local ptr_result
+        ptr_result=$(awk -v octet="^${host_octet} " '$0 ~ octet && /IN PTR/ {gsub(/[[:space:]]/,"",$NF); print $NF}' "${ptr_zone_file}")
+
+        if [[ -n "${ptr_result}" ]]; then
+            found=true
+            echo ""
+            print_info "Query: ${ipv4} (PTR lookup)"
+            echo "  PTR   : ${ptr_result}"
+
+            # Also show forward records for the resolved hostname
+            local resolved_host="${ptr_result%.${v_domain_name}.}"
+            resolved_host="${resolved_host%.}"
+            local a_record
+            a_record=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+            local aaaa_record
+            aaaa_record=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN AAAA/ {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+
+            if [[ -n "${a_record}" ]]; then
+                echo "  A     : ${a_record}"
+            fi
+            if [[ -n "${aaaa_record}" ]]; then
+                echo "  AAAA  : ${aaaa_record}"
+            fi
+            local cname_aliases
+            cname_aliases=$(awk -v target="${resolved_host}.${v_domain_name}." '$0 ~ /IN CNAME/ && $NF == target {gsub(/[[:space:]].*/,"",$1); print $1}' "${v_fw_zone}")
+            if [[ -n "${cname_aliases}" ]]; then
+                while IFS= read -r alias; do
+                    echo "  CNAME : ${alias}.${v_domain_name}"
+                done <<< "${cname_aliases}"
+            fi
+            echo ""
+        fi
+
+    elif [[ "${query_input}" =~ : ]]; then
+        # IPv6 address — reverse lookup in IPv6 PTR zone file
+        local ipv6="${query_input}"
+        local ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
+
+        if [[ ! -f "${ipv6_zone_file}" ]]; then
+            print_error "No IPv6 reverse zone file found."
+            return 1
+        fi
+
+        # Expand IPv6 to full form and convert to nibble format for zone lookup
+        local expanded_ipv6
+        expanded_ipv6=$(python3 -c "import ipaddress; print(ipaddress.ip_address('${ipv6}').exploded)" 2>/dev/null || true)
+
+        if [[ -z "${expanded_ipv6}" ]]; then
+            print_error "Invalid IPv6 address: ${ipv6}"
+            return 1
+        fi
+
+        # Verify the address belongs to our configured IPv6 network
+        local in_network
+        in_network=$(python3 -c "import ipaddress; print(ipaddress.ip_address('${ipv6}') in ipaddress.ip_network('${dnsbinder_ipv6_ula_subnet}', strict=False))" 2>/dev/null || true)
+
+        if [[ "${in_network}" != "True" ]]; then
+            print_error "IPv6 address ${ipv6} is not in the configured network ${dnsbinder_ipv6_ula_subnet}"
+            return 1
+        fi
+
+        # Convert to full nibble-reversed format
+        # e.g., fd28:2808:2020:3000:0000:0000:0000:0002 →
+        # 2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.3.0.2.0.2.8.0.8.2.8.2.d.f
+        local nibbles
+        nibbles=$(echo "${expanded_ipv6}" | tr -d ':' | rev | sed 's/./&./g' | sed 's/\.$//')
+
+        # Zone file stores host portion only (last 64 bits = first 16 nibbles
+        # of the reversed string for a /64 zone). Extract host nibbles.
+        local host_nibbles
+        host_nibbles=$(echo "${nibbles}" | cut -c1-31)
+
+        # Look up the exact host nibble entry in the zone file
+        local ptr_match
+        ptr_match=$(awk -v nib="${host_nibbles}" '$1 == nib && /IN PTR/ {print}' "${ipv6_zone_file}" 2>/dev/null | head -1 || true)
+
+        if [[ -n "${ptr_match}" ]]; then
+            found=true
+            local ptr_hostname
+            ptr_hostname=$(awk '{gsub(/[[:space:]]/,"",$NF); print $NF}' <<< "${ptr_match}")
+            echo ""
+            print_info "Query: ${ipv6} (IPv6 PTR lookup)"
+            echo "  PTR   : ${ptr_hostname}"
+
+            # Also show forward records for the resolved hostname
+            local resolved_host="${ptr_hostname%.${v_domain_name}.}"
+            resolved_host="${resolved_host%.}"
+            local a_record
+            a_record=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+            local aaaa_record
+            aaaa_record=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN AAAA/ {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+
+            if [[ -n "${a_record}" ]]; then
+                echo "  A     : ${a_record}"
+            fi
+            if [[ -n "${aaaa_record}" ]]; then
+                echo "  AAAA  : ${aaaa_record}"
+            fi
+            local cname_aliases
+            cname_aliases=$(awk -v target="${resolved_host}.${v_domain_name}." '$0 ~ /IN CNAME/ && $NF == target {gsub(/[[:space:]].*/,"",$1); print $1}' "${v_fw_zone}")
+            if [[ -n "${cname_aliases}" ]]; then
+                while IFS= read -r alias; do
+                    echo "  CNAME : ${alias}.${v_domain_name}"
+                done <<< "${cname_aliases}"
+            fi
+            echo ""
+        fi
+
+    else
+        # Hostname — forward lookup in zone file
+        local hostname="${query_input}"
+
+        # Check A record
+        local a_record
+        a_record=$(awk -v host="^${hostname} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+
+        # Check AAAA record
+        local aaaa_record
+        aaaa_record=$(awk -v host="^${hostname} " '$0 ~ host && /IN AAAA/ {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+
+        # Check CNAME record (as source — this name IS a cname)
+        local cname_target
+        cname_target=$(awk -v host="^${hostname} " '$0 ~ host && /IN CNAME/ {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+
+        # Check if any CNAME points TO this hostname
+        local cname_aliases
+        cname_aliases=$(awk -v target="${hostname}.${v_domain_name}." '$0 ~ /IN CNAME/ && $NF == target {gsub(/[[:space:]].*/,"",$1); print $1}' "${v_fw_zone}")
+
+        if [[ -n "${a_record}" || -n "${aaaa_record}" || -n "${cname_target}" ]]; then
+            found=true
+            echo ""
+            print_info "Query: ${hostname}.${v_domain_name}"
+
+            if [[ -n "${cname_target}" ]]; then
+                echo "  CNAME of : ${cname_target}"
+                # Resolve the target host's records
+                local resolved_host="${cname_target%.${v_domain_name}.}"
+                resolved_host="${resolved_host%.}"
+                local target_a
+                target_a=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+                local target_aaaa
+                target_aaaa=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN AAAA/ {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+                if [[ -n "${target_a}" ]]; then
+                    echo "  A     : ${target_a}"
+                fi
+                if [[ -n "${target_aaaa}" ]]; then
+                    echo "  AAAA  : ${target_aaaa}"
+                fi
+            else
+                if [[ -n "${a_record}" ]]; then
+                    echo "  A     : ${a_record}"
+                fi
+                if [[ -n "${aaaa_record}" ]]; then
+                    echo "  AAAA  : ${aaaa_record}"
+                fi
+                if [[ -n "${cname_aliases}" ]]; then
+                    while IFS= read -r alias; do
+                        echo "  CNAME : ${alias}.${v_domain_name}"
+                    done <<< "${cname_aliases}"
+                fi
+            fi
+            echo ""
+        fi
+    fi
+
+    if ! $found; then
+        print_error "No records found for \"${query_input}\" in zone database."
+        return 1
+    fi
+}
+
 fn_set_ptr_zone() {
 
     arr_subnets=()
@@ -2564,11 +2793,12 @@ Use one of the following Options :
     -cc,   --create-cname        To create a CNAME/Alias record for an existing host record
     -dc,   --delete-cname        To delete a CNAME/Alias record for an existing host record
     -dcy                         caution ! To do the above without any confirmation
+    -q,    --query               Lookup any record and display all its relevant records
+    -y,    --yes                 Append to any command to skip confirmation prompts
     --setup                      To configure local dns server and domain (dual-stack IPv4/IPv6)
                                  Both IPv4 and IPv6 networks are auto-detected from system
                                  Usage: dnsbinder --setup <domain>
                                  Example: dnsbinder --setup tux2lab.internal
-    -y,    --yes                 Append to any command to skip confirmation prompts
     -h,    --help                To print this usage info 
 
 Note: All host record operations automatically create/manage both IPv4 (A) and IPv6 (AAAA) records
@@ -2708,6 +2938,11 @@ then
             ;;
         --setup)
             fn_configure_named_dns_server "${2}"
+            exit
+            ;;
+        -q|--query)
+            fn_check_existence_of_domain
+            fn_query_record "${2:-}"
             exit
             ;;
         *)

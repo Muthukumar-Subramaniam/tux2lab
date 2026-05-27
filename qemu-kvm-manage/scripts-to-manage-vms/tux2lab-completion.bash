@@ -51,7 +51,7 @@ _tux2lab_completions() {
     }
 
     # DNS options
-    local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy --setup -y --yes -h --help"
+    local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy -q --query --setup -y --yes -h --help"
 
     # ===== FIRST ARGUMENT (top-level command) =====
     if [[ ${COMP_CWORD} -eq 1 ]]; then

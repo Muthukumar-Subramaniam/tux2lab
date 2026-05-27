@@ -39,8 +39,9 @@ OPTIONS (passed to dnsbinder):
     -cc,   --create-cname        Create a CNAME/Alias record
     -dc,   --delete-cname        Delete a CNAME/Alias record
     -dcy                         Delete CNAME without confirmation
-    --setup                      Configure DNS domain and server (admin/internal)
-    -y,    --yes                 Append to any command to skip confirmation prompts"
+    -q,    --query               Lookup any record and display all its relevant records
+    -y,    --yes                 Append to any command to skip confirmation prompts
+    --setup                      Configure DNS domain and server (admin/internal)"
     exit 0
 fi
 
@@ -52,6 +53,7 @@ if [[ $# -gt 0 ]]; then
                    -df --delete-from-file -dfy
                    -ci --create-with-ip -cc --create-cname
                    -dc --delete-cname -dcy
+                   -q --query
                    --setup -y --yes)
     option_is_valid=false
     for opt in "${valid_options[@]}"; do
