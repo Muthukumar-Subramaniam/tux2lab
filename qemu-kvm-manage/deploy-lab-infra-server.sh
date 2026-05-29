@@ -1022,8 +1022,6 @@ deploy_lab_infra_server_host() {
     # -----------------------------
     # Install required packages
     # -----------------------------
-    print_task "Installing required packages on host..."
-
     REQUIRED_PACKAGES=(
         bash-completion vim git bind-utils bind wget tar cifs-utils
         tftp-server kea kea-hooks radvd nginx nginx-mod-stream openssl tmux
@@ -1031,40 +1029,60 @@ deploy_lab_infra_server_host() {
         nmap tuned tree yum-utils python3-pip python3-cryptography
     )
 
-    # Install packages, skipping already installed ones
-    sudo dnf install -y "${REQUIRED_PACKAGES[@]}" &>/dev/null &
-    pkg_pid=$!
-
-    elapsed=0
-    while kill -0 "$pkg_pid" 2>/dev/null; do
-        printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages on host [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-        sleep 1
-        elapsed=$((elapsed + 1))
+    # Filter to missing packages only
+    missing_pkgs=()
+    for pkg in "${REQUIRED_PACKAGES[@]}"; do
+        if ! rpm -q "$pkg" &>/dev/null; then
+            missing_pkgs+=("$pkg")
+        fi
     done
-    wait "$pkg_pid" || {
+
+    if [[ ${#missing_pkgs[@]} -eq 0 ]]; then
+        print_task "Installing required packages..."
+        print_task_skip
+    else
+        print_task "Installing required packages..."
+
+        pkg_log=$(mktemp)
+        sudo dnf install -y "${missing_pkgs[@]}" &>"$pkg_log" &
+        pkg_pid=$!
+
+        elapsed=0
+        while kill -0 "$pkg_pid" 2>/dev/null; do
+            printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+            sleep 1
+            elapsed=$((elapsed + 1))
+        done
+        wait "$pkg_pid" || {
+            printf "\r\033[K"
+            print_task "Installing required packages..."
+            print_task_fail
+            print_error "Failed to install required packages:"
+            cat "$pkg_log"
+            rm -f "$pkg_log"
+            exit 1
+        }
+        rm -f "$pkg_log"
         printf "\r\033[K"
-        print_task "Installing required packages on host..."
-        print_task_fail
-        print_error "Failed to install required packages."
-        exit 1
-    }
-    printf "\r\033[K"
-    printf "${MAKE_IT_CYAN}[TASK] Installing required packages on host (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
-    print_task_done
+        printf "${MAKE_IT_CYAN}[TASK] Installing required packages (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+        print_task_done
+    fi
 
     # -----------------------------
     # Install Ansible if not already installed
     # -----------------------------
     if command -v ansible &>/dev/null; then
-        print_info "Ansible is already installed."
+        print_task "Installing Ansible..."
+        print_task_skip
     else
-        print_task "Installing Ansible on the host..."
+        print_task "Installing Ansible..."
 
+        pkg_log=$(mktemp)
         if command -v dnf &>/dev/null; then
-            sudo dnf install -y ansible-core &>/dev/null &
+            sudo dnf install -y ansible-core &>"$pkg_log" &
             pkg_pid=$!
         elif command -v apt-get &>/dev/null; then
-            (sudo apt-get update &>/dev/null && sudo apt-get install -y ansible-core &>/dev/null) &
+            (sudo apt-get update && sudo apt-get install -y ansible-core) &>"$pkg_log" &
             pkg_pid=$!
         else
             print_task_fail
@@ -1074,19 +1092,22 @@ deploy_lab_infra_server_host() {
 
         elapsed=0
         while kill -0 "$pkg_pid" 2>/dev/null; do
-            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible on the host [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
             sleep 1
             elapsed=$((elapsed + 1))
         done
         wait "$pkg_pid" || {
             printf "\r\033[K"
-            print_task "Installing Ansible on the host..."
+            print_task "Installing Ansible..."
             print_task_fail
-            print_error "Failed to install Ansible."
+            print_error "Failed to install Ansible:"
+            cat "$pkg_log"
+            rm -f "$pkg_log"
             exit 1
         }
+        rm -f "$pkg_log"
         printf "\r\033[K"
-        printf "${MAKE_IT_CYAN}[TASK] Installing Ansible on the host (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+        printf "${MAKE_IT_CYAN}[TASK] Installing Ansible (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
         print_task_done
     fi
 

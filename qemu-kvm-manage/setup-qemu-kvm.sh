@@ -59,36 +59,68 @@ Defaults:$USER !authenticate
 EOF
 print_task_done
 
-print_task "Installing required packages for QEMU/KVM..."
+REQUIRED_PACKAGES_APT=(qemu-kvm qemu-utils libvirt-daemon-system libvirt-clients python3-requests python3-libxml2 python3-libvirt libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0 ovmf ed git openssl)
+REQUIRED_PACKAGES_DNF=(qemu-kvm qemu-img libvirt libvirt-daemon libvirt-daemon-driver-qemu python3-requests python3-libxml2 python3-libvirt libosinfo python3-gobject gobject-introspection edk2-ovmf ed git openssl)
 
+# Determine package manager and filter to missing packages only
 if command -v apt-get &>/dev/null; then
-    sudo apt-get update &>/dev/null && sudo apt-get install -y qemu-kvm qemu-utils libvirt-daemon-system libvirt-clients python3-requests python3-libxml2 python3-libvirt libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0 ovmf ed git openssl &>/dev/null &
-    pkg_pid=$!
+    pkg_manager="apt"
+    missing_pkgs=()
+    for pkg in "${REQUIRED_PACKAGES_APT[@]}"; do
+        if ! dpkg -s "$pkg" &>/dev/null; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
 elif command -v dnf &>/dev/null; then
-    sudo dnf install -y qemu-kvm qemu-img libvirt libvirt-daemon libvirt-daemon-driver-qemu python3-requests python3-libxml2 python3-libvirt libosinfo python3-gobject gobject-introspection edk2-ovmf ed git openssl &>/dev/null &
-    pkg_pid=$!
+    pkg_manager="dnf"
+    missing_pkgs=()
+    for pkg in "${REQUIRED_PACKAGES_DNF[@]}"; do
+        if ! rpm -q "$pkg" &>/dev/null; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
 else
+    print_task "Installing required packages..."
     print_task_fail
     print_error "Unsupported package manager. Only apt-get and dnf are supported."
     exit 1
 fi
 
-elapsed=0
-while kill -0 "$pkg_pid" 2>/dev/null; do
-    printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-    sleep 1
-    elapsed=$((elapsed + 1))
-done
-wait "$pkg_pid" || {
-    printf "\r\033[K"
+if [[ ${#missing_pkgs[@]} -eq 0 ]]; then
     print_task "Installing required packages..."
-    print_task_fail
-    print_error "Failed to install required packages."
-    exit 1
-}
-printf "\r\033[K"
-printf "${MAKE_IT_CYAN}[TASK] Installing required packages (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
-print_task_done
+    print_task_skip
+else
+    print_task "Installing required packages..."
+
+    pkg_log=$(mktemp)
+    if [[ "$pkg_manager" == "apt" ]]; then
+        (sudo apt-get update && sudo apt-get install -y "${missing_pkgs[@]}") &>"$pkg_log" &
+        pkg_pid=$!
+    else
+        sudo dnf install -y "${missing_pkgs[@]}" &>"$pkg_log" &
+        pkg_pid=$!
+    fi
+
+    elapsed=0
+    while kill -0 "$pkg_pid" 2>/dev/null; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    wait "$pkg_pid" || {
+        printf "\r\033[K"
+        print_task "Installing required packages..."
+        print_task_fail
+        print_error "Failed to install required packages:"
+        cat "$pkg_log"
+        rm -f "$pkg_log"
+        exit 1
+    }
+    rm -f "$pkg_log"
+    printf "\r\033[K"
+    printf "${MAKE_IT_CYAN}[TASK] Installing required packages (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    print_task_done
+fi
 
 print_task "Disabling libvirtd-tls and libvirtd-tcp sockets..."
 sudo systemctl disable --now libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
