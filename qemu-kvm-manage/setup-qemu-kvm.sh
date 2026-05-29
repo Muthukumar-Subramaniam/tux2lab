@@ -75,19 +75,19 @@ fi
 
 elapsed=0
 while kill -0 "$pkg_pid" 2>/dev/null; do
-    printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages for QEMU/KVM [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+    printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
     sleep 1
     elapsed=$((elapsed + 1))
 done
 wait "$pkg_pid" || {
     printf "\r\033[K"
-    print_task "Installing required packages for QEMU/KVM..."
+    print_task "Installing required packages..."
     print_task_fail
     print_error "Failed to install required packages."
     exit 1
 }
 printf "\r\033[K"
-printf "${MAKE_IT_CYAN}[TASK] Installing required packages for QEMU/KVM (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+printf "${MAKE_IT_CYAN}[TASK] Installing required packages (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
 print_task_done
 
 print_task "Disabling libvirtd-tls and libvirtd-tcp sockets..."
@@ -154,10 +154,10 @@ run_virsh_cmd() {
 # Check if the virsh network is already active with correct IPs
 if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_labbr0" && ip addr show labbr0 | grep -q "$ipv6_labbr0" ) && \
    sudo virsh net-info "$virsh_network_name" &>/dev/null; then
-    print_task "Setting up custom bridge network labbr0 for QEMU/KVM..."
+    print_task "Setting up custom bridge network labbr0..."
     print_task_skip
 else
-    print_task "Setting up custom bridge network labbr0 for QEMU/KVM..."
+    print_task "Setting up custom bridge network labbr0..."
     run_virsh_cmd net-destroy "$virsh_network_name" || true
     run_virsh_cmd net-undefine "$virsh_network_name" || true
     run_virsh_cmd net-define "$virsh_network_definition" || {
@@ -181,7 +181,7 @@ if sudo virsh net-info default &>/dev/null; then
     print_task_done
 fi
 
-print_task "Creating custom tools to manage QEMU/KVM..."
+print_task "Installing tux2lab CLI tool..."
 scripts_directory="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
 if [[ ! -f "$scripts_directory/tux2lab.sh" ]]; then
     print_task_fail
@@ -191,7 +191,7 @@ fi
 sudo ln -sf "$scripts_directory/tux2lab.sh" /usr/local/bin/tux2lab
 print_task_done
 
-print_task "Installing bash completion for tux2lab..."
+print_task "Installing bash completion..."
 if [[ ! -f "$scripts_directory/tux2lab-completion.bash" ]]; then
     print_task_fail
     print_error "tux2lab-completion.bash not found at $scripts_directory/tux2lab-completion.bash"
@@ -200,6 +200,6 @@ fi
 sudo ln -sf "$scripts_directory/tux2lab-completion.bash" /etc/bash_completion.d/tux2lab-completion.bash
 print_task_done
 
-print_success "QEMU/KVM setup completed successfully!"
+print_success "QEMU/KVM setup completed!"
 
 exit 0
