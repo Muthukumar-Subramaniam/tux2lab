@@ -135,12 +135,17 @@ retries=0
 while ! sudo virsh version &>/dev/null; do
     retries=$((retries + 1))
     if [[ $retries -ge 30 ]]; then
+        printf "\r\033[K"
+        print_task "Enabling and restarting libvirtd..."
         print_task_fail
         print_error "libvirtd failed to become ready after restart."
         exit 1
     fi
+    printf "\r${MAKE_IT_CYAN}[TASK] Enabling and restarting libvirtd [%dm %ds]...${RESET_COLOR}\033[K" $((retries/60)) $((retries%60))
     sleep 1
 done
+printf "\r\033[K"
+printf "${MAKE_IT_CYAN}[TASK] Enabling and restarting libvirtd (%dm %ds)...${RESET_COLOR}" $((retries/60)) $((retries%60))
 print_task_done
 
 print_task "Creating /tux2lab-data/vms to manage VMs..."

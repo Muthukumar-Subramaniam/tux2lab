@@ -204,6 +204,7 @@ prepare_lab_infra_config() {
     print_task "Capturing network info from QEMU-KVM default network bridge..."
 
     qemu_kvm_default_net_info=$(sudo virsh net-dumpxml tux2lab 2>/dev/null) || {
+        print_task_fail
         print_error "Failed to get network info from virsh"
         exit 1
     }
@@ -211,6 +212,7 @@ prepare_lab_infra_config() {
     lab_infra_server_ipv4_netmask=$(echo "$qemu_kvm_default_net_info" | awk -F"'" '/<ip address=/ {print $4}')
   
     if [[ -z "$lab_infra_server_ipv4_gateway" || -z "$lab_infra_server_ipv4_netmask" ]]; then
+        print_task_fail
         print_error "Failed to extract network information from virsh output"
         exit 1
     fi
@@ -222,6 +224,7 @@ prepare_lab_infra_config() {
     lab_infra_server_ipv6_prefix=$(echo "$qemu_kvm_default_net_info" | awk -F"'" '/<ip family=.ipv6/ {print $6}')
   
     if [[ -z "$lab_infra_server_ipv6_gateway" || -z "$lab_infra_server_ipv6_prefix" ]]; then
+        print_task_fail
         print_error "IPv6 configuration not found in QEMU/KVM default network!"
         print_info "Dual-stack support required. Please ensure labbr0.xml has IPv6 configured."
         exit 1
@@ -583,7 +586,7 @@ deploy_lab_infra_server_vm() {
             sudo virsh undefine "${lab_infra_server_hostname}" --nvram &>/dev/null || true
         else
             print_error "Lab Infra VM '${lab_infra_server_hostname}' already exists in libvirt!"
-            print_info "To remove it, run: sudo virsh destroy ${lab_infra_server_hostname} && sudo virsh undefine ${lab_infra_server_hostname} --nvram && sudo rm -rf ${VM_DIR}"
+            print_info "To redeploy, use: tux2lab rebuild --clean-state"
             exit 1
         fi
     fi
@@ -601,7 +604,7 @@ deploy_lab_infra_server_vm() {
             rm -rf "$VM_DIR"
         else
             print_error "Lab Infra VM directory already exists at $VM_DIR."
-            print_info "To remove it, run: sudo rm -rf ${VM_DIR}"
+            print_info "To redeploy, use: tux2lab rebuild --clean-state"
             exit 1
         fi
     fi
@@ -786,8 +789,9 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
         sleep 5
         elapsed=$((elapsed + 5))
     done
-    printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for SSH to become available on ${lab_infra_server_hostname} [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-    print_success ""
+    printf "\r\033[K"
+    printf "${MAKE_IT_CYAN}[TASK] Waiting for SSH to become available on ${lab_infra_server_hostname} (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    print_task_done
 
     # Wait for bootstrap to complete
     local max_bootstrap_wait=900  # 15 minutes
@@ -806,8 +810,9 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
         sleep 10
         elapsed=$((elapsed + 10))
     done
-    printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-    print_success ""
+    printf "\r\033[K"
+    printf "${MAKE_IT_CYAN}[TASK] Waiting for lab infrastructure bootstrap to complete (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    print_task_done
 
     # Configure DNS resolution on the KVM host to use the lab's DNS server
     print_task "Configuring DNS resolution for labbr0..."
@@ -902,77 +907,94 @@ deploy_lab_infra_server_host() {
 
     # ====== Check and start libvirtd if needed ======
     if sudo systemctl is-active --quiet libvirtd; then
-        print_info "libvirtd is already running"
+        print_task "Starting libvirtd..."
+        print_task_skip
     else
-        print_info "Starting libvirtd..."
-        if ! sudo systemctl restart libvirtd; then
+        print_task "Starting libvirtd..."
+        if ! sudo systemctl restart libvirtd &>/dev/null; then
+            print_task_fail
             print_error "Failed to start libvirtd"
             exit 1
         fi
-        print_success "libvirtd started successfully"
+        print_task_done
     fi
 
     # ====== Wait for labbr0 ======
-    print_info "Waiting for $lab_bridge_interface_name to be created..."
     local bridge_creation_timeout_seconds=30
     local bridge_creation_elapsed_seconds=0
-    until ip link show "$lab_bridge_interface_name" &>/dev/null; do
-        if [[ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]]; then
-            print_error "Timeout waiting for $lab_bridge_interface_name"
-            exit 1
-        fi
-        printf "."
-        sleep 1
-        bridge_creation_elapsed_seconds=$((bridge_creation_elapsed_seconds + 1))
-    done
-    echo
-    print_info "$lab_bridge_interface_name detected!"
+    if ip link show "$lab_bridge_interface_name" &>/dev/null; then
+        print_task "Waiting for ${lab_bridge_interface_name}..."
+        print_task_skip
+    else
+        until ip link show "$lab_bridge_interface_name" &>/dev/null; do
+            if [[ $bridge_creation_elapsed_seconds -ge $bridge_creation_timeout_seconds ]]; then
+                printf "\r\033[K"
+                print_task "Waiting for ${lab_bridge_interface_name}..."
+                print_task_fail
+                print_error "Timeout waiting for $lab_bridge_interface_name"
+                exit 1
+            fi
+            printf "\r${MAKE_IT_CYAN}[TASK] Waiting for ${lab_bridge_interface_name} [%dm %ds]...${RESET_COLOR}\033[K" $((bridge_creation_elapsed_seconds/60)) $((bridge_creation_elapsed_seconds%60))
+            sleep 1
+            bridge_creation_elapsed_seconds=$((bridge_creation_elapsed_seconds + 1))
+        done
+        printf "\r\033[K"
+        printf "${MAKE_IT_CYAN}[TASK] Waiting for ${lab_bridge_interface_name} (%dm %ds)...${RESET_COLOR}" $((bridge_creation_elapsed_seconds/60)) $((bridge_creation_elapsed_seconds%60))
+        print_task_done
+    fi
 
     # ====== Create dummy link if missing ======
-    if ! ip link show "$lab_bridge_dummy_interface_name" &>/dev/null; then
-        print_info "Creating dummy interface $lab_bridge_dummy_interface_name to keep $lab_bridge_interface_name always up..."
-        sudo ip link add name "$lab_bridge_dummy_interface_name" type dummy || { print_error "Failed to create dummy interface"; return 1; }
-        sudo ip link set "$lab_bridge_dummy_interface_name" master "$lab_bridge_interface_name" || { print_error "Failed to attach dummy to bridge"; return 1; }
-        sudo ip link set "$lab_bridge_dummy_interface_name" up || { print_error "Failed to bring up dummy interface"; return 1; }
-        print_success "Dummy interface created and attached"
+    if ip link show "$lab_bridge_dummy_interface_name" &>/dev/null; then
+        print_task "Creating dummy interface ${lab_bridge_dummy_interface_name}..."
+        print_task_skip
     else
-        print_info "Dummy interface $lab_bridge_dummy_interface_name already exists."
+        print_task "Creating dummy interface ${lab_bridge_dummy_interface_name}..."
+        sudo ip link add name "$lab_bridge_dummy_interface_name" type dummy &>/dev/null || { print_task_fail; print_error "Failed to create dummy interface"; return 1; }
+        sudo ip link set "$lab_bridge_dummy_interface_name" master "$lab_bridge_interface_name" &>/dev/null || { print_task_fail; print_error "Failed to attach dummy to bridge"; return 1; }
+        sudo ip link set "$lab_bridge_dummy_interface_name" up &>/dev/null || { print_task_fail; print_error "Failed to bring up dummy interface"; return 1; }
+        print_task_done
     fi
 
     # ====== Wait for labbr0 to come up ======
-    print_info "Waiting for $lab_bridge_interface_name to come UP..."
     local bridge_up_timeout_seconds=30
     local bridge_up_elapsed_seconds=0
-    while ! ip link show "$lab_bridge_interface_name" 2>/dev/null | grep -q 'state UP'; do
-        if [[ $bridge_up_elapsed_seconds -ge $bridge_up_timeout_seconds ]]; then
-            print_error "Timeout waiting for $lab_bridge_interface_name to come up"
-            exit 1
-        fi
-        printf "."
-        sleep 1
-        bridge_up_elapsed_seconds=$((bridge_up_elapsed_seconds + 1))
-    done
-    echo
-    print_info "$lab_bridge_interface_name is UP and running!"
+    if ip link show "$lab_bridge_interface_name" 2>/dev/null | grep -q 'state UP'; then
+        print_task "Waiting for ${lab_bridge_interface_name} to come UP..."
+        print_task_skip
+    else
+        while ! ip link show "$lab_bridge_interface_name" 2>/dev/null | grep -q 'state UP'; do
+            if [[ $bridge_up_elapsed_seconds -ge $bridge_up_timeout_seconds ]]; then
+                printf "\r\033[K"
+                print_task "Waiting for ${lab_bridge_interface_name} to come UP..."
+                print_task_fail
+                print_error "Timeout waiting for $lab_bridge_interface_name to come up"
+                exit 1
+            fi
+            printf "\r${MAKE_IT_CYAN}[TASK] Waiting for ${lab_bridge_interface_name} to come UP [%dm %ds]...${RESET_COLOR}\033[K" $((bridge_up_elapsed_seconds/60)) $((bridge_up_elapsed_seconds%60))
+            sleep 1
+            bridge_up_elapsed_seconds=$((bridge_up_elapsed_seconds + 1))
+        done
+        printf "\r\033[K"
+        printf "${MAKE_IT_CYAN}[TASK] Waiting for ${lab_bridge_interface_name} to come UP (%dm %ds)...${RESET_COLOR}" $((bridge_up_elapsed_seconds/60)) $((bridge_up_elapsed_seconds%60))
+        print_task_done
+    fi
 
     # ====== Assign IP addresses (dual-stack) ======
     local lab_infra_server_ipv4_cidr_prefix
     lab_infra_server_ipv4_cidr_prefix=$(awk -F. '{for(i=1;i<=4;i++){n=$i+0; while(n){c+=n%2; n=int(n/2)}}} END{print c+0}' <<< "${lab_infra_server_ipv4_netmask}")
 
-    print_info "Configuring IPv4 ${lab_infra_server_ipv4_address}/${lab_infra_server_ipv4_cidr_prefix} on $lab_bridge_interface_name..."
-    # Add the IPv4 address with CIDR prefix
+    print_task "Configuring IPv4 ${lab_infra_server_ipv4_address}/${lab_infra_server_ipv4_cidr_prefix} on ${lab_bridge_interface_name}..."
     if sudo ip addr add "${lab_infra_server_ipv4_address}/${lab_infra_server_ipv4_cidr_prefix}" dev "$lab_bridge_interface_name" 2>/dev/null; then
-        print_success "IPv4 address assigned successfully"
+        print_task_done
     else
-        print_info "IPv4 address may already be assigned"
+        print_task_skip
     fi
 
-    print_info "Configuring IPv6 ${lab_infra_server_ipv6_address}/${lab_infra_server_ipv6_prefix} on $lab_bridge_interface_name..."
-    # Add the IPv6 address with prefix
+    print_task "Configuring IPv6 ${lab_infra_server_ipv6_address}/${lab_infra_server_ipv6_prefix} on ${lab_bridge_interface_name}..."
     if sudo ip addr add "${lab_infra_server_ipv6_address}/${lab_infra_server_ipv6_prefix}" dev "$lab_bridge_interface_name" 2>/dev/null; then
-        print_success "IPv6 address assigned successfully"
+        print_task_done
     else
-        print_info "IPv6 address may already be assigned"
+        print_task_skip
     fi
 
     # -----------------------------
