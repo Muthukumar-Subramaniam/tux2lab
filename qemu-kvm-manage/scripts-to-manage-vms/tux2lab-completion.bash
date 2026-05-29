@@ -33,6 +33,8 @@ _tux2lab_completions() {
     local ipv6_route_subcommands="enable disable check auto status"
 
     # Distro names and versions (sourced from single source of truth)
+    # Unset guard so re-sourcing works (declare -A is function-local, doesn't persist)
+    unset _DISTRO_VERSIONS_CONF_LOADED
     source /tux2lab/ks-manage/distro-versions.conf 2>/dev/null || true
     local all_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
     local rhel_distros="almalinux rocky oraclelinux centos-stream rhel"
@@ -224,7 +226,7 @@ _tux2lab_completions() {
         # Complete distro names after setup/cleanup subcommand
         if [[ ${COMP_CWORD} -eq 3 ]] && [[ "${distro_subcmd}" == "setup" || "${distro_subcmd}" == "cleanup" ]]; then
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=( $(compgen -W "-v --version -h --help" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
             else
                 COMPREPLY=( $(compgen -W "${all_distros}" -- "${cur}") )
             fi
@@ -309,7 +311,11 @@ _tux2lab_completions() {
                 done
             done
             if ! $distro_given; then
-                COMPREPLY=( $(compgen -W "${all_distros} ${gi_opts}" -- "${cur}") )
+                if [[ ${cur} == -* ]]; then
+                    COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+                else
+                    COMPREPLY=( $(compgen -W "${all_distros}" -- "${cur}") )
+                fi
             else
                 COMPREPLY=( $(compgen -W "${gi_opts}" -- "${cur}") )
             fi
