@@ -53,7 +53,7 @@ _tux2lab_completions() {
     }
 
     # DNS options
-    local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy -q --query --setup -y --yes -h --help"
+    local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy -q --query --setup -y --yes --inline -h --help"
 
     # ===== FIRST ARGUMENT (top-level command) =====
     if [[ ${COMP_CWORD} -eq 1 ]]; then
@@ -353,9 +353,9 @@ _tux2lab_completions() {
                 ;;
         esac
 
-        # After the main option + argument, offer --yes
+        # After the main option + argument, offer --yes/--inline
         if [[ ${cur} == -* ]]; then
-            COMPREPLY=( $(compgen -W "-y --yes" -- "${cur}") )
+            COMPREPLY=( $(compgen -W "-y --yes --inline" -- "${cur}") )
             return 0
         fi
 

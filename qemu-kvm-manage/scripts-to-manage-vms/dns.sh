@@ -41,6 +41,7 @@ OPTIONS (passed to dnsbinder):
     -dcy                         Delete CNAME without confirmation
     -q,    --query               Lookup any record and display all its relevant records
     -y,    --yes                 Append to any command to skip confirmation prompts
+    --inline                     Suppress TUI (no screen clear/cursor control) for bulk operations
     --setup                      Configure DNS domain and server (admin/internal)"
     exit 0
 fi
@@ -54,7 +55,7 @@ if [[ $# -gt 0 ]]; then
                    -ci --create-with-ip -cc --create-cname
                    -dc --delete-cname -dcy
                    -q --query
-                   --setup -y --yes)
+                   --setup -y --yes --inline)
     option_is_valid=false
     for opt in "${valid_options[@]}"; do
         if [[ "$1" == "$opt" ]]; then

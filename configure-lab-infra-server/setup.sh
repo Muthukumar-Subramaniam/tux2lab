@@ -107,7 +107,7 @@ dhcp_lease_file="$(mktemp /tmp/dhcp-lease-records.XXXXXXXXXX)"
 for IP in $(seq 156 254); do
     echo "dhcp-lease${IP} ${dnsbinder_last24_subnet}.${IP}" >> "$dhcp_lease_file"
 done
-if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cify "$dhcp_lease_file"; then
+if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --inline "$dhcp_lease_file"; then
     echo -e "\nWarning: Some DHCP lease DNS records may have failed to create.\n"
 fi
 rm -f "$dhcp_lease_file"

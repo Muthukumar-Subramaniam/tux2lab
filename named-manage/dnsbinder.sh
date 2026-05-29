@@ -2008,9 +2008,10 @@ fn_handle_multiple_host_record_with_ip() {
     local v_host_list_file="${1}"
     local v_auto_confirm="${2:-}"
 
-    clear
-
-    print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+    if ! $inline_mode; then
+        clear
+        print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+    fi
 
     if [[ -z "${v_host_list_file}" ]]; then
         echo
@@ -2093,16 +2094,22 @@ fn_handle_multiple_host_record_with_ip() {
     local v_host_count=0
 
     # Show initial header once
-    clear
-    print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+    if ! $inline_mode; then
+        clear
+        print_cyan "######################(DNS-Bulk-Records-Maker-with-IP)#############################"
+    else
+        print_info "Creating ${v_total_host_records} host records..."
+    fi
 
     while read -r v_host_record v_host_ipv4; do
         # Update progress header in place (move cursor to top)
-        tput cup 1 0
-        print_cyan "####################################( Running )####################################"
-        print_white "Status     : [ ${v_host_count}/${v_total_host_records} ] host records have been processed"
-        print_green "Successful : ${v_count_successfull}"
-        print_red "Failed     : ${v_count_failed}"
+        if ! $inline_mode; then
+            tput cup 1 0
+            print_cyan "####################################( Running )####################################"
+            print_white "Status     : [ ${v_host_count}/${v_total_host_records} ] host records have been processed"
+            print_green "Successful : ${v_count_successfull}"
+            print_red "Failed     : ${v_count_failed}"
+        fi
 
         ((v_host_count++))
 
@@ -2172,14 +2179,18 @@ fn_handle_multiple_host_record_with_ip() {
         fi
 
         # Clear from cursor to end of screen for next iteration
-        tput ed
+        if ! $inline_mode; then
+            tput ed
+        fi
 
     done < "${v_work_file}"
 
     rm -f "${v_work_file}"
 
     # Clear the progress display before showing final summary
-    clear
+    if ! $inline_mode; then
+        clear
+    fi
 
     local v_post_execution_serial_fw_zone
     v_post_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
@@ -2244,7 +2255,9 @@ fn_handle_multiple_host_record() {
     v_action_required="${2}"
     local v_auto_confirm="${3:-}"
 
-    clear
+    if ! $inline_mode; then
+        clear
+    fi
 
     fn_progress_title() {
     
@@ -2332,17 +2345,23 @@ fn_handle_multiple_host_record() {
     v_host_count=0
     
     # Show initial header once
-    clear
-    fn_progress_title
+    if ! $inline_mode; then
+        clear
+        fn_progress_title
+    else
+        print_info "${v_action_required^}ing ${v_total_host_records} host records..."
+    fi
     
     while read -r v_host_record
     do
         # Update progress header in place (move cursor to top)
-        tput cup 1 0
-        print_cyan "####################################( Running )####################################"
-        print_white "Status     : [ ${v_host_count}/${v_total_host_records} ] host records have been processed"
-        print_green "Successful : ${v_count_successfull}"
-        print_red "Failed     : ${v_count_failed}"
+        if ! $inline_mode; then
+            tput cup 1 0
+            print_cyan "####################################( Running )####################################"
+            print_white "Status     : [ ${v_host_count}/${v_total_host_records} ] host records have been processed"
+            print_green "Successful : ${v_count_successfull}"
+            print_red "Failed     : ${v_count_failed}"
+        fi
         
         ((v_host_count++))
         
@@ -2442,14 +2461,18 @@ fn_handle_multiple_host_record() {
     fi
 
     # Clear from cursor to end of screen for next iteration
-    tput ed
+    if ! $inline_mode; then
+        tput ed
+    fi
     
     done < "${v_work_file}"
 
     rm -f "${v_work_file}"
 
     # Clear the progress display before showing final summary
-    clear
+    if ! $inline_mode; then
+        clear
+    fi
 
     v_post_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
@@ -2795,6 +2818,7 @@ Use one of the following Options :
     -dcy                         caution ! To do the above without any confirmation
     -q,    --query               Lookup any record and display all its relevant records
     -y,    --yes                 Append to any command to skip confirmation prompts
+    --inline                     Suppress TUI (no screen clear/cursor control) for bulk operations
     --setup                      To configure local dns server and domain (dual-stack IPv4/IPv6)
                                  Both IPv4 and IPv6 networks are auto-detected from system
                                  Usage: dnsbinder --setup <domain>
@@ -2809,12 +2833,16 @@ Run dnsbinder utility without any arguments to get menu driven actions."
 
 if [[ -n "${1}" ]]
 then
-    # Check for standalone --yes / -y flag (can appear as last argument)
+    # Check for standalone --yes / -y flag and --inline flag (can appear anywhere after first arg)
     auto_confirm=""
+    inline_mode=false
     args=("$@")
     for i in "${!args[@]}"; do
         if [[ "${args[$i]}" == "--yes" || "${args[$i]}" == "-y" ]] && [[ $i -gt 0 ]]; then
             auto_confirm="-y"
+            unset 'args[$i]'
+        elif [[ "${args[$i]}" == "--inline" ]] && [[ $i -gt 0 ]]; then
+            inline_mode=true
             unset 'args[$i]'
         fi
     done
