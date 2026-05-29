@@ -752,7 +752,8 @@ EOF
         --cpu host-model \
         --boot loader=${OVMF_CODE_PATH},\
 nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},\
-nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on
+nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
+        --xml ./os/nvram/@format=raw
 
     # Cleanup ISO mount
     sudo umount -l "$iso_mount_dir" 2>/dev/null || true

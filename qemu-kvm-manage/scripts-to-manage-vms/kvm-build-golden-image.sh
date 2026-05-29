@@ -156,7 +156,8 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --machine q35 \
     --watchdog none \
     --cpu host-model \
-    --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},nvram=${NVRAM_PATH},menu=on"; then
+    --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},nvram=${NVRAM_PATH},menu=on" \
+    --xml ./os/nvram/@format=raw; then
     print_error "VM installation failed. Cleaning up..."
     sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
