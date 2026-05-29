@@ -29,104 +29,60 @@ fi
 # Check if lab environment is already deployed
 check_existing_lab_deployment() {
     local LAB_ENV_FILE="/tux2lab-data/lab_environment_vars"
-    local found_issues=0
-  
+    local severity=0
+    local details=()
+
     print_info "Checking for existing lab deployment..."
-  
+
     # Check if lab environment file exists
     if [[ -f "$LAB_ENV_FILE" ]]; then
-        print_warning "Found existing lab environment configuration at: $LAB_ENV_FILE"
-        found_issues=1
-    
-        # Source the file to get existing values
+        severity=1
         source "$LAB_ENV_FILE"
-    
+
         if [[ -n "${lab_infra_server_hostname:-}" ]]; then
-            print_warning "Lab Infra Server appears to be already configured:" nskip
-            print_warning "  Hostname: ${lab_infra_server_hostname}"
-      
-            # Check if it's a VM deployment
+            details+=("Hostname   : ${lab_infra_server_hostname}")
+
             if [[ "${lab_infra_server_mode_is_host:-false}" == "false" ]]; then
-                # Check if VM exists
                 if sudo virsh list --all | grep -q "${lab_infra_server_hostname}"; then
-                    print_warning "  VM Status: EXISTS (running or stopped)"
-                    found_issues=2
+                    details+=("VM         : exists (running or stopped)")
+                    severity=2
                 fi
-        
-                # Check if VM disk exists
                 local VM_DIR="/tux2lab-data/vms/${lab_infra_server_hostname}"
                 if [[ -d "$VM_DIR" ]]; then
-                    print_warning "  VM Directory: EXISTS at $VM_DIR"
-                    found_issues=2
+                    details+=("VM disk    : $VM_DIR")
+                    severity=2
                 fi
             else
-                # Check if host-mode services are running
-                print_warning "  Mode: HOST (deployed directly on KVM host)"
+                details+=("Mode       : host")
                 if sudo systemctl is-active --quiet named; then
-                    print_warning "  DNS Service (named): ACTIVE"
-                    found_issues=2
+                    details+=("DNS (named): active")
+                    severity=2
                 fi
                 if sudo systemctl is-active --quiet kea-dhcp4; then
-                    print_warning "  DHCP Service (kea): ACTIVE"
-                    found_issues=2
+                    details+=("DHCP (kea) : active")
+                    severity=2
                 fi
             fi
         fi
     fi
-  
-    # Check for SSH keys
-    if [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]]; then
-        print_warning "Lab SSH keys already exist at: $HOME/.ssh/tux2lab_id_rsa"
-        found_issues=1
-    fi
-  
-    # Check for SSH config
-    if [[ -f "/etc/ssh/ssh_config.d/999-tux2lab.conf" ]]; then
-        print_warning "Lab SSH config already exists: /etc/ssh/ssh_config.d/999-tux2lab.conf"
-        found_issues=1
-    fi
-  
-    if [[ $found_issues -eq 2 ]]; then
-        print_red "═══════════════════════════════════════════════════════════════════
-CRITICAL: Lab infrastructure is already deployed!
-Re-running this script will OVERWRITE your existing setup.
-═══════════════════════════════════════════════════════════════════"
-    
-        print_yellow "If you want to redeploy from scratch, you must:
-    1. Backup any important data from your lab
-    2. Manually remove the existing deployment:
-        • Delete VM: sudo virsh destroy ${lab_infra_server_hostname:-tux2lab-engine}
-                     sudo virsh undefine ${lab_infra_server_hostname:-tux2lab-engine} --nvram
-                     sudo rm -rf /tux2lab-data/vms/${lab_infra_server_hostname:-tux2lab-engine}
-        • Or stop host services: sudo systemctl stop named kea-dhcp4 nginx
-    3. Remove lab config: sudo rm -rf /tux2lab-data/lab_environment_vars
-    4. Remove SSH keys: rm -f ~/.ssh/tux2lab_id_rsa*"
-    
-        read -rp "Do you understand the risks and want to FORCE re-deployment? (YES/NO): " force_confirm
-    
-        if [[ "$force_confirm" != "YES" ]]; then
-            print_info "Deployment cancelled. Your existing lab is safe."
-            exit 0
-        fi
-    
-        print_warning "Proceeding with FORCED re-deployment..."
-        sleep 2
-    elif [[ $found_issues -eq 1 ]]; then
-        print_warning "Some lab components already exist.
-Continuing may overwrite existing SSH keys or configuration."
-    
-        read -rp "Type 'OVERWRITE' to continue with deployment: " continue_confirm
-    
-        if [[ "$continue_confirm" != "OVERWRITE" ]]; then
-            print_info "Deployment cancelled."
-            exit 0
-        fi
-    
-        print_warning "Proceeding with deployment..."
-        sleep 1
-    else
+
+    [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] && details+=("SSH keys   : present") && severity=${severity:-1}
+    [[ -f "/etc/ssh/ssh_config.d/999-tux2lab.conf" ]] && details+=("SSH config : present") && severity=${severity:-1}
+
+    if [[ $severity -eq 0 ]]; then
         print_info "No existing lab deployment detected. Safe to proceed."
+        return
     fi
+
+    # Print consolidated summary
+    echo
+    print_yellow "Existing lab deployment detected:"
+    for line in "${details[@]}"; do
+        print_yellow "  $line"
+    done
+    echo
+    print_info "To redeploy, use: tux2lab rebuild --clean-state"
+    exit 0
 }
 
 prepare_lab_infra_config() {
