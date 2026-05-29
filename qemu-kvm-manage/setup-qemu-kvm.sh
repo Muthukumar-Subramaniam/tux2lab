@@ -87,7 +87,7 @@ wait "$pkg_pid" || {
     exit 1
 }
 printf "\r\033[K"
-print_task "Installing required packages for QEMU/KVM..."
+printf "${MAKE_IT_CYAN}[TASK] Installing required packages for QEMU/KVM (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
 print_task_done
 
 print_task "Disabling libvirtd-tls and libvirtd-tcp sockets..."

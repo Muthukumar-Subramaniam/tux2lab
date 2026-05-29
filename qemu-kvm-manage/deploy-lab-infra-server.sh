@@ -1049,7 +1049,7 @@ deploy_lab_infra_server_host() {
         exit 1
     }
     printf "\r\033[K"
-    print_task "Installing required packages on host..."
+    printf "${MAKE_IT_CYAN}[TASK] Installing required packages on host (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
     print_task_done
 
     # -----------------------------
@@ -1086,7 +1086,7 @@ deploy_lab_infra_server_host() {
             exit 1
         }
         printf "\r\033[K"
-        print_task "Installing Ansible on the host..."
+        printf "${MAKE_IT_CYAN}[TASK] Installing Ansible on the host (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
         print_task_done
     fi
 
