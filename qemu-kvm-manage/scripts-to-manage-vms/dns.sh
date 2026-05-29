@@ -121,17 +121,29 @@ else
     file_based_option=""
     file_path=""
     yes_flag=""
+    inline_flag=""
 
-    # Detect trailing --yes / -y modifier
+    # Detect trailing --yes / -y and --inline modifiers
     for arg in "$@"; do
         if [[ "$arg" == "--yes" || "$arg" == "-y" ]]; then
             yes_flag="--yes"
+        elif [[ "$arg" == "--inline" ]]; then
+            inline_flag="--inline"
         fi
     done
 
     if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "--create-from-file" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "--delete-from-file" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "--create-with-ip-file" ]] || [[ "$1" == "-cify" ]]; }; then
         file_based_option="$1"
         file_path="$2"
+
+        # Validate no unexpected arguments after the file (only --yes/-y/--inline allowed)
+        for arg in "${@:3}"; do
+            if [[ "$arg" != "--yes" && "$arg" != "-y" && "$arg" != "--inline" ]]; then
+                print_error "Unexpected argument: $arg"
+                print_info "'$1' takes only a file argument and optional --yes/--inline flags."
+                exit 1
+            fi
+        done
 
         # Validate that file exists locally
         if [[ ! -f "$file_path" ]]; then
@@ -165,7 +177,7 @@ else
         fi
 
         # Execute dnsbinder with remote temp file
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag}" || exit_code=$?
+        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag} ${inline_flag}" || exit_code=$?
 
         # Cleanup handled by trap, clear it
         cleanup_remote_temp
