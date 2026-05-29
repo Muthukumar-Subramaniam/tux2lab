@@ -75,18 +75,18 @@ fi
 
 elapsed=0
 while kill -0 "$pkg_pid" 2>/dev/null; do
-    printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages for QEMU/KVM... [%dm %ds]${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+    printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages for QEMU/KVM [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
     sleep 1
     elapsed=$((elapsed + 1))
 done
 wait "$pkg_pid" || {
-    printf "\r"
+    printf "\r\033[K"
     print_task "Installing required packages for QEMU/KVM..."
     print_task_fail
     print_error "Failed to install required packages."
     exit 1
 }
-printf "\r"
+printf "\r\033[K"
 print_task "Installing required packages for QEMU/KVM..."
 print_task_done
 
@@ -154,7 +154,8 @@ run_virsh_cmd() {
 # Check if the virsh network is already active with correct IPs
 if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_labbr0" && ip addr show labbr0 | grep -q "$ipv6_labbr0" ) && \
    sudo virsh net-info "$virsh_network_name" &>/dev/null; then
-    print_success "labbr0 bridge and virsh network '$virsh_network_name' already configured — skipping task."
+    print_task "Setting up custom bridge network labbr0 for QEMU/KVM..."
+    print_task_skip
 else
     print_task "Setting up custom bridge network labbr0 for QEMU/KVM..."
     run_virsh_cmd net-destroy "$virsh_network_name" || true

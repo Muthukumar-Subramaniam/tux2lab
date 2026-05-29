@@ -1037,18 +1037,18 @@ deploy_lab_infra_server_host() {
 
     elapsed=0
     while kill -0 "$pkg_pid" 2>/dev/null; do
-        printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages on host... [%dm %ds]${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+        printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages on host [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
         sleep 1
         elapsed=$((elapsed + 1))
     done
     wait "$pkg_pid" || {
-        printf "\r"
+        printf "\r\033[K"
         print_task "Installing required packages on host..."
         print_task_fail
         print_error "Failed to install required packages."
         exit 1
     }
-    printf "\r"
+    printf "\r\033[K"
     print_task "Installing required packages on host..."
     print_task_done
 
@@ -1074,18 +1074,18 @@ deploy_lab_infra_server_host() {
 
         elapsed=0
         while kill -0 "$pkg_pid" 2>/dev/null; do
-            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible on the host... [%dm %ds]${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible on the host [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
             sleep 1
             elapsed=$((elapsed + 1))
         done
         wait "$pkg_pid" || {
-            printf "\r"
+            printf "\r\033[K"
             print_task "Installing Ansible on the host..."
             print_task_fail
             print_error "Failed to install Ansible."
             exit 1
         }
-        printf "\r"
+        printf "\r\033[K"
         print_task "Installing Ansible on the host..."
         print_task_done
     fi
