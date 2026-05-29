@@ -2113,7 +2113,7 @@ fn_handle_multiple_host_record_with_ip() {
 
         ((v_host_count++))
 
-        print_task "Attempting to create the host record ${v_host_record}.${v_domain_name} (${v_host_ipv4}) . . . " "nskip"
+        print_task "Creating host record ${v_host_record}.${v_domain_name} (${v_host_ipv4})..." "nskip"
 
         local v_serial_fw_zone_pre_execution
         v_serial_fw_zone_pre_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
@@ -2365,7 +2365,7 @@ fn_handle_multiple_host_record() {
         
         ((v_host_count++))
         
-        print_task "Attempting to ${v_action_required} the host record ${v_host_record}.${v_domain_name} . . . " "nskip"
+        print_task "${v_action_required^}ing host record ${v_host_record}.${v_domain_name}..." "nskip"
     
         v_serial_fw_zone_pre_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
