@@ -17,7 +17,7 @@ if ! virt_install_error=$(sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3
   --machine q35 \
   --watchdog none \
   --cpu host-model \
-  --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH},nvram=${NVRAM_PATH},menu=on" \
+  --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},nvram=${NVRAM_PATH},menu=on" \
   2>&1 >/dev/null); then
     echo "$virt_install_error" >&2
     return 1

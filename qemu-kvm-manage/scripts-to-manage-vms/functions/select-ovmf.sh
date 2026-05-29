@@ -11,3 +11,8 @@ if [[ ! -f "$OVMF_CODE_PATH" ]]; then
         OVMF_VARS_PATH='/usr/share/OVMF/OVMF_VARS_4M.fd'
     fi
 fi
+
+# Explicitly declare NVRAM template format as raw. Libvirt >= 11.6 defaults
+# to qcow2 NVRAM and refuses raw templates without this hint. Older libvirt
+# silently ignores the attribute — safe to set unconditionally.
+OVMF_NVRAM_TEMPLATE_FORMAT_OPT=",nvram.templateFormat=raw"
