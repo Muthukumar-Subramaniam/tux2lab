@@ -35,7 +35,7 @@ if [[ ! -d /sys/module/kvm ]]; then
 fi
 
 print_warning "This script will configure QEMU/KVM virtualization environment on this system."
-print_info "The following actions will be performed:
+print_cyan "The following actions will be performed:
   - Grant passwordless sudo privileges to user '$USER'
   - Install QEMU/KVM hypervisor and virtualization packages
   - Install and configure libvirtd daemon service
@@ -52,55 +52,73 @@ if ! $AUTO_YES; then
 fi
 echo ""
 
-print_task "Enabling passwordless sudo for $USER"
+print_task "Enabling passwordless sudo for $USER..."
 cat <<EOF | sudo tee "/etc/sudoers.d/$USER" &>/dev/null
 $USER ALL=(ALL) NOPASSWD: ALL
 Defaults:$USER !authenticate
 EOF
 print_task_done
 
-print_info "Installing required packages for QEMU/KVM..."
+print_task "Installing required packages for QEMU/KVM..."
 
 if command -v apt-get &>/dev/null; then
-    sudo apt-get update && sudo apt-get install -y qemu-kvm qemu-utils libvirt-daemon-system libvirt-clients python3-requests python3-libxml2 python3-libvirt libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0 ovmf ed git openssl || {
-        print_error "Failed to install required packages."
-        exit 1
-    }
+    sudo apt-get update &>/dev/null && sudo apt-get install -y qemu-kvm qemu-utils libvirt-daemon-system libvirt-clients python3-requests python3-libxml2 python3-libvirt libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0 ovmf ed git openssl &>/dev/null &
+    pkg_pid=$!
 elif command -v dnf &>/dev/null; then
-    sudo dnf install -y qemu-kvm qemu-img libvirt libvirt-daemon libvirt-daemon-driver-qemu python3-requests python3-libxml2 python3-libvirt libosinfo python3-gobject gobject-introspection edk2-ovmf ed git openssl || {
-        print_error "Failed to install required packages."
-        exit 1
-    }
+    sudo dnf install -y qemu-kvm qemu-img libvirt libvirt-daemon libvirt-daemon-driver-qemu python3-requests python3-libxml2 python3-libvirt libosinfo python3-gobject gobject-introspection edk2-ovmf ed git openssl &>/dev/null &
+    pkg_pid=$!
 else
+    print_task_fail
     print_error "Unsupported package manager. Only apt-get and dnf are supported."
     exit 1
 fi
 
-print_info "Disabling libvirtd-tls and libvirtd-tcp sockets..."
+elapsed=0
+while kill -0 "$pkg_pid" 2>/dev/null; do
+    printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages for QEMU/KVM... [%dm %ds]${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+    sleep 1
+    elapsed=$((elapsed + 1))
+done
+wait "$pkg_pid" || {
+    printf "\r"
+    print_task "Installing required packages for QEMU/KVM..."
+    print_task_fail
+    print_error "Failed to install required packages."
+    exit 1
+}
+printf "\r"
+print_task "Installing required packages for QEMU/KVM..."
+print_task_done
+
+print_task "Disabling libvirtd-tls and libvirtd-tcp sockets..."
 sudo systemctl disable --now libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
 sudo systemctl mask libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
+print_task_done
 
-print_info "Enabling and restarting libvirtd..."
-sudo systemctl enable libvirtd
-sudo systemctl restart libvirtd
+print_task "Enabling and restarting libvirtd..."
+sudo systemctl enable libvirtd &>/dev/null
+sudo systemctl restart libvirtd &>/dev/null
 # Wait for libvirtd socket to become ready
 retries=0
 while ! sudo virsh version &>/dev/null; do
     retries=$((retries + 1))
     if [[ $retries -ge 30 ]]; then
-        print_error "libvirtd failed to become ready after restart"
+        print_task_fail
+        print_error "libvirtd failed to become ready after restart."
         exit 1
     fi
     sleep 1
 done
-sudo systemctl status libvirtd -l --no-pager || true
+print_task_done
 
-print_task "Creating /tux2lab-data/vms to manage VMs"
+print_task "Creating /tux2lab-data/vms to manage VMs..."
 sudo mkdir -p /tux2lab-data/vms || {
+    print_task_fail
     print_error "Failed to create /tux2lab-data/vms directory."
     exit 1
 }
 sudo chown -R "$USER":"$(id -g)" /tux2lab-data || {
+    print_task_fail
     print_error "Failed to change ownership of /tux2lab-data directory."
     exit 1
 }
@@ -138,7 +156,7 @@ if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_lab
    sudo virsh net-info "$virsh_network_name" &>/dev/null; then
     print_success "labbr0 bridge and virsh network '$virsh_network_name' already configured — skipping task."
 else
-    print_task "Setting up custom bridge network labbr0 for QEMU/KVM"
+    print_task "Setting up custom bridge network labbr0 for QEMU/KVM..."
     run_virsh_cmd net-destroy "$virsh_network_name" || true
     run_virsh_cmd net-undefine "$virsh_network_name" || true
     run_virsh_cmd net-define "$virsh_network_definition" || {
@@ -156,13 +174,13 @@ fi
 # Remove libvirt's default network (virbr0 + dnsmasq) — its dnsmasq binds 0.0.0.0:67
 # which blocks Kea DHCP from opening raw sockets on labbr0
 if sudo virsh net-info default &>/dev/null; then
-    print_task "Removing libvirt default network (virbr0) to avoid DHCP port conflict"
+    print_task "Removing libvirt default network (virbr0)..."
     run_virsh_cmd net-destroy default || true
     run_virsh_cmd net-undefine default || true
     print_task_done
 fi
 
-print_task "Creating custom tools to manage QEMU/KVM"
+print_task "Creating custom tools to manage QEMU/KVM..."
 scripts_directory="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
 if [[ ! -f "$scripts_directory/tux2lab.sh" ]]; then
     print_task_fail
@@ -172,7 +190,7 @@ fi
 sudo ln -sf "$scripts_directory/tux2lab.sh" /usr/local/bin/tux2lab
 print_task_done
 
-print_task "Installing bash completion for tux2lab"
+print_task "Installing bash completion for tux2lab..."
 if [[ ! -f "$scripts_directory/tux2lab-completion.bash" ]]; then
     print_task_fail
     print_error "tux2lab-completion.bash not found at $scripts_directory/tux2lab-completion.bash"

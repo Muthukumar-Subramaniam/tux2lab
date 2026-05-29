@@ -245,7 +245,7 @@ prepare_lab_infra_config() {
     fi
 
     # Capture network info from QEMU-KVM default bridge
-    print_task "Capturing network info from QEMU-KVM default network bridge"
+    print_task "Capturing network info from QEMU-KVM default network bridge..."
 
     qemu_kvm_default_net_info=$(sudo virsh net-dumpxml tux2lab 2>/dev/null) || {
         print_error "Failed to get network info from virsh"
@@ -313,7 +313,7 @@ prepare_lab_infra_config() {
 ✓ IPv6 ULA Subnet     : \033[1m${lab_infra_server_ipv6_ula_subnet}\033[0m"
 
     # Update SSH Custom Config
-    print_task "Creating SSH Custom Config for '${lab_infra_domain_name}' domain"
+    print_task "Creating SSH Custom Config for '${lab_infra_domain_name}' domain..."
     # Split IP address
     IFS='.' read -r lab_infra_ipv4_octet1 lab_infra_ipv4_octet2 lab_infra_ipv4_octet3 lab_infra_ipv4_octet4 <<< "$lab_infra_server_ipv4_address"
     # Split Netmask
@@ -393,7 +393,7 @@ EOF
 
     print_task_done
 
-    print_task "Updating /etc/hosts for ${lab_infra_server_hostname}"
+    print_task "Updating /etc/hosts for ${lab_infra_server_hostname}..."
 
     # Remove any existing entry (escape dots for regex safety)
     local escaped_hostname
@@ -408,7 +408,7 @@ EOF
     # Save all lab environment variables to file
     LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
 
-    print_info "Saving Lab Environment variables to: $LAB_ENV_VARS_FILE..."
+    print_task "Saving lab environment variables to ${LAB_ENV_VARS_FILE}..."
 
     # Create file with secure permissions before writing sensitive data (shadow password, SSH keys)
     touch "$LAB_ENV_VARS_FILE"
@@ -432,7 +432,7 @@ lab_infra_server_ipv6_ula_subnet="${lab_infra_server_ipv6_ula_subnet}"
 lab_infra_server_ipv6_address="${lab_infra_server_ipv6_address}"
 EOF
 
-    print_success "Lab environment variables saved successfully."
+    print_task_done
 
 }
 
@@ -513,7 +513,7 @@ prepare_lab_infra_config_for_rebuild() {
     subnets_to_allow_ssh_pub_access="${subnets_to_allow_ssh_pub_access# }"
 
     # Update SSH config
-    print_task "Updating SSH config for ${lab_infra_domain_name}"
+    print_task "Updating SSH config for ${lab_infra_domain_name}..."
     sudo mkdir -p /etc/ssh/ssh_config.d
     SSH_CUSTOM_CONFIG_FILE="/etc/ssh/ssh_config.d/999-tux2lab.conf"
     sudo tee "$SSH_CUSTOM_CONFIG_FILE" &>/dev/null <<EOF
@@ -554,7 +554,7 @@ EOF
     print_task_done
 
     # Update /etc/hosts
-    print_task "Updating /etc/hosts for ${lab_infra_server_hostname}"
+    print_task "Updating /etc/hosts for ${lab_infra_server_hostname}..."
     local escaped_hostname
     escaped_hostname=$(printf '%s' "${lab_infra_server_hostname}" | sed 's/\./\\./g')
     sudo sed -i.bak "/${escaped_hostname}/d" /etc/hosts
@@ -745,7 +745,7 @@ deploy_lab_infra_server_vm() {
     # -----------------------------
     # Deploy tux2lab.service
     # -----------------------------
-    print_info "Deploying tux2lab.service..."
+    print_task "Deploying tux2lab.service..."
     sudo tee /etc/systemd/system/tux2lab.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
@@ -764,7 +764,7 @@ EOF
     sudo chmod 644 /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
     sudo systemctl enable tux2lab.service >/dev/null 2>&1
-    print_success "tux2lab.service deployed and enabled."
+    print_task_done
 
     # -----------------------------
     # Launch VM via virt-install
@@ -1022,7 +1022,7 @@ deploy_lab_infra_server_host() {
     # -----------------------------
     # Install required packages
     # -----------------------------
-    print_info "Installing required packages on host via dnf..."
+    print_task "Installing required packages on host..."
 
     REQUIRED_PACKAGES=(
         bash-completion vim git bind-utils bind wget tar cifs-utils
@@ -1032,37 +1032,62 @@ deploy_lab_infra_server_host() {
     )
 
     # Install packages, skipping already installed ones
-    if ! sudo dnf install -y "${REQUIRED_PACKAGES[@]}"; then
+    sudo dnf install -y "${REQUIRED_PACKAGES[@]}" &>/dev/null &
+    pkg_pid=$!
+
+    elapsed=0
+    while kill -0 "$pkg_pid" 2>/dev/null; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Installing required packages on host... [%dm %ds]${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    wait "$pkg_pid" || {
+        printf "\r"
+        print_task "Installing required packages on host..."
+        print_task_fail
         print_error "Failed to install required packages."
         exit 1
-    fi
-
-    print_success "All required packages installed on host successfully."
+    }
+    printf "\r"
+    print_task "Installing required packages on host..."
+    print_task_done
 
     # -----------------------------
     # Install Ansible if not already installed
     # -----------------------------
     if command -v ansible &>/dev/null; then
-        print_info "Ansible is already installed. Proceeding further..."
+        print_info "Ansible is already installed."
     else
-        print_info "Installing Ansible on the host..."
+        print_task "Installing Ansible on the host..."
 
         if command -v dnf &>/dev/null; then
-            sudo dnf install -y ansible-core || {
-                print_error "Failed to install Ansible"
-                exit 1
-            }
+            sudo dnf install -y ansible-core &>/dev/null &
+            pkg_pid=$!
         elif command -v apt-get &>/dev/null; then
-            sudo apt-get update && sudo apt-get install -y ansible-core || {
-                print_error "Failed to install Ansible"
-                exit 1
-            }
+            (sudo apt-get update &>/dev/null && sudo apt-get install -y ansible-core &>/dev/null) &
+            pkg_pid=$!
         else
+            print_task_fail
             print_error "Unsupported package manager. Cannot install ansible-core."
             exit 1
         fi
 
-        print_success "Ansible installation completed successfully."
+        elapsed=0
+        while kill -0 "$pkg_pid" 2>/dev/null; do
+            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible on the host... [%dm %ds]${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
+            sleep 1
+            elapsed=$((elapsed + 1))
+        done
+        wait "$pkg_pid" || {
+            printf "\r"
+            print_task "Installing Ansible on the host..."
+            print_task_fail
+            print_error "Failed to install Ansible."
+            exit 1
+        }
+        printf "\r"
+        print_task "Installing Ansible on the host..."
+        print_task_done
     fi
 
     if ! ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml; then
@@ -1177,7 +1202,7 @@ deploy_lab_infra_server_host() {
     # -----------------------------
     # Deploy tux2lab.service
     # -----------------------------
-    print_info "Deploying tux2lab.service..."
+    print_task "Deploying tux2lab.service..."
     sudo tee /etc/systemd/system/tux2lab.service > /dev/null <<EOF
 [Unit]
 Description=tux2lab Lab Infrastructure
@@ -1196,7 +1221,7 @@ EOF
     sudo chmod 644 /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
     sudo systemctl enable tux2lab.service >/dev/null 2>&1
-    print_success "tux2lab.service deployed and enabled."
+    print_task_done
 
     echo
     print_green "═══════════════════════════════════════════════════════════════════"
