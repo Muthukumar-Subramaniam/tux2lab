@@ -34,7 +34,9 @@ if [[ ! -d /sys/module/kvm ]]; then
     fi
 fi
 
-print_warning "This script will configure QEMU/KVM virtualization environment on this system."
+print_warning "This script will configure QEMU/KVM virtualization environment on this system.
+tux2lab takes complete control of QEMU/KVM on this host.
+Any existing KVM/libvirt workloads will be removed."
 print_cyan "The following actions will be performed:
   - Grant passwordless sudo privileges to user '$USER'
   - Install QEMU/KVM hypervisor and virtualization packages

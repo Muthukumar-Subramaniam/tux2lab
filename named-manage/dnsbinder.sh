@@ -2595,12 +2595,12 @@ fn_get_cname_record() {
 
     if [[ "${v_action_requested}" == "create" ]]
     then
-        if grep -q "^${v_input_cname} " <<< $(sed -n '/;CNAME-Records/,$p' "${v_fw_zone}")
+        if grep -q "^${v_input_cname} " <<< "$(sed -n '/;CNAME-Records/,$p' "${v_fw_zone}")"
         then 
             print_error "CNAME record for \"${v_input_cname}.${v_domain_name}\" already exists! "
             exit 1
 
-        elif grep -q "^${v_input_cname} "  <<< $(sed -n '/;A-Records/,/;CNAME-Records/{//!p;}' "${v_fw_zone}")
+        elif grep -q "^${v_input_cname} "  <<< "$(sed -n '/;A-Records/,/;CNAME-Records/{//!p;}' "${v_fw_zone}")"
         then
             print_error "Conflict! Already a host record exists with the same name of CNAME \"${v_input_cname}.${v_domain_name}\" ! "
             exit 1
@@ -2608,7 +2608,7 @@ fn_get_cname_record() {
 
         fn_get_hostname_record_from_user
 
-        if ! grep -q "^${v_input_hostname} "  <<< $(sed -n '/;A-Records/,/;CNAME-Records/{//!p;}' "${v_fw_zone}")
+        if ! grep -q "^${v_input_hostname} "  <<< "$(sed -n '/;A-Records/,/;CNAME-Records/{//!p;}' "${v_fw_zone}")"
         then
             print_error "Provided host record \"${v_input_hostname}.${v_domain_name}\" doesn't exist to create CNAME \"${v_input_cname}.${v_domain_name}\" ! "
             exit 1
@@ -2617,7 +2617,7 @@ fn_get_cname_record() {
 
     if [[ "${v_action_requested}" == "delete" ]]
     then
-        if ! grep -q "^${v_input_cname} " <<< $(sed -n '/;CNAME-Records/,$p' "${v_fw_zone}")
+        if ! grep -q "^${v_input_cname} " <<< "$(sed -n '/;CNAME-Records/,$p' "${v_fw_zone}")"
         then 
             print_error "CNAME record for ${v_input_cname}.${v_domain_name} doesn't exist! "
             exit 1

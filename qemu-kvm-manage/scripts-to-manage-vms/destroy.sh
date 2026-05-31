@@ -312,14 +312,17 @@ if [[ "$host_mode_detected" == "true" ]]; then
         ((++skipped_steps))
     fi
 
-    # Remove firewalld trusted zone rules for lab network
+    # Remove firewalld trusted zone rules for lab network (only lab subnets)
     print_task "Removing firewalld trusted zone rules..."
     if systemctl is-active firewalld &>/dev/null; then
-        trusted_sources=$(sudo firewall-cmd --permanent --zone=trusted --list-sources 2>/dev/null || true)
-        if [[ -n "$trusted_sources" ]]; then
-            for src in $trusted_sources; do
-                sudo firewall-cmd --permanent --zone=trusted --remove-source="$src" &>/dev/null || true
-            done
+        fw_removed=false
+        if [[ -n "${lab_infra_server_ipv4_subnet:-}" ]]; then
+            sudo firewall-cmd --permanent --zone=trusted --remove-source="${lab_infra_server_ipv4_subnet}" &>/dev/null && fw_removed=true || true
+        fi
+        if [[ -n "${lab_infra_server_ipv6_ula_subnet:-}" ]]; then
+            sudo firewall-cmd --permanent --zone=trusted --remove-source="${lab_infra_server_ipv6_ula_subnet}" &>/dev/null && fw_removed=true || true
+        fi
+        if $fw_removed; then
             sudo firewall-cmd --reload &>/dev/null || true
             print_task_done
             ((++completed_steps))
