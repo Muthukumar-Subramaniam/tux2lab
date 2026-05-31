@@ -1,4 +1,4 @@
-# tux2lab — Build Your Own QEMU/KVM Virtual Home Lab
+# tux2lab — Build Your Own KVM Virtual Home Lab
 
 [![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=orange&include_prereleases)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
@@ -58,7 +58,7 @@ virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:300
 
 ## Supported Distributions
 
-### Infra Server OS (RHEL-based only)
+### Infra Server OS — VM Mode (RHEL-based only)
 
 AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 10.
 
@@ -85,7 +85,7 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 
 **Guest VMs (each):** 2 GB RAM · 2 vCPUs · 20 GB disk
 
-**KVM Host:** Ubuntu or AlmaLinux/RHEL-based with hardware virtualization support.
+**KVM Host:** RHEL-based or Ubuntu with hardware virtualization support.
 
 ---
 
@@ -100,7 +100,6 @@ sudo mkdir -p /tux2lab
 sudo chown "${USER}:$(id -g)" /tux2lab
 curl -sSL https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest/download/tux2lab.tar.gz \
   | tar -xzv -C /tux2lab
-cd /tux2lab/qemu-kvm-manage/
 ```
 
 **For developers/contributors — clone from the repository:**
@@ -109,21 +108,20 @@ cd /tux2lab/qemu-kvm-manage/
 sudo mkdir -p /tux2lab
 sudo chown "${USER}:$(id -g)" /tux2lab
 git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
-cd /tux2lab/qemu-kvm-manage/
 ```
 
 ### Step 2 — Install QEMU/KVM
 
 ```bash
-./setup-qemu-kvm.sh
+/tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh
 ```
 
 This script:
 - Installs QEMU/KVM, libvirt, and all dependencies (supports both `apt` and `dnf`)
-- Creates the `tux2lab` virtual network (`labbr0` bridge) with NAT
+- Grants passwordless sudo to the current user
+- Creates the `labbr0` bridge network with dual-stack (IPv4/IPv6) NAT
 - Sets up the `/tux2lab-data/` data directory
 - Installs the `tux2lab` CLI and bash completion
-- Validates your system is not a VM (bare-metal host required)
 
 ### Step 3 — Download Infra Server ISO (VM mode only)
 
@@ -142,41 +140,28 @@ The ISO is used as the install medium for the infra server VM.
 tux2lab deploy
 ```
 
-The interactive wizard will guide you through:
-- Setting an admin password
-- Selecting VM mode (recommended) or Host mode
-- Configuring SSH keys for passwordless access
+The interactive wizard handles:
+- Deploy mode selection — VM (recommended) or Host
+- Admin password setup
 
 The hostname is fixed to `tux2lab-engine` and the domain is automatically set to `<your-username>.internal`.
 
-**What happens next (VM mode):**
-
-1. A kickstart file is generated from your inputs
-2. `virt-install` creates and boots the infra server VM
-3. AlmaLinux installs unattended via kickstart (console output shown live)
-4. VM reboots → bootstrap service clones tux2lab repo and runs Ansible
-5. Deploy script waits for bootstrap to complete automatically
-6. DNS resolution is configured, health check runs — lab is ready
+The deploy process (VM mode):
+- Validates the infra server ISO is available
+- Generates SSH keys for passwordless access
+- Prepares a kickstart file from your inputs
+- Mounts the ISO and extracts kernel/initrd for PXE-style boot
+- Launches the infra server VM via `virt-install` (console output shown live)
+- Waits for OS installation to complete and starts the VM
+- Waits for SSH to become reachable on the new VM
+- Waits for the bootstrap service to finish (clones tux2lab, runs Ansible)
+- Configures DNS resolution on the KVM host (`resolvectl`)
+- Runs a health check to verify all lab services are up
 
 ### Step 5 — Verify Your Lab
 
 ```bash
 tux2lab health
-```
-
-```
-tux2lab Infra Health Check
-Lab Infra Server Mode: VM
-Lab Infra Server     : tux2lab-engine.user.internal
-
-[ ✓ ] DNS Server           [ 53/tcp  ]
-[ ✓ ] DHCP Server          [ 67/udp  ]
-[ ✓ ] NTP Server           [ 123/udp ]
-[ ✓ ] TFTP Server          [ 69/udp  ]
-[ ✓ ] NFS Server           [ 2049/tcp ]
-[ ✓ ] Web Server           [ 80/tcp  ]
-
-Status: STABLE
 ```
 
 ---
