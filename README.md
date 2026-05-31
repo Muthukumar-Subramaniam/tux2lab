@@ -3,14 +3,14 @@
 [![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=orange&include_prereleases)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-Transform your Linux workstation into a powerful, automated virtual datacenter.
-Build and manage a virtual home lab, making it easy to deploy, break, and rebuild
-Linux VMs effortlessly. tux2lab automates VM provisioning, manages the complete
-lifecycle of your VMs, and provides a flexible environment for learning, testing,
-and experimenting with Linux-based technologies.
+Transform your Linux workstation into a powerful, automated virtual datacenter —
+deploy, break, and rebuild VMs effortlessly. tux2lab automates provisioning,
+manages the complete VM lifecycle, and provides a flexible environment for
+learning, testing, and experimenting with Linux-based technologies.
 
-Although many open-source alternatives exist, I built this project for the fun
-of creating something of my own and sharing it with anyone with similar interests.
+Plenty of open-source alternatives may exist; this project was built out of the
+sheer fun of creating something from scratch and sharing it with anyone who has
+similar interests.
 
 > [!WARNING]
 > This project is intended for testing, development, and experimentation purposes only.
