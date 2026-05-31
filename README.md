@@ -153,10 +153,10 @@ The hostname is fixed to `tux2lab-engine` and the domain is automatically set to
 
 1. A kickstart file is generated from your inputs
 2. `virt-install` creates and boots the infra server VM
-3. AlmaLinux installs unattended via kickstart (SSH keys, network, local repo configured in `%post`)
-4. First reboot → bootstrap service clones tux2lab repo and runs Ansible
-5. Ansible configures all lab services (DNS, DHCP, PXE, NFS, nginx, etc.) — lab is ready
-6. Press `Ctrl + ]` to exit the console when you see the login prompt
+3. AlmaLinux installs unattended via kickstart (console output shown live)
+4. VM reboots → bootstrap service clones tux2lab repo and runs Ansible
+5. Deploy script waits for bootstrap to complete automatically
+6. DNS resolution is configured, health check runs — lab is ready
 
 ### Step 5 — Verify Your Lab
 
