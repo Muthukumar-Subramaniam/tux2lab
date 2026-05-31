@@ -35,7 +35,8 @@ if ! systemctl list-unit-files "$SERVICE_NAME" &>/dev/null; then
     exit 1
 fi
 
-if ! sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+if ! sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null && \
+   ! sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
     print_info "Auto-start is already disabled."
     exit 0
 fi

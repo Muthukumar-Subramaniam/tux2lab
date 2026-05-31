@@ -163,7 +163,9 @@ elif [[ "$force_stop" == false ]]; then
     fi
 fi
 # Stop the VM
-if stop_vm "$qemu_kvm_hostname"; then
+rc=0
+stop_vm "$qemu_kvm_hostname" || rc=$?
+if [[ $rc -eq 0 || $rc -eq 2 ]]; then
     exit 0
 else
     exit 1

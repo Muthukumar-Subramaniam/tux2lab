@@ -102,19 +102,11 @@ main() {
         install-pxe|install-golden|reimage-pxe|reimage-golden)
             script_name="kvm-${subcommand}.sh"
             ;;
-        build-golden-image)
-            print_info "This command has moved. Use: tux2lab golden-image build"
-            exit 1
-            ;;
         disk-add|disk-resize|disk-attach|disk-detach|disk-delete|nic-add|nic-remove)
             script_name="kvm-${subcommand}.sh"
             ;;
         snapshot-create|snapshot-list|snapshot-info|snapshot-delete|snapshot-revert)
             script_name="kvm-${subcommand}.sh"
-            ;;
-        ipv6-route)
-            print_info "This command has moved. Use: tux2lab ipv6-route"
-            exit 1
             ;;
         *)
             print_error "Unknown subcommand: $subcommand"

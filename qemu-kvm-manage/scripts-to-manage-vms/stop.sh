@@ -54,13 +54,13 @@ shutdown_all_vms() {
             infra_vm_running=true
             continue
         fi
-        shutdown_vm "$vm_name"
+        shutdown_vm "$vm_name" || true
     done <<< "$running_vms"
 
     # Shutdown infra server VM last
     if $infra_vm_running; then
         print_info "Shutting down lab infra server VM last..."
-        shutdown_vm "$lab_infra_server_hostname"
+        shutdown_vm "$lab_infra_server_hostname" || true
     fi
 
     # Wait for all VMs to shut down

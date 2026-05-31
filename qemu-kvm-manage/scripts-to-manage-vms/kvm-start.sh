@@ -132,7 +132,9 @@ fi
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
 # Start the VM
-if start_vm "$qemu_kvm_hostname"; then
+rc=0
+start_vm "$qemu_kvm_hostname" || rc=$?
+if [[ $rc -eq 0 || $rc -eq 2 ]]; then
     exit 0
 else
     exit 1

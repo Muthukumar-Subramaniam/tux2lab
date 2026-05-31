@@ -64,7 +64,8 @@ fn_run_on_infra() {
     if $lab_infra_server_mode_is_host; then
         sudo bash -c "$1" 2>/dev/null
     else
-        ssh "${ssh_opts[@]}" "$ssh_target" "sudo bash -c '$1'" 2>/dev/null
+        local escaped_cmd="${1//\'/\'\\\'\'}"
+        ssh "${ssh_opts[@]}" "$ssh_target" "sudo bash -c '${escaped_cmd}'" 2>/dev/null
     fi
 }
 
