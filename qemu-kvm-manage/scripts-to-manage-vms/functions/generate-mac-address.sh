@@ -3,7 +3,7 @@
 # MAC Address Generation Functions for QEMU/KVM VMs                                     #
 #----------------------------------------------------------------------------------------#
 
-readonly MAC_GEN_LOCK_DIR="/tux2lab-data/.mac-generation.lock"
+[[ -z "${MAC_GEN_LOCK_DIR:-}" ]] && readonly MAC_GEN_LOCK_DIR="/tux2lab-data/.mac-generation.lock"
 MAC_GEN_LOCK_ACQUIRED=false
 
 fn_acquire_mac_gen_lock() {

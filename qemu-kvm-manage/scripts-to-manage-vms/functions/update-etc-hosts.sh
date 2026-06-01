@@ -1,4 +1,4 @@
-readonly ETC_HOSTS_LOCK_DIR="/tux2lab-data/.etc-hosts.lock"
+[[ -z "${ETC_HOSTS_LOCK_DIR:-}" ]] && readonly ETC_HOSTS_LOCK_DIR="/tux2lab-data/.etc-hosts.lock"
 ETC_HOSTS_LOCK_ACQUIRED=false
 
 fn_acquire_etc_hosts_lock() {
