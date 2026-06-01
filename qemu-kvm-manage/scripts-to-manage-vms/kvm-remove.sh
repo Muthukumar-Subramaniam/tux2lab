@@ -120,11 +120,19 @@ remove_vm() {
     local escaped_vm_name="${vm_name//./\\.}"
     if grep -q "${vm_name}" "$ETC_HOSTS_FILE" 2>/dev/null; then
         print_task "Removing from /etc/hosts..."
-        if sudo sed -i.bak "/[[:space:]]${escaped_vm_name}$/d" "$ETC_HOSTS_FILE" 2>/dev/null; then
-            print_task_done
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+        if fn_acquire_etc_hosts_lock; then
+            if sudo sed -i.bak "/[[:space:]]${escaped_vm_name}$/d" "$ETC_HOSTS_FILE" 2>/dev/null; then
+                fn_release_etc_hosts_lock
+                print_task_done
+            else
+                fn_release_etc_hosts_lock
+                print_task_fail
+                print_warning "Could not update /etc/hosts."
+            fi
         else
             print_task_fail
-            print_warning "Could not update /etc/hosts."
+            print_warning "Could not acquire /etc/hosts lock."
         fi
     fi
     

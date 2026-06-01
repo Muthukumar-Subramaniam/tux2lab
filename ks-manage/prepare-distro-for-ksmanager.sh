@@ -1101,6 +1101,35 @@ fi
 
 # ====== DISPATCH ======
 
+# Acquire per-distro-version singleton lock (fail-fast if another operation is running)
+DISTRO_SETUP_LOCK_DIR="/tux2lab-data/.distro-setup-${DISTRO}-${VERSION//\./-}.lock"
+
+if ! mkdir "${DISTRO_SETUP_LOCK_DIR}" 2>/dev/null; then
+    if [[ -f "${DISTRO_SETUP_LOCK_DIR}/pid" ]]; then
+        existing_pid=$(cat "${DISTRO_SETUP_LOCK_DIR}/pid" 2>/dev/null)
+        if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
+            print_error "Another distro operation for ${DISTRO_DISPLAY_NAMES[$DISTRO]} ${VERSION} is already in progress (PID ${existing_pid})."
+            exit 1
+        fi
+        # Stale lock from a dead process — reclaim it
+        rm -f "${DISTRO_SETUP_LOCK_DIR}/pid"
+        rmdir "${DISTRO_SETUP_LOCK_DIR}" 2>/dev/null || true
+    fi
+    if ! mkdir "${DISTRO_SETUP_LOCK_DIR}" 2>/dev/null; then
+        print_error "Cannot acquire distro setup lock. Please retry."
+        exit 1
+    fi
+fi
+
+printf '%s\n' "$$" > "${DISTRO_SETUP_LOCK_DIR}/pid"
+fn_release_distro_setup_lock() {
+    rm -f "${DISTRO_SETUP_LOCK_DIR}/pid" 2>/dev/null
+    rmdir "${DISTRO_SETUP_LOCK_DIR}" 2>/dev/null || true
+}
+trap 'fn_release_distro_setup_lock' EXIT
+trap 'fn_release_distro_setup_lock; trap - INT; kill -s INT $$' INT
+trap 'fn_release_distro_setup_lock; trap - TERM; kill -s TERM $$' TERM
+
 case "$MODE" in
     --setup)
         fn_setup_distro "$DISTRO" "$VERSION"
