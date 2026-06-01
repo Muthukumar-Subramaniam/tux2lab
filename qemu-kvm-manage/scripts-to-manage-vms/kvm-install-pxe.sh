@@ -128,7 +128,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
-    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via PXE boot" "The VM will download OS files and install (this may take a few minutes)."
+    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via PXE boot" "Installation via PXE boot may take a few minutes per VM."
 done
 
 # Summary for multiple VMs

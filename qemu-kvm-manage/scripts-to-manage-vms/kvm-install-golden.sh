@@ -243,11 +243,11 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
-    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via golden image disk" "The VM will reboot once or twice during installation (~1 minute)."
+    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via golden image disk" "Installation via golden image disk takes ~1 minute per VM."
 done
 
 # Summary for multiple VMs
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-operation-summary.sh
-if ! show_vm_operation_summary "${TOTAL_VMS}" "SUCCESSFUL_VMS" "FAILED_VMS" "installation via golden image disk" "All VMs will reboot once or twice during installation (~1 minute each)."; then
+if ! show_vm_operation_summary "${TOTAL_VMS}" "SUCCESSFUL_VMS" "FAILED_VMS" "installation via golden image disk" "Installation via golden image disk takes ~1 minute per VM."; then
     exit 1
 fi
