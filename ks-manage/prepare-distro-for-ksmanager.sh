@@ -60,10 +60,10 @@ if [[ "${1:-}" == "--download-infra-iso" ]]; then
         local available_gb=$(( available_kb / 1024 / 1024 ))
         if [[ "$available_gb" -lt "$required_gb" ]]; then
             print_error "Insufficient disk space on $target_dir"
-            print_info "Available: ${available_gb} GiB, Required: ${required_gb} GiB"
+            print_info "Available: ${available_gb} GiB, Minimum required: ${required_gb} GiB"
             exit 1
         fi
-        print_info "Disk space check passed: ${available_gb} GiB available (${required_gb} GiB required)"
+        print_info "Disk space check passed: ${available_gb} GiB available (minimum ${required_gb} GiB)"
     }
 
     fn_download_checksum() {
@@ -415,7 +415,8 @@ set -euo pipefail
 readonly ISO_DIR="/tux2lab-data/iso-files"
 readonly ISO_MOUNTS_CONF="/tux2lab-data/iso-mounts.conf"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
-readonly MIN_DISK_SPACE_GB=12
+readonly MIN_DISK_SPACE_RHEL_GB=12
+readonly MIN_DISK_SPACE_OTHER_GB=5
 
 # ====== DEPENDENCY CHECK ======
 MISSING_COMMANDS=()
@@ -489,10 +490,10 @@ fn_check_disk_space() {
     local available_gb=$(( available_kb / 1024 / 1024 ))
     if [[ "$available_gb" -lt "$required_gb" ]]; then
         print_error "Insufficient disk space on $target_dir"
-        print_info "Available: ${available_gb} GiB, Required: ${required_gb} GiB"
+        print_info "Available: ${available_gb} GiB, Minimum required: ${required_gb} GiB"
         exit 1
     fi
-    print_info "Disk space check passed: ${available_gb} GiB available (${required_gb} GiB required)"
+    print_info "Disk space check passed: ${available_gb} GiB available (minimum ${required_gb} GiB)"
 }
 
 fn_download_checksum() {
@@ -837,7 +838,12 @@ fn_setup_distro() {
             exit 1
         fi
 
-        fn_check_disk_space "$ISO_DIR" "$MIN_DISK_SPACE_GB"
+        local min_space_gb="$MIN_DISK_SPACE_OTHER_GB"
+        local d
+        for d in "${RHEL_BASED_DISTROS[@]}"; do
+            [[ "$d" == "$distro" ]] && { min_space_gb="$MIN_DISK_SPACE_RHEL_GB"; break; }
+        done
+        fn_check_disk_space "$ISO_DIR" "$min_space_gb"
 
         print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
         if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$iso_path" "$iso_url"; then
