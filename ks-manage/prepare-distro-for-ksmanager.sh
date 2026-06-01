@@ -35,7 +35,7 @@ if [[ "${1:-}" == "--download-infra-iso" ]]; then
         exit 1
     fi
 
-    for cmd in wget sha256sum awk grep; do
+    for cmd in curl sha256sum awk grep; do
         if ! command -v "$cmd" &>/dev/null; then
             print_error "Required command '$cmd' not found. Please install it first."
             exit 1
@@ -72,7 +72,7 @@ if [[ "${1:-}" == "--download-infra-iso" ]]; then
 
         print_task "Downloading CHECKSUM file..."
         rm -f "$checksum_file"
-        if ! wget --quiet --output-document="$checksum_file" "$checksum_url"; then
+        if ! curl --silent --location --retry 3 --retry-delay 2 --output "$checksum_file" "$checksum_url"; then
             print_task_fail
             print_error "Failed to download CHECKSUM from ${checksum_url}"
             rm -f "$checksum_file"
@@ -343,7 +343,7 @@ Guest VMs also support Debian-based (Ubuntu) and SUSE-based (openSUSE) via 'tux2
     fn_check_disk_space "${ISO_DIR}" "${MIN_DISK_SPACE_GB}"
 
     print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
-    if ! wget --continue --output-document="$ISO_PATH" "$ISO_URL"; then
+    if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$ISO_PATH" --progress-bar "$ISO_URL"; then
         print_error "Failed to download ISO from ${ISO_URL}"
         rm -f "$ISO_PATH"
         exit 1
@@ -419,7 +419,7 @@ readonly MIN_DISK_SPACE_GB=12
 
 # ====== DEPENDENCY CHECK ======
 MISSING_COMMANDS=()
-for cmd in wget curl mountpoint sed awk grep sha256sum; do
+for cmd in curl mountpoint sed awk grep sha256sum; do
     command -v "$cmd" &>/dev/null || MISSING_COMMANDS+=("$cmd")
 done
 if [[ ${#MISSING_COMMANDS[@]} -gt 0 ]]; then
@@ -501,7 +501,7 @@ fn_download_checksum() {
 
     print_task "Downloading CHECKSUM file..."
     rm -f "$checksum_file"
-    if ! wget --quiet --output-document="$checksum_file" "$checksum_url"; then
+    if ! curl --silent --location --retry 3 --retry-delay 2 --output "$checksum_file" "$checksum_url"; then
         print_task_fail
         print_error "Failed to download CHECKSUM from ${checksum_url}"
         rm -f "$checksum_file"
@@ -840,7 +840,7 @@ fn_setup_distro() {
         fn_check_disk_space "$ISO_DIR" "$MIN_DISK_SPACE_GB"
 
         print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
-        if ! wget --continue --output-document="$iso_path" "$iso_url"; then
+        if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$iso_path" --progress-bar "$iso_url"; then
             print_error "Failed to download ISO from ${iso_url}"
             print_info "Cleaning up partial download..."
             sudo rm -f "$iso_path"
