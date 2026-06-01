@@ -343,7 +343,7 @@ Guest VMs also support Debian-based (Ubuntu) and SUSE-based (openSUSE) via 'tux2
     fn_check_disk_space "${ISO_DIR}" "${MIN_DISK_SPACE_GB}"
 
     print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
-    if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$ISO_PATH" --progress-bar "$ISO_URL"; then
+    if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$ISO_PATH" "$ISO_URL"; then
         print_error "Failed to download ISO from ${ISO_URL}"
         rm -f "$ISO_PATH"
         exit 1
@@ -840,7 +840,7 @@ fn_setup_distro() {
         fn_check_disk_space "$ISO_DIR" "$MIN_DISK_SPACE_GB"
 
         print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
-        if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$iso_path" --progress-bar "$iso_url"; then
+        if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$iso_path" "$iso_url"; then
             print_error "Failed to download ISO from ${iso_url}"
             print_info "Cleaning up partial download..."
             sudo rm -f "$iso_path"
