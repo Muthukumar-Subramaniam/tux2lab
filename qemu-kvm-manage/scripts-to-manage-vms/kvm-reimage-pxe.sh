@@ -63,6 +63,9 @@ FAILED_VMS=()
 SUCCESSFUL_VMS=()
 SKIPPED_VMS=()
 
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/vm-hostname-lock.sh
+trap 'fn_release_vm_hostname_lock' EXIT
+
 for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-multi-vm-progress.sh
     show_multi_vm_progress "$qemu_kvm_hostname"
@@ -88,6 +91,12 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
+    # Acquire per-hostname lock to prevent duplicate operations
+    if ! fn_acquire_vm_hostname_lock "$qemu_kvm_hostname"; then
+        FAILED_VMS+=("$qemu_kvm_hostname")
+        continue
+    fi
+
     # PXE installation requires minimum 2 GiB memory and 2 vCPUs
     if [[ "$CLEAN_INSTALL" != "yes" ]]; then
         current_mem_kib=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^Max memory/ {print $3}')
@@ -96,6 +105,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         if (( current_mem_gib < 2 || current_vcpus < 2 )); then
             print_error "VM '${qemu_kvm_hostname}' has ${current_vcpus} vCPU(s) and ${current_mem_gib} GiB memory — minimum 2 vCPUs and 2 GiB required for PXE installation."
             print_info "Run 'tux2lab vm resize cpu 2 memory 2 -H ${qemu_kvm_hostname}' first, or use --clean-install to reset to defaults."
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -124,6 +134,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
         if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
             print_task_fail
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -135,6 +146,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         if ! GENERATED_MAC=$(get_vm_mac_address "${qemu_kvm_hostname}"); then
             print_task_fail
             print_error "Failed to get MAC address from VM \"${qemu_kvm_hostname}\"."
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -149,6 +161,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     [[ -n "$REIMAGE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $REIMAGE_OS_DISTRO"
     [[ -n "$REIMAGE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $REIMAGE_VERSION_TYPE"
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -156,6 +169,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Update /etc/hosts
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
     if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -163,6 +177,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Shut down VM if running
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
     if ! POWEROFF_VM_CONTEXT="Powering off before reimaging" POWEROFF_VM_STRICT=true poweroff_vm "$qemu_kvm_hostname"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -174,6 +189,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         # Destroy VM and delete directory
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-clean-install.sh
         if ! destroy_vm_for_clean_install "$qemu_kvm_hostname"; then
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -181,6 +197,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         # Create fresh VM directory
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-directory.sh
         if ! create_vm_directory "${qemu_kvm_hostname}"; then
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -188,6 +205,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         # Create new disk with default size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-disk.sh
         if ! create_vm_disk "${qemu_kvm_hostname}" 20; then
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -196,6 +214,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-ovmf.sh
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-installation.sh
         if ! start_vm_installation "$qemu_kvm_hostname" "PXE boot with default specs"; then
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -215,6 +234,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         if ! sudo qemu-img create -f qcow2 "${vm_qcow2_disk_path}" "20G" >/dev/null 2>&1; then
             print_error "Failed to create qcow2 disk for \"$qemu_kvm_hostname\"."
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
@@ -228,11 +248,13 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         # Start reimaging process
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-for-reimage.sh
         if ! start_vm_for_reimage "$qemu_kvm_hostname" "reimaging via PXE boot"; then
+            fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
         fi
     fi
 
+    fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
 
     # Show completion message for single VM

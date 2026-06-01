@@ -151,6 +151,9 @@ CURRENT_VM=0
 FAILED_VMS=()
 SUCCESSFUL_VMS=()
 
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/vm-hostname-lock.sh
+trap 'fn_release_vm_hostname_lock' EXIT
+
 for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Reset OS_DISTRO and VERSION_TYPE to command-line values for each VM
     OS_DISTRO="$CMDLINE_OS_DISTRO"
@@ -166,11 +169,18 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
+    # Acquire per-hostname lock to prevent duplicate operations
+    if ! fn_acquire_vm_hostname_lock "$qemu_kvm_hostname"; then
+        FAILED_VMS+=("$qemu_kvm_hostname")
+        continue
+    fi
+
     # Run ksmanager and extract VM details
     print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
     if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
         print_task_fail
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -182,6 +192,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -190,6 +201,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
     if ! normalize_os_distro "${OS_DISTRO}"; then
         print_error "Failed to normalize OS distro for \"$qemu_kvm_hostname\"."
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -198,6 +210,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Create VM directory
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-directory.sh
     if ! create_vm_directory "${qemu_kvm_hostname}"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -205,12 +218,14 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Update /etc/hosts
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
     if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/clone-golden-image-disk.sh
     if ! clone_golden_image_disk "$qemu_kvm_hostname" "${OS_DISTRO}" "${VERSION_TYPE}"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -218,10 +233,12 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Start installation process via golden image disk
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-installation.sh
     if ! start_vm_installation "$qemu_kvm_hostname" "golden image disk"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
 
+    fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
 
     # Show completion message for single VM

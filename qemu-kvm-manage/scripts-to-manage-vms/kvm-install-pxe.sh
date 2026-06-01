@@ -54,6 +54,9 @@ CURRENT_VM=0
 FAILED_VMS=()
 SUCCESSFUL_VMS=()
 
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/vm-hostname-lock.sh
+trap 'fn_release_vm_hostname_lock' EXIT
+
 for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-multi-vm-progress.sh
     show_multi_vm_progress "$qemu_kvm_hostname"
@@ -65,11 +68,18 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
+    # Acquire per-hostname lock to prevent duplicate operations
+    if ! fn_acquire_vm_hostname_lock "$qemu_kvm_hostname"; then
+        FAILED_VMS+=("$qemu_kvm_hostname")
+        continue
+    fi
+
     # Generate unique MAC address for the VM
     print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
     if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
         print_task_fail
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -84,6 +94,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     [[ -n "$CMDLINE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $CMDLINE_VERSION_TYPE"
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -91,6 +102,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Create VM directory
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-directory.sh
     if ! create_vm_directory "${qemu_kvm_hostname}"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -98,6 +110,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Update /etc/hosts
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
     if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
@@ -105,10 +118,12 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Start installation process via PXE boot
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-installation.sh
     if ! start_vm_installation "$qemu_kvm_hostname" "PXE boot"; then
+        fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
 
+    fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
 
     # Show completion message for single VM
