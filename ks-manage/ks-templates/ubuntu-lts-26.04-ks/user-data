@@ -77,7 +77,7 @@ autoinstall:
         type: mount
 # /boot partition
       - device: disk-get_disk_type_for_the_vm
-        size: 536870912
+        size: 1073741824
         wipe: superblock
         number: 2
         preserve: false
