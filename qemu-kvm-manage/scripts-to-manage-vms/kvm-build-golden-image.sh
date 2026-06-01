@@ -76,37 +76,6 @@ fi
 # Validate distro name and version locally before generating MAC or invoking ksmanager
 validate_distro_version "$OS_DISTRO" "$VERSION_TYPE"
 
-# Acquire per-distro-version singleton lock (fail-fast if another build is running)
-if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
-    GOLDEN_BUILD_LOCK_DIR="/tux2lab-data/.golden-image-build-${OS_DISTRO}-${VERSION_TYPE//\./-}.lock"
-
-    if ! mkdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null; then
-        if [[ -f "${GOLDEN_BUILD_LOCK_DIR}/pid" ]]; then
-            existing_pid=$(cat "${GOLDEN_BUILD_LOCK_DIR}/pid" 2>/dev/null)
-            if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
-                print_error "Another golden-image build for ${OS_DISTRO} ${VERSION_TYPE} is already in progress (PID ${existing_pid})."
-                exit 1
-            fi
-            # Stale lock from a dead process — reclaim it
-            rm -f "${GOLDEN_BUILD_LOCK_DIR}/pid"
-            rmdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null || true
-        fi
-        if ! mkdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null; then
-            print_error "Cannot acquire golden-image build lock. Please retry."
-            exit 1
-        fi
-    fi
-
-    printf '%s\n' "$$" > "${GOLDEN_BUILD_LOCK_DIR}/pid"
-    fn_release_golden_build_lock() {
-        rm -f "${GOLDEN_BUILD_LOCK_DIR}/pid" 2>/dev/null
-        rmdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null || true
-    }
-    trap 'fn_release_golden_build_lock' EXIT
-    trap 'fn_release_golden_build_lock; trap - INT; kill -s INT $$' INT
-    trap 'fn_release_golden_build_lock; trap - TERM; kill -s TERM $$' TERM
-fi
-
 # Generate unique MAC address for the VM
 print_task "Generating MAC address for golden image VM..."
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
@@ -130,6 +99,37 @@ if ! run_ksmanager "" "$ksmanager_opts"; then
 fi
 
 qemu_kvm_hostname="$EXTRACTED_HOSTNAME"
+
+# Acquire per-golden-image singleton lock (fail-fast if another build is running)
+# This works for both interactive mode (distro resolved by ksmanager) and CLI mode.
+GOLDEN_BUILD_LOCK_DIR="/tux2lab-data/.golden-image-build-${qemu_kvm_hostname}.lock"
+
+fn_release_golden_build_lock() {
+    rm -f "${GOLDEN_BUILD_LOCK_DIR}/pid" 2>/dev/null
+    rmdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null || true
+}
+
+if ! mkdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null; then
+    if [[ -f "${GOLDEN_BUILD_LOCK_DIR}/pid" ]]; then
+        existing_pid=$(cat "${GOLDEN_BUILD_LOCK_DIR}/pid" 2>/dev/null)
+        if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
+            print_error "Another golden-image build for '${qemu_kvm_hostname}' is already in progress (PID ${existing_pid})."
+            exit 1
+        fi
+        # Stale lock from a dead process — reclaim it
+        rm -f "${GOLDEN_BUILD_LOCK_DIR}/pid"
+        rmdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null || true
+    fi
+    if ! mkdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null; then
+        print_error "Cannot acquire golden-image build lock. Please retry."
+        exit 1
+    fi
+fi
+
+printf '%s\n' "$$" > "${GOLDEN_BUILD_LOCK_DIR}/pid"
+trap 'fn_release_golden_build_lock' EXIT
+trap 'fn_release_golden_build_lock; trap - INT; kill -s INT $$' INT
+trap 'fn_release_golden_build_lock; trap - TERM; kill -s TERM $$' TERM
 
 mkdir -p /tux2lab-data/golden-images-disk-store
 
