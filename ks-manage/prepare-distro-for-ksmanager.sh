@@ -24,7 +24,7 @@ if [[ "${1:-}" == "--download-infra-iso" ]]; then
     readonly ISO_DIR="/tux2lab-data/iso-files"
     readonly INFRA_ISO_MARKER="${ISO_DIR}/infra-server-iso"
     readonly INFRA_DISTRO_MARKER="${ISO_DIR}/infra-server-distro"
-    readonly MIN_DISK_SPACE_GB=12
+    readonly MIN_DISK_SPACE_GB=16
     readonly DEFAULT_DISTRO="almalinux"
     # INFRA_SERVER_VERSION is defined in distro-versions.conf
 
@@ -415,7 +415,7 @@ set -euo pipefail
 readonly ISO_DIR="/tux2lab-data/iso-files"
 readonly ISO_MOUNTS_CONF="/tux2lab-data/iso-mounts.conf"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
-readonly MIN_DISK_SPACE_RHEL_GB=12
+readonly MIN_DISK_SPACE_RHEL_GB=16
 readonly MIN_DISK_SPACE_OTHER_GB=5
 
 # ====== DEPENDENCY CHECK ======
