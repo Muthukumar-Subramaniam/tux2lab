@@ -1,6 +1,6 @@
 # tux2lab — Build Your Own KVM Virtual Home Lab
 
-[![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=orange&include_prereleases)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=green)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Transform your Linux workstation into a powerful, automated virtual datacenter —
