@@ -682,9 +682,11 @@ if $is_host_mode && command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev
     if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
         sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files 2>/dev/null || true
     fi
-    # nginx: web content
+    # nginx: web content (includes os-repos ISO mounts served via HTTP for PXE)
     sudo chcon -R -t httpd_sys_content_t /tux2lab-data 2>/dev/null || true
-    # NFS exports
+    # nginx: allow serving content from NFS/mounted filesystems (ISO mounts for PXE)
+    sudo setsebool -P httpd_use_nfs on 2>/dev/null || true
+    # NFS exports (os-repos served via NFS for inst.stage2/nfsroot during PXE install)
     sudo setsebool -P nfs_export_all_ro on 2>/dev/null || true
     sudo setsebool -P nfs_export_all_rw on 2>/dev/null || true
 fi
