@@ -117,7 +117,7 @@ configure_nginx() {
     if [[ ! -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key ]]; then
         print_task "Generating self-signed SSL private key..."
         sudo openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 \
-            -out /etc/pki/tls/private/tux2lab-nginx-selfsigned.key
+            -out /etc/pki/tls/private/tux2lab-nginx-selfsigned.key &>/dev/null
         print_task_done
     else
         print_task "Generating self-signed SSL private key..."
