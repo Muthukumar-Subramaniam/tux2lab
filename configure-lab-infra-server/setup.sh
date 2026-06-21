@@ -128,6 +128,7 @@ fi
 
 echo -e "\nDisabling SELinux . . .\n"
 
+sudo setenforce 0 2>/dev/null || true
 sudo grubby --update-kernel ALL --args selinux=0
 
 echo -e "\nRemove crashkernel memory reserve if present . . .\n"
