@@ -1005,7 +1005,7 @@ deploy_lab_infra_server_host() {
         bash-completion vim git bind-utils bind wget tar cifs-utils
         tftp-server kea kea-hooks radvd nginx nginx-mod-stream openssl tmux
         rsync sysstat tcpdump traceroute nc samba-client lsof nfs-utils
-        nmap tuned tree yum-utils python3-pip python3-cryptography
+        nmap tuned tree yum-utils python3-cryptography
     )
 
     # Filter to missing packages only
@@ -1047,54 +1047,6 @@ deploy_lab_infra_server_host() {
         print_task_done
     fi
 
-    # -----------------------------
-    # Install Ansible if not already installed
-    # -----------------------------
-    if command -v ansible &>/dev/null; then
-        print_task "Installing Ansible..."
-        print_task_skip
-    else
-        print_task "Installing Ansible..."
-
-        pkg_log=$(mktemp)
-        if command -v dnf &>/dev/null; then
-            sudo dnf install -y ansible-core &>"$pkg_log" &
-            pkg_pid=$!
-        elif command -v apt-get &>/dev/null; then
-            (sudo apt-get update && sudo apt-get install -y ansible-core) &>"$pkg_log" &
-            pkg_pid=$!
-        else
-            print_task_fail
-            print_error "Unsupported package manager. Cannot install ansible-core."
-            exit 1
-        fi
-
-        elapsed=0
-        while kill -0 "$pkg_pid" 2>/dev/null; do
-            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-            sleep 1
-            elapsed=$((elapsed + 1))
-        done
-        wait "$pkg_pid" || {
-            printf "\r\033[K"
-            print_task "Installing Ansible..."
-            print_task_fail
-            print_error "Failed to install Ansible:"
-            cat "$pkg_log"
-            rm -f "$pkg_log"
-            exit 1
-        }
-        rm -f "$pkg_log"
-        printf "\r\033[K"
-        printf "${MAKE_IT_CYAN}[TASK] Installing Ansible (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
-        print_task_done
-    fi
-
-    if ! ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml; then
-        print_error "Failed to install Ansible collections"
-        exit 1
-    fi
-
     # ---------------------------
     # Lab Infra DNS configuration
     # ---------------------------
@@ -1120,7 +1072,7 @@ deploy_lab_infra_server_host() {
             echo "default_linux_distro_iso_path=\"${default_linux_distro_iso_path}\"" | sudo tee -a /etc/environment &>/dev/null
         fi
 
-        # Set infra server distro and version in environment (for Ansible ISO mount)
+        # Set infra server distro and version in environment (for ISO mount)
         if ! grep -q infra_server_distro /etc/environment; then
             echo "infra_server_distro=\"${INFRA_DISTRO}\"" | sudo tee -a /etc/environment &>/dev/null
         fi
@@ -1185,17 +1137,14 @@ deploy_lab_infra_server_host() {
     fi
 
     # -----------------------------
-    # Ansible playbook execution
+    # Configure Lab Infra Services
     # -----------------------------
 
-    print_info "Executing Ansible playbook to configure Lab Infra Services..."
+    print_info "Configuring Lab Infra Services..."
 
-    export ANSIBLE_REMOTE_USER="${lab_infra_admin_username}"
-    ANSIBLE_HOME="/tux2lab/configure-lab-infra-server/"
-
-    # Run ansible-playbook that configures the essential services
-    if ! ansible-playbook /tux2lab/configure-lab-infra-server/configure-lab-infra-server.yaml; then
-        print_error "Ansible playbook execution failed"
+    # Run the configuration script that sets up all essential services
+    if ! bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh; then
+        print_error "Lab Infra Services configuration failed"
         exit 1
     fi
 

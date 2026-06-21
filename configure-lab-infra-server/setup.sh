@@ -10,23 +10,6 @@ if [[ "$UID" -eq 0 ]]; then
     exit 1
 fi
 
-if command -v ansible &>/dev/null; then
-    echo -e "\nAnsible is already installed, Proceeding further . . .\n"
-else
-    echo -e "\nInstalling Ansible . . . \n"
-    if command -v dnf &>/dev/null; then
-        sudo dnf install -y ansible-core || exit 1
-    elif command -v apt-get &>/dev/null; then
-        sudo apt-get update && sudo apt-get install -y ansible-core || exit 1
-    else
-        echo -e "\nUnsupported package manager. Cannot install ansible-core.\n"
-        exit 1
-    fi
-    echo "## Completed Ansible Installation ##"
-fi
-
-ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml || exit 1
-
 echo -e "\nAdd password-less sudo access for $USER . . . \n"
 mgmt_super_user="$USER"
 echo "${mgmt_super_user} ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/${mgmt_super_user}" &>/dev/null
@@ -59,14 +42,6 @@ fi
 
 # Backup environment file
 sudo cp -p /etc/environment "/root/environment_bkp_$(date +%F)"
-
-echo -e "\nSetting Up ansible remote user . . . \n"
-
-export ANSIBLE_REMOTE_USER="$USER"
-
-if ! grep -q '^ANSIBLE_REMOTE_USER=' /etc/environment; then
-    echo "ANSIBLE_REMOTE_USER=\"$USER\"" | sudo tee -a /etc/environment &>/dev/null
-fi
 
 echo -e "\nSetting up local dns domain with dnsbinder . . .\n"
 
@@ -161,5 +136,5 @@ sudo grubby --update-kernel ALL --remove-args=crashkernel
 
 if [[ "${1:-}" != "--invoked-by-automation" ]]; then
     echo -e "\nPlease reboot the server if you did not face any issue with setup script ! \n"
-    echo -e "\nAfter Reboot you can ansible playbook configure-lab-infra-server.yaml to setup the system ! \n" 
+    echo -e "\nAfter Reboot you can run configure-lab-infra-server.sh to setup the system ! \n"
 fi

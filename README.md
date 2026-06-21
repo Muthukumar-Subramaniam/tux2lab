@@ -21,7 +21,6 @@ similar interests.
 
 - Automated VM provisioning via PXE boot & golden images
 - Dynamic DNS management for your local domain
-- Configuration management via Ansible
 - Complete VM lifecycle management — deploy, resize, snapshot, destroy
 - Multi-distribution support across Red Hat, Debian, and SUSE families
 - Dual-stack networking (IPv4 + IPv6) out of the box
@@ -154,7 +153,7 @@ The deploy process (VM mode):
 - Launches the infra server VM via `virt-install` (console output shown live)
 - Waits for OS installation to complete and starts the VM
 - Waits for SSH to become reachable on the new VM
-- Waits for the bootstrap service to finish (clones tux2lab, runs Ansible)
+- Waits for the bootstrap service to finish (clones tux2lab, configures services)
 - Configures DNS resolution on the KVM host (`resolvectl`)
 - Runs a health check to verify all lab services are up
 
@@ -319,7 +318,7 @@ tux2lab/
 │   ├── deploy-lab-infra-server.sh
 │   ├── setup-qemu-kvm.sh
 │   └── scripts-to-manage-vms/  CLI dispatcher and all tux2lab vm subcommands
-├── configure-lab-infra-server/ Ansible playbook and roles for infra server setup
+├── configure-lab-infra-server/ Bash scripts and config files for infra server setup
 ├── ks-manage/                  Kickstart/cloud-init templates and ksmanager
 ├── named-manage/               DNS zone management (dnsbinder)
 ├── common-utils/               Shared utilities (color output, disk tools)
