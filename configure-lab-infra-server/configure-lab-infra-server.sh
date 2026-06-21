@@ -670,6 +670,8 @@ configure_firewall
 configure_nginx
 configure_nfs
 configure_chronyd
-configure_git_and_prompt
+if ! $is_host_mode; then
+    configure_git_and_prompt
+fi
 setup_pxe_boot
 print_success "All Lab Infra Services have been configured successfully."
