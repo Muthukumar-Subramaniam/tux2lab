@@ -435,6 +435,11 @@ if [[ "$host_mode_detected" == "true" ]]; then
         print_task_skip
         ((++skipped_steps))
     fi
+
+    print_task "Removing CLI symlinks..."
+    sudo rm -f /usr/sbin/dnsbinder /usr/local/bin/ksmanager /usr/local/bin/prepare-distro-for-ksmanager
+    print_task_done
+    ((++completed_steps))
 fi
 
 # Unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)

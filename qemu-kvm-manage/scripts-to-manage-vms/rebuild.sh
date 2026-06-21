@@ -324,6 +324,9 @@ if ${lab_infra_server_mode_is_host:-false}; then
     if grep -q '/tux2lab-data/tux2lab' /etc/fstab 2>/dev/null; then
         sudo sed -i '\|/tux2lab-data/tux2lab|d' /etc/fstab
     fi
+
+    # Remove CLI symlinks (will be recreated by deploy)
+    sudo rm -f /usr/sbin/dnsbinder /usr/local/bin/ksmanager /usr/local/bin/prepare-distro-for-ksmanager
 fi
 
 # ====== STEP 5: CLEAN /etc/hosts LAB ENTRIES ======
