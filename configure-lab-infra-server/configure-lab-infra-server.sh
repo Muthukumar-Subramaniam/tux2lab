@@ -674,4 +674,19 @@ if ! $is_host_mode; then
     configure_git_and_prompt
 fi
 setup_pxe_boot
+
+# Apply SELinux contexts if SELinux is present and not disabled
+if $is_host_mode && command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+    print_info "Applying SELinux contexts for lab services..."
+    # named: zone files
+    if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
+        sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files 2>/dev/null || true
+    fi
+    # nginx: web content
+    sudo chcon -R -t httpd_sys_content_t /tux2lab-data 2>/dev/null || true
+    # NFS exports
+    sudo setsebool -P nfs_export_all_ro on 2>/dev/null || true
+    sudo setsebool -P nfs_export_all_rw on 2>/dev/null || true
+fi
+
 print_success "All Lab Infra Services have been configured successfully."

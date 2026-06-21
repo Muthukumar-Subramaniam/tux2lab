@@ -1052,16 +1052,21 @@ deploy_lab_infra_server_host() {
     fi
 
     # ---------------------------
-    # Disable SELinux (if active)
+    # Handle SELinux
     # ---------------------------
-    print_info "Checking SELinux status..."
-    if sestatus 2>/dev/null | grep -q "disabled"; then
-        print_info "SELinux is already disabled."
-    else
-        print_info "Disabling SELinux for current boot and persistently..."
-        sudo setenforce 0 2>/dev/null || true
-        sudo grubby --update-kernel ALL --args selinux=0
-        print_success "SELinux has been disabled."
+    if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+        if [[ "${lab_infra_server_mode_is_host}" == "true" ]]; then
+            # Host mode: disable for current session only (don't permanently modify host)
+            print_info "SELinux is active — setting permissive for current session..."
+            sudo setenforce 0 2>/dev/null || true
+            print_success "SELinux set to permissive (non-persistent)."
+        else
+            # VM mode: disable entirely (disposable lab VM)
+            print_info "Disabling SELinux for current boot and persistently..."
+            sudo setenforce 0 2>/dev/null || true
+            sudo grubby --update-kernel ALL --args selinux=0
+            print_success "SELinux has been disabled."
+        fi
     fi
 
     # ---------------------------

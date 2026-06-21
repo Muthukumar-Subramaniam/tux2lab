@@ -126,10 +126,22 @@ if ! ip link | grep -q eth0; then
     sudo rm -rf /etc/NetworkManager/system-connections/orig-during-install
 fi
 
-echo -e "\nDisabling SELinux . . .\n"
+echo -e "\nHandling SELinux . . .\n"
 
-sudo setenforce 0 2>/dev/null || true
-sudo grubby --update-kernel ALL --args selinux=0
+if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+    if [[ "${1:-}" == "--invoked-by-automation" ]]; then
+        # VM mode: disable permanently (disposable lab VM)
+        sudo setenforce 0 2>/dev/null || true
+        sudo grubby --update-kernel ALL --args selinux=0
+        echo "SELinux disabled permanently."
+    else
+        # Host mode: set permissive for current session only
+        sudo setenforce 0 2>/dev/null || true
+        echo "SELinux set to permissive (non-persistent)."
+    fi
+else
+    echo "SELinux is already disabled."
+fi
 
 echo -e "\nRemove crashkernel memory reserve if present . . .\n"
 
