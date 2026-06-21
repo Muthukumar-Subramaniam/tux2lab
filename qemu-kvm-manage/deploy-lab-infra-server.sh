@@ -798,7 +798,7 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     # Host-driven setup: rsync tux2lab and configure remotely
     # -----------------------------
     print_task "Syncing /tux2lab to infra server VM..."
-    if ! rsync -a --delete -e "ssh $ssh_opts" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
+    if ! rsync -a --delete --exclude='.git' -e "ssh $ssh_opts" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
         print_task_fail
         print_error "Failed to rsync /tux2lab to VM"
         exit 1
