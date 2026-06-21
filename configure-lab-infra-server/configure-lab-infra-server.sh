@@ -188,6 +188,15 @@ server {
 EOF
     print_task_done
 
+    # Apply SELinux contexts for nginx before starting (if SELinux is active)
+    if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+        sudo chcon -R -t httpd_sys_content_t /tux2lab-data 2>/dev/null || true
+        sudo setsebool -P httpd_use_nfs on 2>/dev/null || true
+        if command -v semanage &>/dev/null; then
+            sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab-data(/.*)?' 2>/dev/null || true
+        fi
+    fi
+
     # Restart nginx
     print_task "Restarting nginx..."
     sudo systemctl restart nginx
@@ -216,6 +225,12 @@ EOF
         sudo sed -i "/^\[nfsd\]$/a host=${dnsbinder_server_ipv4_address},${dnsbinder_server_ipv6_address}" /etc/nfs.conf
     fi
     print_task_done
+
+    # Apply SELinux booleans for NFS exports (if SELinux is active)
+    if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+        sudo setsebool -P nfs_export_all_ro on 2>/dev/null || true
+        sudo setsebool -P nfs_export_all_rw on 2>/dev/null || true
+    fi
 
     # Restart NFS
     print_task "Restarting nfs-server..."
@@ -674,21 +689,5 @@ if ! $is_host_mode; then
     configure_git_and_prompt
 fi
 setup_pxe_boot
-
-# Apply SELinux contexts if SELinux is present and not disabled
-if $is_host_mode && command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
-    print_info "Applying SELinux contexts for lab services..."
-    # named: zone files
-    if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
-        sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files 2>/dev/null || true
-    fi
-    # nginx: web content (includes os-repos ISO mounts served via HTTP for PXE)
-    sudo chcon -R -t httpd_sys_content_t /tux2lab-data 2>/dev/null || true
-    # nginx: allow serving content from NFS/mounted filesystems (ISO mounts for PXE)
-    sudo setsebool -P httpd_use_nfs on 2>/dev/null || true
-    # NFS exports (os-repos served via NFS for inst.stage2/nfsroot during PXE install)
-    sudo setsebool -P nfs_export_all_ro on 2>/dev/null || true
-    sudo setsebool -P nfs_export_all_rw on 2>/dev/null || true
-fi
 
 print_success "All Lab Infra Services have been configured successfully."

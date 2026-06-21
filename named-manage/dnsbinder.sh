@@ -644,6 +644,16 @@ print(ptr)
 
     print_task_done
 
+    # Apply SELinux context for named if SELinux is active
+    if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+        chown -R named:named "${var_zone_dir}"
+        chcon -R -t named_zone_t "${var_zone_dir}" 2>/dev/null || true
+        # Make context persistent across relabels
+        if command -v semanage &>/dev/null; then
+            semanage fcontext -a -t named_zone_t "${var_zone_dir}(/.*)?" 2>/dev/null || true
+        fi
+    fi
+
     print_task "Enabling and starting named DNS Service..."
 
     systemctl enable --now named &>/dev/null    

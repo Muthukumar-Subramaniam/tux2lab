@@ -135,9 +135,8 @@ if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disab
         sudo grubby --update-kernel ALL --args selinux=0
         echo "SELinux disabled permanently."
     else
-        # Host mode: set permissive for current session only
-        sudo setenforce 0 2>/dev/null || true
-        echo "SELinux set to permissive (non-persistent)."
+        # Host mode: SELinux stays enforcing, contexts applied by configure script
+        echo "SELinux is active (Enforcing). Targeted contexts will be applied during configuration."
     fi
 else
     echo "SELinux is already disabled."
