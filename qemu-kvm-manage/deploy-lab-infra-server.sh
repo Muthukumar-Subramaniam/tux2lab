@@ -1052,6 +1052,19 @@ deploy_lab_infra_server_host() {
     fi
 
     # ---------------------------
+    # Disable SELinux (if active)
+    # ---------------------------
+    print_info "Checking SELinux status..."
+    if sestatus 2>/dev/null | grep -q "disabled"; then
+        print_info "SELinux is already disabled."
+    else
+        print_info "Disabling SELinux for current boot and persistently..."
+        sudo setenforce 0 2>/dev/null || true
+        sudo grubby --update-kernel ALL --args selinux=0
+        print_success "SELinux has been disabled."
+    fi
+
+    # ---------------------------
     # Lab Infra DNS configuration
     # ---------------------------
     print_info "Setting up Lab Infra DNS with custom utility dnsbinder (dual-stack)..."
@@ -1130,19 +1143,6 @@ deploy_lab_infra_server_host() {
             print_warning "Some DHCP lease DNS records may have failed to create."
         fi
         rm -f "$dhcp_lease_file"
-    fi
-
-    print_info "Checking SELinux status..."
-
-    if sestatus 2>/dev/null | grep -q "disabled"; then
-        print_info "SELinux is already disabled."
-    else
-        print_info "Disabling SELinux for current boot and persistently..."
-        # Disable for current boot
-        sudo setenforce 0 2>/dev/null || true
-        # Disable for all future boots
-        sudo grubby --update-kernel ALL --args selinux=0
-        print_success "SELinux has been disabled."
     fi
 
     # -----------------------------
