@@ -304,16 +304,17 @@ EOF
 configure_git_and_prompt() {
     print_info "Configuring git prompt and command prompt..."
 
-    local git_prompt_url="https://raw.githubusercontent.com/git/git/master/contrib/completion/git-prompt.sh"
+    local git_prompt_src="/tux2lab/configure-lab-infra-server/files/git-prompt.sh"
 
-    # Download git-prompt.sh for root
-    print_task "Downloading git-prompt.sh for root..."
-    sudo curl -fsSL -o /root/.git-prompt.sh "$git_prompt_url"
+    # Install git-prompt.sh for root
+    print_task "Installing git-prompt.sh for root..."
+    sudo cp -f "$git_prompt_src" /root/.git-prompt.sh
+    sudo chmod 0644 /root/.git-prompt.sh
     print_task_done
 
-    # Download git-prompt.sh for management user
-    print_task "Downloading git-prompt.sh for ${mgmt_super_user}..."
-    sudo curl -fsSL -o "/home/${mgmt_super_user}/.git-prompt.sh" "$git_prompt_url"
+    # Install git-prompt.sh for management user
+    print_task "Installing git-prompt.sh for ${mgmt_super_user}..."
+    sudo cp -f "$git_prompt_src" "/home/${mgmt_super_user}/.git-prompt.sh"
     sudo chown "${mgmt_super_user}:${mgmt_super_user}" "/home/${mgmt_super_user}/.git-prompt.sh"
     sudo chmod 0644 "/home/${mgmt_super_user}/.git-prompt.sh"
     print_task_done
