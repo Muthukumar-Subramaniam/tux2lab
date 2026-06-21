@@ -335,20 +335,14 @@ configure_git_and_prompt() {
     # Update PS1 for management user
     print_task "Setting PS1 for ${mgmt_super_user}..."
     local mgmt_bashrc="/home/${mgmt_super_user}/.bashrc"
-    if sudo grep -q '^PS1=' "$mgmt_bashrc"; then
-        sudo sed -i "/^PS1=/c\\${ps1_mgmt_user}" "$mgmt_bashrc"
-    else
-        echo "${ps1_mgmt_user}" | sudo tee -a "$mgmt_bashrc" > /dev/null
-    fi
+    sudo sed -i '/^PS1=/d' "$mgmt_bashrc"
+    echo "${ps1_mgmt_user}" | sudo tee -a "$mgmt_bashrc" > /dev/null
     print_task_done
 
     # Update PS1 for root
     print_task "Setting PS1 for root..."
-    if sudo grep -q '^PS1=' /root/.bashrc; then
-        sudo sed -i "/^PS1=/c\\${ps1_root_user}" /root/.bashrc
-    else
-        echo "${ps1_root_user}" | sudo tee -a /root/.bashrc > /dev/null
-    fi
+    sudo sed -i '/^PS1=/d' /root/.bashrc
+    echo "${ps1_root_user}" | sudo tee -a /root/.bashrc > /dev/null
     print_task_done
 }
 
