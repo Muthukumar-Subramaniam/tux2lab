@@ -204,7 +204,6 @@ EOF
                 sudo semanage fcontext -m -t httpd_sys_content_t '/tux2lab-data(/.*)?' &>/dev/null || true
             sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || \
                 sudo semanage fcontext -m -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || true
-            sudo restorecon -R /tux2lab-data &>/dev/null || true
         fi
         print_task_done
     fi

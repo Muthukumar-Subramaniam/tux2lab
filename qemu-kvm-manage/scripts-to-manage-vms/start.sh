@@ -146,7 +146,13 @@ when_lab_infra_server_is_host() {
         print_task_done
     fi
 
-    # ====== STEP 6: Restart named service ======
+    # ====== STEP 6: Restore SELinux contexts and restart named ======
+    if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+        print_task "Restoring SELinux contexts for DNS zone files..."
+        sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files &>/dev/null || true
+        print_task_done
+    fi
+
     print_task "Restarting named service..."
     if ! sudo systemctl restart named; then
         print_task_fail
