@@ -1060,6 +1060,11 @@ deploy_lab_infra_server_host() {
         exit 1
     fi
 
+    # Ensure named is running (dnsbinder --setup skips restart if domain already exists)
+    if ! sudo systemctl is-active --quiet named; then
+        sudo systemctl start named
+    fi
+
     # Set mgmt_super_user in environment using lab_infra_admin_username
     if ! grep -q mgmt_super_user /etc/environment; then
         echo "mgmt_super_user=\"${lab_infra_admin_username}\"" | sudo tee -a /etc/environment &>/dev/null
