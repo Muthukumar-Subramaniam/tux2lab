@@ -190,17 +190,19 @@ EOF
 
     # Apply SELinux contexts for nginx before starting (if SELinux is active)
     if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
-        sudo chcon -R -t httpd_sys_content_t /tux2lab-data 2>/dev/null || true
+        print_task "Applying SELinux contexts for web/DNS content..."
+        sudo chcon -R -t httpd_sys_content_t /tux2lab-data &>/dev/null || true
         # Restore named zone context (overwritten by blanket httpd_sys_content_t above)
         if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
-            sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files 2>/dev/null || true
+            sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files &>/dev/null || true
         fi
-        sudo setsebool -P httpd_use_nfs on 2>/dev/null || true
+        sudo setsebool -P httpd_use_nfs on &>/dev/null || true
         if command -v semanage &>/dev/null; then
-            sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab-data(/.*)?' 2>/dev/null || true
-            sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' 2>/dev/null || true
-            sudo restorecon -R /tux2lab-data 2>/dev/null || true
+            sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab-data(/.*)?' &>/dev/null || true
+            sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || true
+            sudo restorecon -R /tux2lab-data &>/dev/null || true
         fi
+        print_task_done
     fi
 
     # Restart nginx
@@ -234,8 +236,10 @@ EOF
 
     # Apply SELinux booleans for NFS exports (if SELinux is active)
     if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
-        sudo setsebool -P nfs_export_all_ro on 2>/dev/null || true
-        sudo setsebool -P nfs_export_all_rw on 2>/dev/null || true
+        print_task "Applying SELinux booleans for NFS exports..."
+        sudo setsebool -P nfs_export_all_ro on &>/dev/null || true
+        sudo setsebool -P nfs_export_all_rw on &>/dev/null || true
+        print_task_done
     fi
 
     # Restart NFS

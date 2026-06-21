@@ -646,12 +646,14 @@ print(ptr)
 
     # Apply SELinux context for named if SELinux is active
     if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
+        print_task "Applying SELinux context for DNS zone files..."
         chown -R named:named "${var_zone_dir}"
-        chcon -R -t named_zone_t "${var_zone_dir}" 2>/dev/null || true
+        chcon -R -t named_zone_t "${var_zone_dir}" &>/dev/null || true
         # Make context persistent across relabels
         if command -v semanage &>/dev/null; then
-            semanage fcontext -a -t named_zone_t "${var_zone_dir}(/.*)?" 2>/dev/null || true
+            semanage fcontext -a -t named_zone_t "${var_zone_dir}(/.*)?" &>/dev/null || true
         fi
+        print_task_done
     fi
 
     print_task "Enabling and starting named DNS Service..."
