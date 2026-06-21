@@ -191,15 +191,19 @@ EOF
     # Apply SELinux contexts for nginx before starting (if SELinux is active)
     if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
         print_task "Applying SELinux contexts for web/DNS content..."
-        sudo chcon -R -t httpd_sys_content_t /tux2lab-data &>/dev/null || true
-        # Restore named zone context (overwritten by blanket httpd_sys_content_t above)
-        if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
-            sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files &>/dev/null || true
-        fi
+        # Apply httpd_sys_content_t to /tux2lab-data but skip zone files (named is already running)
+        sudo chcon -t httpd_sys_content_t /tux2lab-data &>/dev/null || true
+        for dir in /tux2lab-data/*/; do
+            [[ "$dir" == "/tux2lab-data/dnsbinder-managed-zone-files/" ]] && continue
+            sudo chcon -R -t httpd_sys_content_t "$dir" &>/dev/null || true
+        done
         sudo setsebool -P httpd_use_nfs on &>/dev/null || true
+        # Persist contexts via semanage (use -a to add, fall back to -m to modify stale rules)
         if command -v semanage &>/dev/null; then
-            sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab-data(/.*)?' &>/dev/null || true
-            sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || true
+            sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab-data(/.*)?' &>/dev/null || \
+                sudo semanage fcontext -m -t httpd_sys_content_t '/tux2lab-data(/.*)?' &>/dev/null || true
+            sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || \
+                sudo semanage fcontext -m -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || true
             sudo restorecon -R /tux2lab-data &>/dev/null || true
         fi
         print_task_done

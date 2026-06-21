@@ -649,9 +649,10 @@ print(ptr)
         print_task "Applying SELinux context for DNS zone files..."
         chown -R named:named "${var_zone_dir}"
         chcon -R -t named_zone_t "${var_zone_dir}" &>/dev/null || true
-        # Make context persistent across relabels
+        # Make context persistent across relabels (use -a to add, fall back to -m for stale rules)
         if command -v semanage &>/dev/null; then
-            semanage fcontext -a -t named_zone_t "${var_zone_dir}(/.*)?" &>/dev/null || true
+            semanage fcontext -a -t named_zone_t "${var_zone_dir}(/.*)?" &>/dev/null || \
+                semanage fcontext -m -t named_zone_t "${var_zone_dir}(/.*)?" &>/dev/null || true
         fi
         print_task_done
     fi
