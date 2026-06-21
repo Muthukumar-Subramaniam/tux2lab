@@ -670,21 +670,11 @@ EOF
 # =====================================================================
 # Main execution — mirrors the former playbook role order
 # =====================================================================
-echo
 print_info "Configuring Lab Infra Services..."
-echo
-
 configure_firewall
-echo
 configure_nginx
-echo
 configure_nfs
-echo
 configure_chronyd
-echo
 configure_git_and_prompt
-echo
 setup_pxe_boot
-echo
-
 print_success "All Lab Infra Services have been configured successfully."
