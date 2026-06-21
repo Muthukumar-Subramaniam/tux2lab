@@ -191,9 +191,15 @@ EOF
     # Apply SELinux contexts for nginx before starting (if SELinux is active)
     if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
         sudo chcon -R -t httpd_sys_content_t /tux2lab-data 2>/dev/null || true
+        # Restore named zone context (overwritten by blanket httpd_sys_content_t above)
+        if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
+            sudo chcon -R -t named_zone_t /tux2lab-data/dnsbinder-managed-zone-files 2>/dev/null || true
+        fi
         sudo setsebool -P httpd_use_nfs on 2>/dev/null || true
         if command -v semanage &>/dev/null; then
             sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab-data(/.*)?' 2>/dev/null || true
+            sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' 2>/dev/null || true
+            sudo restorecon -R /tux2lab-data 2>/dev/null || true
         fi
     fi
 
