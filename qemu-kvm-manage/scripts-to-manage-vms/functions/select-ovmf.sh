@@ -1,15 +1,10 @@
-OVMF_CODE_PATH='/tux2lab/qemu-kvm-manage/ovmf-uefi-firmware/OVMF_CODE.fd'
-OVMF_VARS_PATH='/tux2lab/qemu-kvm-manage/ovmf-uefi-firmware/OVMF_VARS.fd'
-
-# Fallback to system OVMF firmware if vendored firmware is missing
-if [[ ! -f "$OVMF_CODE_PATH" ]]; then
-    if [[ -f /usr/share/edk2/ovmf/OVMF_CODE.fd ]]; then
-        OVMF_CODE_PATH='/usr/share/edk2/ovmf/OVMF_CODE.fd'
-        OVMF_VARS_PATH='/usr/share/edk2/ovmf/OVMF_VARS.fd'
-    elif [[ -f /usr/share/OVMF/OVMF_CODE_4M.fd ]]; then
-        OVMF_CODE_PATH='/usr/share/OVMF/OVMF_CODE_4M.fd'
-        OVMF_VARS_PATH='/usr/share/OVMF/OVMF_VARS_4M.fd'
-    fi
+# Prefer system OVMF firmware (matches installed QEMU), fall back to vendored copy
+if [[ -f /usr/share/edk2/ovmf/OVMF_CODE.fd ]]; then
+    OVMF_CODE_PATH='/usr/share/edk2/ovmf/OVMF_CODE.fd'
+    OVMF_VARS_PATH='/usr/share/edk2/ovmf/OVMF_VARS.fd'
+else
+    OVMF_CODE_PATH='/tux2lab/qemu-kvm-manage/ovmf-uefi-firmware/OVMF_CODE.fd'
+    OVMF_VARS_PATH='/tux2lab/qemu-kvm-manage/ovmf-uefi-firmware/OVMF_VARS.fd'
 fi
 
 # Explicitly declare NVRAM template format as raw. Libvirt >= 11.6 defaults
