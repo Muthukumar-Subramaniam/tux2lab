@@ -760,7 +760,7 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     sudo rmdir "$iso_mount_dir" 2>/dev/null || true
 
     # -----------------------------
-    # Post-install: start VM and wait for bootstrap to complete
+    # Post-install: start VM, sync tux2lab, and configure services
     # -----------------------------
     echo
     print_info "OS installation complete. Starting VM for first-boot configuration..."
@@ -794,26 +794,30 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     printf "${MAKE_IT_CYAN}[TASK] Waiting for SSH to become available on ${lab_infra_server_hostname} (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
     print_task_done
 
-    # Wait for bootstrap to complete
-    local max_bootstrap_wait=900  # 15 minutes
-    elapsed=0
-
-    while ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
-        "test -f /opt/tux2lab-bootstrap.done" 2>/dev/null; do
-        if [[ $elapsed -ge $max_bootstrap_wait ]]; then
-            echo
-            print_error "Timed out waiting for bootstrap (${max_bootstrap_wait}s)."
-            print_info "Bootstrap may still be running. Check with:"
-            print_info "  ssh ${lab_infra_admin_username}@${lab_infra_server_ipv4_address} 'journalctl -u tux2lab-bootstrap -f'"
-            exit 1
-        fi
-        printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-        sleep 10
-        elapsed=$((elapsed + 10))
-    done
-    printf "\r\033[K"
-    printf "${MAKE_IT_CYAN}[TASK] Waiting for lab infrastructure bootstrap to complete (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    # -----------------------------
+    # Host-driven setup: rsync tux2lab and configure remotely
+    # -----------------------------
+    print_task "Syncing /tux2lab to infra server VM..."
+    if ! rsync -a --delete -e "ssh $ssh_opts" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
+        print_task_fail
+        print_error "Failed to rsync /tux2lab to VM"
+        exit 1
+    fi
     print_task_done
+
+    print_info "Running setup.sh on infra server VM..."
+    if ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+        "bash /tux2lab/configure-lab-infra-server/setup.sh --invoked-by-automation"; then
+        print_error "setup.sh failed on infra server VM"
+        exit 1
+    fi
+
+    print_info "Configuring Lab Infra Services on infra server VM..."
+    if ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+        "bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh"; then
+        print_error "Lab Infra Services configuration failed on infra server VM"
+        exit 1
+    fi
 
     # Configure DNS resolution on the KVM host to use the lab's DNS server
     print_task "Configuring DNS resolution for labbr0..."

@@ -13,8 +13,20 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 
 # =====================================================================
-# Validate required environment variables from /etc/environment
+# Load environment variables from /etc/environment
 # (Set by setup.sh / deploy-lab-infra-server.sh via dnsbinder)
+# =====================================================================
+if [[ -f /etc/environment ]]; then
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || -z "$value" ]] && continue
+        value="${value%\"}"
+        value="${value#\"}"
+        export "$key=$value"
+    done < /etc/environment
+fi
+
+# =====================================================================
+# Validate required environment variables
 # =====================================================================
 required_env_vars=(
     mgmt_super_user

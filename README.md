@@ -153,7 +153,7 @@ The deploy process (VM mode):
 - Launches the infra server VM via `virt-install` (console output shown live)
 - Waits for OS installation to complete and starts the VM
 - Waits for SSH to become reachable on the new VM
-- Waits for the bootstrap service to finish (clones tux2lab, configures services)
+- Syncs tux2lab to the VM and configures all lab infra services remotely
 - Configures DNS resolution on the KVM host (`resolvectl`)
 - Runs a health check to verify all lab services are up
 
