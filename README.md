@@ -12,6 +12,9 @@ Plenty of open-source alternatives may exist; this project was built out of the
 sheer fun of creating something from scratch and sharing it with anyone who has
 similar interests.
 
+Architecturally, tux2lab is orchestrated by **JBOBS** — *Just a Bunch Of Bash Scripts*.
+No frameworks, no extra languages. Just Bash doing what Bash does best.
+
 > [!WARNING]
 > This project is intended for testing, development, and experimentation purposes only.
 
