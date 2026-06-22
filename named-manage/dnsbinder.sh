@@ -739,11 +739,16 @@ print(ptr)
 
     print_task_done
 
-    # Display success message with dual-stack info if configured
+    # Display success message
     if [[ -n "${v_ipv6_address}" ]]; then
-        print_success "All done! Your domain \"${v_given_domain}\" with dual-stack DNS server IPv4: ${v_primary_ip}, IPv6: ${v_ipv6_address} [ ${v_dns_host_short_name}.${v_given_domain} ] has been configured."
+        print_success "DNS domain \"${v_given_domain}\" configured successfully.
+  Server : ${v_dns_host_short_name}.${v_given_domain}
+  IPv4   : ${v_primary_ip}
+  IPv6   : ${v_ipv6_address}"
     else
-        print_success "All done! Your domain \"${v_given_domain}\" with DNS server ${v_primary_ip} [ ${v_dns_host_short_name}.${v_given_domain} ] has been configured."
+        print_success "DNS domain \"${v_given_domain}\" configured successfully.
+  Server : ${v_dns_host_short_name}.${v_given_domain}
+  IPv4   : ${v_primary_ip}"
     fi
 }
 

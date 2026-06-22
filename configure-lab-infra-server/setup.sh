@@ -5,17 +5,19 @@
 #----------------------------------------------------------------------------------------#
 set -euo pipefail
 
+source /tux2lab/common-utils/color-functions.sh
+
 if [[ "$UID" -eq 0 ]]; then
-    echo -e "\nPlease do not run as root or with sudo, directly run the script from user who has sudo access! \n"
+    print_error "Please do not run as root or with sudo, directly run the script from user who has sudo access!"
     exit 1
 fi
 
-echo -e "\nAdd password-less sudo access for $USER . . . \n"
+print_task "Enabling passwordless sudo for $USER..."
 mgmt_super_user="$USER"
 echo "${mgmt_super_user} ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/${mgmt_super_user}" &>/dev/null
+print_task_done
 
-echo -e "\nSetting up some custom global vars . . .\n"
-
+print_task "Setting up environment variables..."
 if ! grep -q mgmt_super_user /etc/environment;then
     echo "mgmt_super_user=\"${mgmt_super_user}\"" | sudo tee -a /etc/environment &>/dev/null
 fi
@@ -42,13 +44,14 @@ fi
 
 # Backup environment file
 sudo cp -p /etc/environment "/root/environment_bkp_$(date +%F)"
+print_task_done
 
-echo -e "\nSetting up local dns domain with dnsbinder . . .\n"
+print_info "Setting up local DNS domain with dnsbinder..."
 
 input_domain_to_dnsbinder=$(sudo bash -c '[[ -f /root/infra_server_on_qemu_kvm_dnsbinder_domain_provided ]] && cat /root/infra_server_on_qemu_kvm_dnsbinder_domain_provided')
 
 if ! sudo bash /tux2lab/named-manage/dnsbinder.sh --setup "${input_domain_to_dnsbinder}"; then
-    echo -e "\nError: DNS setup failed\n"
+    print_error "DNS setup failed"
     exit 1
 fi
 
@@ -58,10 +61,7 @@ source /etc/environment
 : "${dnsbinder_server_short_name:?Error: dnsbinder did not set server name}"
 : "${dnsbinder_last24_subnet:?Error: dnsbinder did not set subnet}"
 
-# No CNAME aliases needed — single fixed hostname: tux2lab-engine
-
-echo -e "\nSetting motd . . .\n"
-
+print_task "Setting server MOTD..."
 cat << EOF | sudo tee /etc/motd &>/dev/null
 +-------------------------------------------------------------+
 |               Welcome to your Lab Infra Server              |
@@ -75,20 +75,22 @@ cat << EOF | sudo tee /etc/motd &>/dev/null
 | https://github.com/Muthukumar-Subramaniam/tux2lab/issues    |
 +-------------------------------------------------------------+
 EOF
+print_task_done
 
-echo -e "\nReserve Records for DHCP lease DNS (last 99 IPs: .156-.254) . . .\n"
-
+print_task "Reserving DNS records for DHCP leases (${dnsbinder_last24_subnet}.156 - ${dnsbinder_last24_subnet}.254)..."
 dhcp_lease_file="$(mktemp /tmp/dhcp-lease-records.XXXXXXXXXX)"
 for IP in $(seq 156 254); do
     echo "dhcp-lease${IP} ${dnsbinder_last24_subnet}.${IP}" >> "$dhcp_lease_file"
 done
-if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --inline "$dhcp_lease_file"; then
-    echo -e "\nWarning: Some DHCP lease DNS records may have failed to create.\n"
+if ! sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --inline "$dhcp_lease_file" &>/dev/null; then
+    print_task_fail
+    print_warning "Some DHCP lease DNS records may have failed to create."
+else
+    print_task_done
 fi
 rm -f "$dhcp_lease_file"
 
-echo -e "\nUpdate Network Interface to conventional naming . . .\n"
-
+print_task "Configuring network interface naming..."
 if ! ip link | grep -q eth0; then
 
     sudo mkdir -p /etc/systemd/network
@@ -124,29 +126,28 @@ if ! ip link | grep -q eth0; then
     sudo cp -a /root/system-connections/. /etc/NetworkManager/system-connections/. 2>/dev/null || true
 
     sudo rm -rf /etc/NetworkManager/system-connections/orig-during-install
+    print_task_done
+else
+    print_task_skip
 fi
 
-echo -e "\nHandling SELinux . . .\n"
-
+print_task "Handling SELinux..."
 if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
     if [[ "${1:-}" == "--invoked-by-automation" ]]; then
         # VM mode: disable permanently (disposable lab VM)
         sudo setenforce 0 2>/dev/null || true
         sudo grubby --update-kernel ALL --args selinux=0
-        echo "SELinux disabled permanently."
     else
         # Host mode: SELinux stays enforcing, contexts applied by configure script
-        echo "SELinux is active (Enforcing). Targeted contexts will be applied during configuration."
+        true
     fi
-else
-    echo "SELinux is already disabled."
 fi
+print_task_done
 
-echo -e "\nRemove crashkernel memory reserve if present . . .\n"
-
-sudo grubby --update-kernel ALL --remove-args=crashkernel
+print_task "Removing crashkernel memory reserve..."
+sudo grubby --update-kernel ALL --remove-args=crashkernel &>/dev/null || true
+print_task_done
 
 if [[ "${1:-}" != "--invoked-by-automation" ]]; then
-    echo -e "\nPlease reboot the server if you did not face any issue with setup script ! \n"
-    echo -e "\nAfter Reboot you can run configure-lab-infra-server.sh to setup the system ! \n"
+    print_info "Please reboot the server, then run configure-lab-infra-server.sh to complete setup."
 fi

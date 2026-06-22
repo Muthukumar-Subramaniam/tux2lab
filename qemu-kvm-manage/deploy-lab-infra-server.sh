@@ -775,11 +775,11 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     fi
 
     # Wait for SSH to become reachable
-    local ssh_opts="-i ${HOME}/.ssh/tux2lab_id_rsa -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
+    local ssh_opts=(-i "${HOME}/.ssh/tux2lab_id_rsa" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
     local max_ssh_wait=300  # 5 minutes
     local elapsed=0
 
-    while ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" true 2>/dev/null; do
+    while ! ssh "${ssh_opts[@]}" "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" true 2>/dev/null; do
         if [[ $elapsed -ge $max_ssh_wait ]]; then
             echo
             print_error "Timed out waiting for SSH (${max_ssh_wait}s). VM may still be booting."
@@ -798,22 +798,20 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     # Host-driven setup: rsync tux2lab and configure remotely
     # -----------------------------
     print_task "Syncing /tux2lab to infra server VM..."
-    if ! rsync -a --delete --exclude='.git' -e "ssh $ssh_opts" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
+    if ! rsync -a --delete --exclude='.git' -e "ssh ${ssh_opts[*]}" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
         print_task_fail
         print_error "Failed to rsync /tux2lab to VM"
         exit 1
     fi
     print_task_done
 
-    print_info "Running setup.sh on infra server VM..."
-    if ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+    if ! ssh "${ssh_opts[@]}" "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
         "bash /tux2lab/configure-lab-infra-server/setup.sh --invoked-by-automation"; then
         print_error "setup.sh failed on infra server VM"
         exit 1
     fi
 
-    print_info "Configuring Lab Infra Services on infra server VM..."
-    if ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+    if ! ssh "${ssh_opts[@]}" "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
         "bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh"; then
         print_error "Lab Infra Services configuration failed on infra server VM"
         exit 1
