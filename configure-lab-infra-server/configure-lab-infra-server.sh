@@ -164,6 +164,10 @@ server {
     autoindex_localtime on;
     include /etc/nginx/mime.types;
     default_type text/plain;
+
+    location /dnsbinder-managed-zone-files/ {
+        return 404;
+    }
 }
 
 server {
@@ -184,6 +188,10 @@ server {
     autoindex_localtime on;
     include /etc/nginx/mime.types;
     default_type text/plain;
+
+    location /dnsbinder-managed-zone-files/ {
+        return 404;
+    }
 }
 EOF
     print_task_done
