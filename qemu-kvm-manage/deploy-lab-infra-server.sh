@@ -715,7 +715,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 User=$(whoami)
-ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStart=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 
 [Install]
 WantedBy=multi-user.target
@@ -1156,7 +1156,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 User=$(whoami)
-ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStart=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 
 [Install]
 WantedBy=multi-user.target
