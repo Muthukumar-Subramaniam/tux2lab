@@ -266,9 +266,9 @@ if ${lab_infra_server_mode_is_host:-false}; then
     fi
 
     # Wipe DNS zones and dnsbinder state (so rebuild runs full setup path)
-    if [[ -d /tux2lab-data/dnsbinder-managed-zone-files ]]; then
+    if [[ -d /var/named/dnsbinder-managed-zone-files ]]; then
         print_task "Wiping DNS zone files..."
-        sudo rm -rf /tux2lab-data/dnsbinder-managed-zone-files
+        sudo rm -rf /var/named/dnsbinder-managed-zone-files
         print_task_done
     fi
     if [[ -d /tux2lab-data/.dnsbinder-zone.lock ]]; then

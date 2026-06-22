@@ -165,9 +165,6 @@ server {
     include /etc/nginx/mime.types;
     default_type text/plain;
 
-    location /dnsbinder-managed-zone-files/ {
-        return 404;
-    }
 }
 
 server {
@@ -188,10 +185,6 @@ server {
     autoindex_localtime on;
     include /etc/nginx/mime.types;
     default_type text/plain;
-
-    location /dnsbinder-managed-zone-files/ {
-        return 404;
-    }
 }
 EOF
     print_task_done
@@ -199,12 +192,7 @@ EOF
     # Apply SELinux contexts for nginx before starting (if SELinux is active)
     if command -v getenforce &>/dev/null && [[ "$(getenforce 2>/dev/null)" != "Disabled" ]]; then
         print_task "Applying SELinux contexts for web content..."
-        # Apply httpd_sys_content_t to /tux2lab-data (skip zone files — named needs named_zone_t)
-        sudo chcon -t httpd_sys_content_t /tux2lab-data &>/dev/null || true
-        for dir in /tux2lab-data/*/; do
-            [[ "$dir" == "/tux2lab-data/dnsbinder-managed-zone-files/" ]] && continue
-            sudo chcon -R -t httpd_sys_content_t "$dir" &>/dev/null || true
-        done
+        sudo chcon -R -t httpd_sys_content_t /tux2lab-data &>/dev/null || true
         # Also label /tux2lab source (bind-mounted into /tux2lab-data/tux2lab)
         sudo chcon -R -t httpd_sys_content_t /tux2lab &>/dev/null || true
         sudo setsebool -P httpd_use_nfs on &>/dev/null || true
@@ -214,8 +202,6 @@ EOF
                 sudo semanage fcontext -m -t httpd_sys_content_t '/tux2lab-data(/.*)?' &>/dev/null || true
             sudo semanage fcontext -a -t httpd_sys_content_t '/tux2lab(/.*)?' &>/dev/null || \
                 sudo semanage fcontext -m -t httpd_sys_content_t '/tux2lab(/.*)?' &>/dev/null || true
-            sudo semanage fcontext -a -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || \
-                sudo semanage fcontext -m -t named_zone_t '/tux2lab-data/dnsbinder-managed-zone-files(/.*)?' &>/dev/null || true
         fi
         print_task_done
     fi
