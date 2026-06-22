@@ -426,9 +426,37 @@ if [[ "$host_mode_detected" == "true" ]]; then
         ((++skipped_steps))
     fi
 
+    print_task "Removing DNS zone files..."
+    if [[ -d /var/named/dnsbinder-managed-zone-files ]]; then
+        sudo rm -rf /var/named/dnsbinder-managed-zone-files
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
+
     print_task "Removing tux2lab variables from /etc/environment..."
     if grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
         sudo sed -i '/^dnsbinder_/d; /^mgmt_super_user/d; /^mgmt_interface_name/d' /etc/environment
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
+
+    print_task "Removing CLI symlinks..."
+    sudo rm -f /usr/sbin/dnsbinder /usr/local/bin/ksmanager /usr/local/bin/prepare-distro-for-ksmanager
+    print_task_done
+    ((++completed_steps))
+
+    print_task "Removing SSL certificates..."
+    if [[ -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key ]] || [[ -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key
+        sudo rm -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt
+        sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-trust 2>/dev/null || true
         print_task_done
         ((++completed_steps))
     else

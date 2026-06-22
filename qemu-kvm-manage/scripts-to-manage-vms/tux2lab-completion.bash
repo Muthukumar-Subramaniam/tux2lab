@@ -15,7 +15,7 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Top-level commands
-    local commands="vm golden-image distro ipv6-route deploy destroy rebuild start stop enable disable health dns version"
+    local commands="vm golden-image distro ipv6-route deploy destroy rebuild sync start stop enable disable health dns version"
 
     # Top-level options
     local options="-h --help -v --version"

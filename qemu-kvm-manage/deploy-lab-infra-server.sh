@@ -715,7 +715,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 User=$(whoami)
-ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStart=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 
 [Install]
 WantedBy=multi-user.target
@@ -760,7 +760,7 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     sudo rmdir "$iso_mount_dir" 2>/dev/null || true
 
     # -----------------------------
-    # Post-install: start VM and wait for bootstrap to complete
+    # Post-install: start VM, sync tux2lab, and configure services
     # -----------------------------
     echo
     print_info "OS installation complete. Starting VM for first-boot configuration..."
@@ -775,11 +775,11 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     fi
 
     # Wait for SSH to become reachable
-    local ssh_opts="-i ${HOME}/.ssh/tux2lab_id_rsa -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
+    local ssh_opts=(-i "${HOME}/.ssh/tux2lab_id_rsa" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
     local max_ssh_wait=300  # 5 minutes
     local elapsed=0
 
-    while ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" true 2>/dev/null; do
+    while ! ssh "${ssh_opts[@]}" "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" true 2>/dev/null; do
         if [[ $elapsed -ge $max_ssh_wait ]]; then
             echo
             print_error "Timed out waiting for SSH (${max_ssh_wait}s). VM may still be booting."
@@ -794,26 +794,28 @@ nvram="${VM_DIR}/${lab_infra_server_hostname}_VARS.fd",menu=on \
     printf "${MAKE_IT_CYAN}[TASK] Waiting for SSH to become available on ${lab_infra_server_hostname} (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
     print_task_done
 
-    # Wait for bootstrap to complete
-    local max_bootstrap_wait=900  # 15 minutes
-    elapsed=0
-
-    while ! ssh $ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
-        "test -f /opt/tux2lab-bootstrap.done" 2>/dev/null; do
-        if [[ $elapsed -ge $max_bootstrap_wait ]]; then
-            echo
-            print_error "Timed out waiting for bootstrap (${max_bootstrap_wait}s)."
-            print_info "Bootstrap may still be running. Check with:"
-            print_info "  ssh ${lab_infra_admin_username}@${lab_infra_server_ipv4_address} 'journalctl -u tux2lab-bootstrap -f'"
-            exit 1
-        fi
-        printf "\r${MAKE_IT_MAGENTA}[INFO] Waiting for lab infrastructure bootstrap to complete [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-        sleep 10
-        elapsed=$((elapsed + 10))
-    done
-    printf "\r\033[K"
-    printf "${MAKE_IT_CYAN}[TASK] Waiting for lab infrastructure bootstrap to complete (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
+    # -----------------------------
+    # Host-driven setup: rsync tux2lab and configure remotely
+    # -----------------------------
+    print_task "Syncing /tux2lab to infra server VM..."
+    if ! rsync -a --delete --exclude='.git' -e "ssh ${ssh_opts[*]}" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
+        print_task_fail
+        print_error "Failed to rsync /tux2lab to VM"
+        exit 1
+    fi
     print_task_done
+
+    if ! ssh "${ssh_opts[@]}" "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+        "bash /tux2lab/configure-lab-infra-server/setup.sh --invoked-by-automation"; then
+        print_error "setup.sh failed on infra server VM"
+        exit 1
+    fi
+
+    if ! ssh "${ssh_opts[@]}" "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
+        "bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh"; then
+        print_error "Lab Infra Services configuration failed on infra server VM"
+        exit 1
+    fi
 
     # Configure DNS resolution on the KVM host to use the lab's DNS server
     print_task "Configuring DNS resolution for labbr0..."
@@ -1005,7 +1007,7 @@ deploy_lab_infra_server_host() {
         bash-completion vim git bind-utils bind wget tar cifs-utils
         tftp-server kea kea-hooks radvd nginx nginx-mod-stream openssl tmux
         rsync sysstat tcpdump traceroute nc samba-client lsof nfs-utils
-        nmap tuned tree yum-utils python3-pip python3-cryptography
+        nmap tuned tree yum-utils python3-cryptography
     )
 
     # Filter to missing packages only
@@ -1047,54 +1049,6 @@ deploy_lab_infra_server_host() {
         print_task_done
     fi
 
-    # -----------------------------
-    # Install Ansible if not already installed
-    # -----------------------------
-    if command -v ansible &>/dev/null; then
-        print_task "Installing Ansible..."
-        print_task_skip
-    else
-        print_task "Installing Ansible..."
-
-        pkg_log=$(mktemp)
-        if command -v dnf &>/dev/null; then
-            sudo dnf install -y ansible-core &>"$pkg_log" &
-            pkg_pid=$!
-        elif command -v apt-get &>/dev/null; then
-            (sudo apt-get update && sudo apt-get install -y ansible-core) &>"$pkg_log" &
-            pkg_pid=$!
-        else
-            print_task_fail
-            print_error "Unsupported package manager. Cannot install ansible-core."
-            exit 1
-        fi
-
-        elapsed=0
-        while kill -0 "$pkg_pid" 2>/dev/null; do
-            printf "\r${MAKE_IT_CYAN}[TASK] Installing Ansible [%dm %ds]...${RESET_COLOR}\033[K" $((elapsed/60)) $((elapsed%60))
-            sleep 1
-            elapsed=$((elapsed + 1))
-        done
-        wait "$pkg_pid" || {
-            printf "\r\033[K"
-            print_task "Installing Ansible..."
-            print_task_fail
-            print_error "Failed to install Ansible:"
-            cat "$pkg_log"
-            rm -f "$pkg_log"
-            exit 1
-        }
-        rm -f "$pkg_log"
-        printf "\r\033[K"
-        printf "${MAKE_IT_CYAN}[TASK] Installing Ansible (%dm %ds)...${RESET_COLOR}" $((elapsed/60)) $((elapsed%60))
-        print_task_done
-    fi
-
-    if ! ansible-galaxy collection install -r /tux2lab/configure-lab-infra-server/requirements.yml; then
-        print_error "Failed to install Ansible collections"
-        exit 1
-    fi
-
     # ---------------------------
     # Lab Infra DNS configuration
     # ---------------------------
@@ -1102,6 +1056,11 @@ deploy_lab_infra_server_host() {
     if ! sudo bash /tux2lab/named-manage/dnsbinder.sh --setup "${lab_infra_domain_name}"; then
         print_error "Failed to setup DNS with dnsbinder"
         exit 1
+    fi
+
+    # Ensure named is running (dnsbinder --setup skips restart if domain already exists)
+    if ! sudo systemctl is-active --quiet named; then
+        sudo systemctl start named
     fi
 
     # Set mgmt_super_user in environment using lab_infra_admin_username
@@ -1120,7 +1079,7 @@ deploy_lab_infra_server_host() {
             echo "default_linux_distro_iso_path=\"${default_linux_distro_iso_path}\"" | sudo tee -a /etc/environment &>/dev/null
         fi
 
-        # Set infra server distro and version in environment (for Ansible ISO mount)
+        # Set infra server distro and version in environment (for ISO mount)
         if ! grep -q infra_server_distro /etc/environment; then
             echo "infra_server_distro=\"${INFRA_DISTRO}\"" | sudo tee -a /etc/environment &>/dev/null
         fi
@@ -1171,31 +1130,13 @@ deploy_lab_infra_server_host() {
         rm -f "$dhcp_lease_file"
     fi
 
-    print_info "Checking SELinux status..."
-
-    if sestatus 2>/dev/null | grep -q "disabled"; then
-        print_info "SELinux is already disabled."
-    else
-        print_info "Disabling SELinux for current boot and persistently..."
-        # Disable for current boot
-        sudo setenforce 0 2>/dev/null || true
-        # Disable for all future boots
-        sudo grubby --update-kernel ALL --args selinux=0
-        print_success "SELinux has been disabled."
-    fi
-
     # -----------------------------
-    # Ansible playbook execution
+    # Configure Lab Infra Services
     # -----------------------------
 
-    print_info "Executing Ansible playbook to configure Lab Infra Services..."
-
-    export ANSIBLE_REMOTE_USER="${lab_infra_admin_username}"
-    ANSIBLE_HOME="/tux2lab/configure-lab-infra-server/"
-
-    # Run ansible-playbook that configures the essential services
-    if ! ansible-playbook /tux2lab/configure-lab-infra-server/configure-lab-infra-server.yaml; then
-        print_error "Ansible playbook execution failed"
+    # Run the configuration script that sets up all essential services
+    if ! bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh; then
+        print_error "Lab Infra Services configuration failed"
         exit 1
     fi
 
@@ -1213,7 +1154,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 User=$(whoami)
-ExecStart=/tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStart=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 
 [Install]
 WantedBy=multi-user.target

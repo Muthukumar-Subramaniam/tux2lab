@@ -22,7 +22,7 @@ v_tmp_file_dnsbinder="$(mktemp /tmp/dnsbinder.XXXXXXXXXX)"
 
 v_domain_name=$(if [[ -f /etc/named.conf ]];then awk '/zones-are-managed-by-dnsbinder/ {print $2}' /etc/named.conf;fi)
 dnsbinder_network=$(if [[ -f /etc/named.conf ]];then awk '/dnsbinder-network/ {print $3}' /etc/named.conf;fi)
-var_zone_dir='/tux2lab-data/dnsbinder-managed-zone-files'
+var_zone_dir='/var/named/dnsbinder-managed-zone-files'
 v_fw_zone="${var_zone_dir}/${v_domain_name}-forward.db"
 
 #--- File Locking Mechanism (mkdir-based spinlock with PID tracking) ---#
@@ -497,7 +497,7 @@ fn_configure_named_dns_server() {
 //Forward Zone for ${v_given_domain}
 zone "${v_given_domain}" IN {
     type master;
-    file "/tux2lab-data/dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
+    file "/var/named/dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
     allow-update { none; };
 };
 //Reverse Zones
@@ -513,7 +513,7 @@ EOF
         tee -a /etc/named.conf > /dev/null << EOF
 zone "${v_reverse_subnet_part}.in-addr.arpa" IN {
     type master;
-    file "/tux2lab-data/dnsbinder-managed-zone-files/${v_subnet_part}.${v_given_domain}-reverse.db";
+    file "/var/named/dnsbinder-managed-zone-files/${v_subnet_part}.${v_given_domain}-reverse.db";
     allow-update { none; };
 };
 EOF
@@ -541,7 +541,7 @@ EOF
 //IPv6 Reverse Zone
 zone "${v_ipv6_reverse_zone}.ip6.arpa" IN {
     type master;
-    file "/tux2lab-data/dnsbinder-managed-zone-files/${v_given_domain}-ipv6-reverse.db";
+    file "/var/named/dnsbinder-managed-zone-files/${v_given_domain}-ipv6-reverse.db";
     allow-update { none; };
 };
 EOF
@@ -644,6 +644,8 @@ print(ptr)
 
     print_task_done
 
+    chown -R named:named "${var_zone_dir}"
+
     print_task "Enabling and starting named DNS Service..."
 
     systemctl enable --now named &>/dev/null    
@@ -737,11 +739,16 @@ print(ptr)
 
     print_task_done
 
-    # Display success message with dual-stack info if configured
+    # Display success message
     if [[ -n "${v_ipv6_address}" ]]; then
-        print_success "All done! Your domain \"${v_given_domain}\" with dual-stack DNS server IPv4: ${v_primary_ip}, IPv6: ${v_ipv6_address} [ ${v_dns_host_short_name}.${v_given_domain} ] has been configured."
+        print_success "DNS domain \"${v_given_domain}\" configured successfully.
+  Server : ${v_dns_host_short_name}.${v_given_domain}
+  IPv4   : ${v_primary_ip}
+  IPv6   : ${v_ipv6_address}"
     else
-        print_success "All done! Your domain \"${v_given_domain}\" with DNS server ${v_primary_ip} [ ${v_dns_host_short_name}.${v_given_domain} ] has been configured."
+        print_success "DNS domain \"${v_given_domain}\" configured successfully.
+  Server : ${v_dns_host_short_name}.${v_given_domain}
+  IPv4   : ${v_primary_ip}"
     fi
 }
 

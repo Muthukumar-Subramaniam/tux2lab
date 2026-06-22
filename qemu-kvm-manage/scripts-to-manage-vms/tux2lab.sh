@@ -51,6 +51,7 @@ LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
     destroy          Permanently destroy the entire lab environment
     rebuild          Tear down and redeploy lab using existing config
+    sync             Sync /tux2lab from host to infra server VM
 
 OPTIONS:
     -h, --help       Show this help message
@@ -113,6 +114,9 @@ main() {
             ;;
         rebuild)
             exec "$SCRIPT_DIR/rebuild.sh" "$@"
+            ;;
+        sync)
+            exec "$SCRIPT_DIR/sync.sh" "$@"
             ;;
         ipv6-route)
             exec "$SCRIPT_DIR/ipv6-route.sh" "$@"

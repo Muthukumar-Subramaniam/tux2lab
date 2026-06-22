@@ -6,8 +6,8 @@ Before=nginx.service nfs-server.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/tux2lab/common-utils/tux2lab-iso-mounts.sh start
-ExecStop=/tux2lab/common-utils/tux2lab-iso-mounts.sh stop
+ExecStart=/usr/bin/bash /tux2lab/common-utils/tux2lab-iso-mounts.sh start
+ExecStop=/usr/bin/bash /tux2lab/common-utils/tux2lab-iso-mounts.sh stop
 
 [Install]
 WantedBy=multi-user.target
