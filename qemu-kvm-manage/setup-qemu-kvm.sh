@@ -51,8 +51,8 @@ if ! $AUTO_YES; then
         print_info "Setup cancelled by user."
         exit 0
     fi
+    echo ""
 fi
-echo ""
 
 print_task "Enabling passwordless sudo for $USER..."
 cat <<EOF | sudo tee "/etc/sudoers.d/$USER" &>/dev/null
