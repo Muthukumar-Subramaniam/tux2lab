@@ -440,6 +440,19 @@ if [[ "$host_mode_detected" == "true" ]]; then
     sudo rm -f /usr/sbin/dnsbinder /usr/local/bin/ksmanager /usr/local/bin/prepare-distro-for-ksmanager
     print_task_done
     ((++completed_steps))
+
+    print_task "Removing SSL certificates..."
+    if [[ -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key ]] || [[ -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key
+        sudo rm -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt
+        sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-trust 2>/dev/null || true
+        print_task_done
+        ((++completed_steps))
+    else
+        print_task_skip
+        ((++skipped_steps))
+    fi
 fi
 
 # Unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)

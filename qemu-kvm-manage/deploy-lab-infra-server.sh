@@ -1136,8 +1136,6 @@ deploy_lab_infra_server_host() {
     # Configure Lab Infra Services
     # -----------------------------
 
-    print_info "Configuring Lab Infra Services..."
-
     # Run the configuration script that sets up all essential services
     if ! bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh; then
         print_error "Lab Infra Services configuration failed"
