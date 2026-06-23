@@ -701,4 +701,5 @@ if ! $is_host_mode; then
 fi
 setup_pxe_boot
 
-print_success "All Lab Infra Services have been configured successfully."
+local_version=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"' -f4)
+print_success "All Lab Infra Services have been configured successfully (v${local_version})."
