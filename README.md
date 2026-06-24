@@ -87,7 +87,7 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 
 **Guest VMs (each):** 2 GB RAM · 2 vCPUs · 20 GB disk
 
-**KVM Host:** RHEL-based or Ubuntu (hardware virtualization required; host mode is RHEL-based only).
+**KVM Host:** RHEL-based, Ubuntu, or openSUSE (hardware virtualization required; host mode is RHEL-based only).
 
 ---
 

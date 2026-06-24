@@ -63,6 +63,7 @@ print_task_done
 
 REQUIRED_PACKAGES_APT=(qemu-kvm qemu-utils libvirt-daemon-system libvirt-clients python3-requests python3-libxml2 python3-libvirt libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0 ovmf ed git openssl)
 REQUIRED_PACKAGES_DNF=(qemu-kvm qemu-img libvirt libvirt-daemon libvirt-daemon-driver-qemu python3-requests python3-libxml2 python3-libvirt libosinfo python3-gobject gobject-introspection edk2-ovmf ed git openssl)
+REQUIRED_PACKAGES_ZYPPER=(qemu-kvm qemu-tools libvirt libvirt-daemon libvirt-daemon-driver-qemu python3-requests python3-libxml2-python python3-libvirt-python libosinfo typelib-1_0-Libosinfo-1_0 python3-gobject gobject-introspection qemu-ovmf-x86_64 ed git openssl)
 
 # Determine package manager and filter to missing packages only
 if command -v apt-get &>/dev/null; then
@@ -81,10 +82,18 @@ elif command -v dnf &>/dev/null; then
             missing_pkgs+=("$pkg")
         fi
     done
+elif command -v zypper &>/dev/null; then
+    pkg_manager="zypper"
+    missing_pkgs=()
+    for pkg in "${REQUIRED_PACKAGES_ZYPPER[@]}"; do
+        if ! rpm -q "$pkg" &>/dev/null; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
 else
     print_task "Installing required packages..."
     print_task_fail
-    print_error "Unsupported package manager. Only apt-get and dnf are supported."
+    print_error "Unsupported package manager. Only apt-get, dnf, and zypper are supported."
     exit 1
 fi
 
@@ -98,8 +107,11 @@ else
     if [[ "$pkg_manager" == "apt" ]]; then
         (sudo apt-get update && sudo apt-get install -y "${missing_pkgs[@]}") &>"$pkg_log" &
         pkg_pid=$!
-    else
+    elif [[ "$pkg_manager" == "dnf" ]]; then
         sudo dnf install -y "${missing_pkgs[@]}" &>"$pkg_log" &
+        pkg_pid=$!
+    else
+        sudo zypper --non-interactive install "${missing_pkgs[@]}" &>"$pkg_log" &
         pkg_pid=$!
     fi
 
