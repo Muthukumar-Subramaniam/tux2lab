@@ -46,6 +46,7 @@ LAB OPERATIONS:
     enable           Enable lab infrastructure auto-start on boot
     disable          Disable lab infrastructure auto-start on boot
     health           Check lab infrastructure health
+    info             Display lab deployment information
 
 LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
@@ -120,6 +121,9 @@ main() {
             ;;
         ipv6-route)
             exec "$SCRIPT_DIR/ipv6-route.sh" "$@"
+            ;;
+        info)
+            exec "$SCRIPT_DIR/info.sh" "$@"
             ;;
         *)
             print_error "Unknown command: $command"
