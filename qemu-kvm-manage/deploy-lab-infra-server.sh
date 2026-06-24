@@ -1296,6 +1296,14 @@ If you have sufficient resources, consider using VM mode for safer deployment."
                 continue
             fi
             
+            # Host mode is only supported on RHEL-based systems
+            if ! grep -qiE '^ID_LIKE=.*(rhel|fedora)' /etc/os-release 2>/dev/null && \
+               ! grep -qiE '^ID=.*(almalinux|rocky|oracle|centos|rhel|fedora)' /etc/os-release 2>/dev/null; then
+                print_error "Host mode is only supported on RHEL-based systems."
+                print_info "Your system appears to be non-RHEL. Use VM mode instead."
+                exit 1
+            fi
+
             print_info "Confirmed: Lab Infra Server Deployment Mode set to 'HOST'."
             deploy_lab_infra_server_host
             break
