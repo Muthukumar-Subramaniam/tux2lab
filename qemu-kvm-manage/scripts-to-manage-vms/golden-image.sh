@@ -90,9 +90,9 @@ golden_image_list() {
 
         local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
         local disk_size virtual_size size
-        disk_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^disk size:/ {print $3, $4; exit}')
+        disk_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^disk size:/ {print $3, $4; exit}' || true)
         disk_size="${disk_size:-?}"
-        virtual_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^virtual size:/ {print $3, $4; exit}')
+        virtual_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^virtual size:/ {print $3, $4; exit}' || true)
         virtual_size="${virtual_size:-?}"
         size="${disk_size} / ${virtual_size}"
         local created
