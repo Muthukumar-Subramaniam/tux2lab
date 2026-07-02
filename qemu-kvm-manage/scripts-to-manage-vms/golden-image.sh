@@ -2,7 +2,7 @@
 #----------------------------------------------------------------------------------------#
 # Script Name: golden-image.sh                                                           #
 # Description: Manage golden image disks for OS provisioning                             #
-# Invoked by : tux2lab golden-image {build|list|cleanup}                                #
+# Invoked by : tux2lab golden-image {build|rebuild|list|cleanup}                         #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
@@ -21,10 +21,11 @@ show_golden_image_help() {
 
 SUBCOMMANDS:
     build [distro] [OPTIONS]    Build a golden image by installing a VM via PXE boot
+    rebuild [distro] [OPTIONS]  Remove and rebuild an existing golden image
     list                        List all available golden images
     cleanup [distro] [OPTIONS]  Remove golden image(s)
 
-BUILD/CLEANUP OPTIONS:
+BUILD/REBUILD/CLEANUP OPTIONS:
     -v, --version <ver>     Specify OS version number
 
 CLEANUP OPTIONS:
@@ -38,6 +39,7 @@ EXAMPLES:
     tux2lab golden-image build                             # Interactive mode
     tux2lab golden-image build almalinux --version 10      # Non-interactive mode
     tux2lab golden-image build almalinux -v 10             # Short form
+    tux2lab golden-image rebuild almalinux -v 9            # Rebuild existing golden image
     tux2lab golden-image cleanup                            # Interactive cleanup
     tux2lab golden-image cleanup almalinux --version 10    # Remove specific golden image
     tux2lab golden-image cleanup rocky -v 9 --force        # Remove without confirmation"
@@ -309,6 +311,183 @@ golden_image_cleanup() {
     print_success "Golden image cleanup complete."
 }
 
+# ====== REBUILD ======
+
+show_rebuild_help() {
+    print_cyan "Usage: tux2lab golden-image rebuild [distro] [OPTIONS]
+Description:
+    Remove an existing golden image and rebuild it from scratch.
+    Equivalent to running cleanup --force followed by build.
+
+Options:
+    -v, --version <ver>     Specify OS version number
+    -h, --help              Show this help message
+
+Examples:
+    tux2lab golden-image rebuild                           # Interactive (pick from existing images)
+    tux2lab golden-image rebuild almalinux --version 9     # Rebuild specific golden image
+    tux2lab golden-image rebuild rocky -v 10               # Short form
+"
+}
+
+golden_image_rebuild() {
+    local rebuild_distro=""
+    local rebuild_version=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v|--version)
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                    print_error "--version/-v requires a version number."
+                    show_rebuild_help
+                    exit 1
+                fi
+                rebuild_version="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_rebuild_help
+                exit 0
+                ;;
+            -*)
+                print_error "Unknown option: $1"
+                show_rebuild_help
+                exit 1
+                ;;
+            *)
+                if [[ -z "$rebuild_distro" ]]; then
+                    rebuild_distro="$1"
+                else
+                    print_error "Unexpected argument: $1"
+                    show_rebuild_help
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Non-interactive mode: distro and version specified
+    if [[ -n "$rebuild_distro" ]]; then
+        if [[ -z "${DISTRO_DISPLAY_NAMES[$rebuild_distro]:-}" ]]; then
+            print_error "Unknown distribution: $rebuild_distro"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap"
+            exit 1
+        fi
+        if [[ -z "$rebuild_version" ]]; then
+            print_error "--version/-v is required when distro is specified."
+            show_rebuild_help
+            exit 1
+        fi
+        local valid_versions="${DISTRO_AVAILABLE_VERSIONS[$rebuild_distro]}"
+        local ver_found=false
+        for v in $valid_versions; do
+            if [[ "$v" == "$rebuild_version" ]]; then
+                ver_found=true
+                break
+            fi
+        done
+        if [[ "$ver_found" != true ]]; then
+            print_error "Invalid version '$rebuild_version' for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]}."
+            print_info "Available versions: $valid_versions"
+            exit 1
+        fi
+
+        local version_dashed="${rebuild_version//./-}"
+        local pattern="${GOLDEN_IMAGE_DIR}/${rebuild_distro}-${version_dashed}-golden-image.*.qcow2"
+        local -a matched_files=()
+        for f in $pattern; do
+            [[ -e "$f" ]] && matched_files+=("$f")
+        done
+        if [[ ${#matched_files[@]} -eq 0 ]]; then
+            print_error "No existing golden image found for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}."
+            print_info "Use 'tux2lab golden-image build' to create a new one."
+            exit 1
+        fi
+
+        print_info "Rebuilding golden image: ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}"
+        for f in "${matched_files[@]}"; do
+            local base
+            base=$(basename "$f" .qcow2)
+            print_task "Removing existing golden image: ${base}..."
+            sudo rm -f "$f"
+            sudo rm -f "${GOLDEN_IMAGE_DIR}/${base}_VARS.fd"
+            print_task_done
+        done
+
+        exec "${SCRIPT_DIR}/kvm-build-golden-image.sh" "$rebuild_distro" --version "$rebuild_version"
+    fi
+
+    # Interactive mode: pick from existing images
+    if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
+        print_info "No golden images found. Nothing to rebuild."
+        print_info "Use 'tux2lab golden-image build' to create a new one."
+        return 0
+    fi
+
+    local -a image_files=()
+    local -a image_distros=()
+    local -a image_versions=()
+    local -a image_labels=()
+    for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
+        local filename
+        filename=$(basename "$qcow2_file" .qcow2)
+        local prefix distro version
+        prefix="${filename%%-golden-image.*}"
+        distro="$prefix"
+        version="unknown"
+        for known_distro in "${!DISTRO_DISPLAY_NAMES[@]}"; do
+            if [[ "$prefix" == "${known_distro}-"* ]]; then
+                distro="$known_distro"
+                local version_raw="${prefix#${known_distro}-}"
+                version="${version_raw//-/.}"
+                break
+            fi
+        done
+        local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
+
+        image_files+=("$qcow2_file")
+        image_distros+=("$distro")
+        image_versions+=("$version")
+        image_labels+=("${display_name} ${version}")
+    done
+
+    local menu="Select golden image to rebuild:\n"
+    for i in "${!image_labels[@]}"; do
+        printf -v line "  %d)  %s\n" $((i+1)) "${image_labels[$i]}"
+        menu+="${line}"
+    done
+    menu+="  q)  Quit"
+
+    print_notify "$menu"
+    echo -n "Enter option number: "
+    read -r choice
+
+    if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+        print_info "Operation cancelled by user."
+        exit 0
+    fi
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#image_files[@]} )); then
+        local selected_file="${image_files[$((choice-1))]}"
+        local selected_distro="${image_distros[$((choice-1))]}"
+        local selected_version="${image_versions[$((choice-1))]}"
+        local base
+        base=$(basename "$selected_file" .qcow2)
+
+        print_info "Rebuilding golden image: ${image_labels[$((choice-1))]}"
+        print_task "Removing existing golden image: ${base}..."
+        sudo rm -f "$selected_file"
+        sudo rm -f "${GOLDEN_IMAGE_DIR}/${base}_VARS.fd"
+        print_task_done
+
+        exec "${SCRIPT_DIR}/kvm-build-golden-image.sh" "$selected_distro" --version "$selected_version"
+    else
+        print_error "Invalid option."
+        exit 1
+    fi
+}
+
 # ====== BUILD ======
 
 golden_image_build() {
@@ -328,6 +507,9 @@ shift
 case "$subcommand" in
     build|create)
         golden_image_build "$@"
+        ;;
+    rebuild)
+        golden_image_rebuild "$@"
         ;;
     list)
         if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
