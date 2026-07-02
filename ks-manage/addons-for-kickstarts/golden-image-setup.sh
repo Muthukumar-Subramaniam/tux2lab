@@ -14,6 +14,7 @@ truncate -s 0 /etc/machine-id
 # 2. Clear hostname so deployed VMs don't boot with golden image name
 echo "Clearing hostname..." | tee -a "$LOG"
 truncate -s 0 /etc/hostname
+rm -f /etc/sysctl.d/hostname.conf 2>>"$LOG"
 
 # 3. Remove SSH host keys and disable SSH service
 echo "Removing SSH host keys..." | tee -a "$LOG"
