@@ -447,7 +447,7 @@ case "${DISTRO_FAMILY}" in
 esac
 
 log "Running lab rootfs extender"
-if ! curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/lab-rootfs-extender" | bash -s -- localhost; then
+if ! curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/lab-rootfs-extender" | bash -s -- localhost --lab-infra-host=get_lab_infra_server_hostname; then
 	log "WARNING: Lab rootfs extender failed, continuing anyway"
 fi
 

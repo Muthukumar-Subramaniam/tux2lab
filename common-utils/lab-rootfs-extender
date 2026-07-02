@@ -5,7 +5,7 @@
 #----------------------------------------------------------------------------------------#
 # lab-rootfs-extender
 # Usage:
-#   ./lab-rootfs-extender [remote-host/localhost]
+#   ./lab-rootfs-extender [remote-host/localhost] [--lab-infra-host=<hostname>]
 # This script is self-contained — no NFS or external file dependencies.
 
 set -euo pipefail
@@ -32,7 +32,19 @@ SSH_OPTS=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/d
 # ----------------------
 # Prompt for hostname if not passed
 # ----------------------
-REMOTE_HOST="${1:-}"
+REMOTE_HOST=""
+LAB_INFRA_SERVER=""
+
+for arg in "$@"; do
+    case "$arg" in
+        --lab-infra-host=*)
+            LAB_INFRA_SERVER="${arg#--lab-infra-host=}"
+            ;;
+        *)
+            [[ -z "$REMOTE_HOST" ]] && REMOTE_HOST="$arg"
+            ;;
+    esac
+done
 
 if [[ -z "$REMOTE_HOST" ]]; then
     read -rp "Enter remote hostname [default: localhost]: " REMOTE_HOST
@@ -52,7 +64,9 @@ if [[ "$REMOTE_HOST" != "localhost" ]]; then
     fi
     print_task_done
 
-    ssh "${SSH_OPTS[@]}" -t "$REMOTE_HOST" "sudo bash -s -- localhost" < "${BASH_SOURCE[0]}"
+    local ssh_args="localhost"
+    [[ -n "$LAB_INFRA_SERVER" ]] && ssh_args="$ssh_args --lab-infra-host=${LAB_INFRA_SERVER}"
+    ssh "${SSH_OPTS[@]}" -t "$REMOTE_HOST" "sudo bash -s -- ${ssh_args}" < "${BASH_SOURCE[0]}"
     exit $?
 fi
 
@@ -71,22 +85,22 @@ fn_get_growpart() {
     fi
     print_task_skip
 
-    # Determine lab infra server hostname from DNS domain
-    local infra_server
-    infra_server=$(hostname -d 2>/dev/null | sed 's/^/tux2lab-engine./')
-
-    print_task "Downloading growpart from lab infra server..."
-    local tmp_growpart
-    tmp_growpart=$(mktemp)
-    if [[ -n "$infra_server" ]] && curl -fsSL -o "$tmp_growpart" "http://${infra_server}/tux2lab/common-utils/growpart" 2>/dev/null; then
-        sudo mv "$tmp_growpart" /usr/bin/growpart
-        sudo chmod +x /usr/bin/growpart
-        print_task_done
-        return 0
+    # Try lab infra server first (if provided as argument)
+    if [[ -n "$LAB_INFRA_SERVER" ]]; then
+        print_task "Downloading growpart from lab infra server..."
+        local tmp_growpart
+        tmp_growpart=$(mktemp)
+        if curl -fsSL -o "$tmp_growpart" "http://${LAB_INFRA_SERVER}/tux2lab/common-utils/growpart" 2>/dev/null; then
+            sudo mv "$tmp_growpart" /usr/bin/growpart
+            sudo chmod +x /usr/bin/growpart
+            print_task_done
+            return 0
+        fi
+        rm -f "$tmp_growpart"
+        print_task_fail
     fi
-    rm -f "$tmp_growpart"
-    print_task_fail
 
+    # Fallback: download from official repository
     print_task "Downloading growpart from official repository..."
     tmp_growpart=$(mktemp)
     if curl -fsSL -o "$tmp_growpart" https://raw.githubusercontent.com/canonical/cloud-utils/main/bin/growpart 2>/dev/null; then
