@@ -27,7 +27,7 @@ _tux2lab_completions() {
     local distro_subcommands="list setup cleanup download-infra-iso"
 
     # Golden image subcommands
-    local golden_image_subcommands="build create list cleanup"
+    local golden_image_subcommands="build create rebuild list cleanup"
 
     # IPv6 route subcommands
     local ipv6_route_subcommands="enable disable check auto status"
@@ -288,8 +288,8 @@ _tux2lab_completions() {
 
         local gi_subcmd="${COMP_WORDS[2]}"
 
-        # Complete distro names as positional argument for build/cleanup
-        if [[ "${gi_subcmd}" == "build" || "${gi_subcmd}" == "create" || "${gi_subcmd}" == "cleanup" ]]; then
+        # Complete distro names as positional argument for build/cleanup/rebuild
+        if [[ "${gi_subcmd}" == "build" || "${gi_subcmd}" == "create" || "${gi_subcmd}" == "cleanup" || "${gi_subcmd}" == "rebuild" ]]; then
             local gi_opts="-v --version -h --help"
             [[ "${gi_subcmd}" == "cleanup" ]] && gi_opts="-v --version -f --force -h --help"
             # Offer versions after -v/--version
