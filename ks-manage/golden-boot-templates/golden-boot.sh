@@ -111,6 +111,17 @@ EOF
 log "Applying sysctl settings"
 sysctl --system > /dev/null 2>&1
 
+log "Restarting syslog daemon to pick up new hostname"
+if systemctl is-active --quiet rsyslog.service; then
+	systemctl restart rsyslog.service
+	log "rsyslog restarted successfully"
+elif systemctl is-active --quiet syslog.service; then
+	systemctl restart syslog.service
+	log "syslog restarted successfully"
+else
+	log "No traditional syslog daemon active (journald handles hostname natively)"
+fi
+
 # Distro-specific network cleanup and configuration
 case "${DISTRO_FAMILY}" in
 	redhat)

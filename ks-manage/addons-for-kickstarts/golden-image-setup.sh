@@ -11,6 +11,10 @@ echo -e "\nGolden Image Cleanup Started: $(date)\n" | tee -a "$LOG"
 echo "Clearing machine-id..." | tee -a "$LOG"
 truncate -s 0 /etc/machine-id
 
+# 2. Clear hostname so deployed VMs don't boot with golden image name
+echo "Clearing hostname..." | tee -a "$LOG"
+truncate -s 0 /etc/hostname
+
 # 2. Remove SSH host keys and disable SSH service
 echo "Removing SSH host keys..." | tee -a "$LOG"
 rm -f /etc/ssh/ssh_host_* 2>>"$LOG"
