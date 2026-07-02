@@ -76,12 +76,15 @@ echo "Bringing down eth0 interface..." | tee -a "$LOG"
 ip link set dev eth0 down
 
 # 9. Touch a file to mark completion of this script
-touch /root/golden-image-setup-completed 
+touch /root/golden-image-setup-completed
 
-# 10. Truncate all log files under /var/log (done last so no stale hostname messages persist)
+# 10. Stop syslog to prevent buffered messages from being written after truncation
+systemctl stop rsyslog 2>/dev/null || true
+
+# 11. Truncate all log files under /var/log
 find /var/log -type f -exec truncate -s 0 {} \;
 
-# 11. Clear journald persistent logs
+# 12. Clear journald persistent logs
 rm -rf /var/log/journal/*
 
 # 13. Final shutdown
