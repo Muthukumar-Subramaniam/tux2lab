@@ -36,7 +36,7 @@ echo "Removing NetworkManager system connections..." | tee -a "$LOG"
 if grep -qi "rhel" /etc/os-release; then
 	rm -f /etc/NetworkManager/system-connections/* 2>>"$LOG"
 elif grep -qi "debian" /etc/os-release; then
-	rm -f /etc/netplan/* 2>>"$LOG"
+	rm -rf /etc/netplan/* 2>>"$LOG"
 	cat << EOF > /etc/netplan/50-golden-boot-dhcp.yaml
 network:
     version: 2
