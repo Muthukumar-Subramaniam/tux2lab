@@ -811,9 +811,13 @@ fn_select_os_distro() {
                 os_distribution="opensuse-leap"
                 print_info "OS distribution selected via --distro flag: ${os_distribution}"
                 ;;
+            azurelinux|azure) 
+                os_distribution="azurelinux"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
             *)
                 print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
-                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap"
+                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap, azurelinux"
                 exit 1
                 ;;
         esac
@@ -1127,6 +1131,8 @@ elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     fi
     # Extract just the version number (e.g., "15.6" from "openSUSE Leap 15.6")
     opensuse_version_number=$(printf '%s\n' "$os_name_and_version" | grep -oP '[0-9]+\.[0-9]+' | head -n 1 || true)
+elif [[ "${os_distribution}" == "azurelinux" ]]; then
+    os_name_and_version="Azure Linux ${version}"
 else
     redhat_based_distro_name="${os_distribution}"
     if [[ "${os_distribution}" == "centos-stream" ]]; then
@@ -1180,6 +1186,12 @@ if ! $invoked_with_golden_image; then
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
         if ! rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
             print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
+    elif [[ "${os_distribution}" == "azurelinux" ]]; then
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/azurelinux-${version}-ks.cfg" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy kickstart template for azurelinux-${version}"
             fn_release_host_lock
             exit 1
         fi
@@ -1255,6 +1267,8 @@ fn_generate_post_install_script() {
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-ubuntu.sh.template"
     elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-opensuse.sh.template"
+    elif [[ "${os_distribution}" == "azurelinux" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-azurelinux.sh.template"
     else
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-redhat.sh.template"
     fi
@@ -1396,6 +1410,7 @@ fn_set_environment() {
 if ! $invoked_with_golden_image; then
 
     fn_set_environment "${host_kickstart_dir}"
+
     mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
 
     if [[ -z "${redhat_based_distro_name}" ]]; then
@@ -1406,6 +1421,8 @@ if ! $invoked_with_golden_image; then
             if [[ "${local_major_version}" -ge 16 ]]; then
                 local_ipxe_template="ipxe-template-opensuse-leap-16.ipxe"
             fi
+        elif [[ "${os_distribution}" == "azurelinux" ]]; then
+            local_ipxe_template="ipxe-template-azurelinux-4.ipxe"
         fi
         if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/${local_ipxe_template}"  "${mac_based_ipxe_cfg_file}"; then
             print_error "Failed to copy iPXE template for ${os_distribution}"

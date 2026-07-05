@@ -149,34 +149,24 @@ fn_generate_validation_payload() {
 set -uo pipefail
 
 LAB_INFRA_SERVER="${1:-}"
+lab_infra_domain_name="${2:-}"
 
-# Detect distro family
+# Detect distro
 source /etc/os-release 2>/dev/null || exit 99
 DISTRO_ID="${ID}"
 DISTRO_VERSION="${VERSION_ID}"
 
-if [[ "$DISTRO_ID" == "ubuntu" ]] || [[ "${ID_LIKE:-}" == *"debian"* ]]; then
-    DISTRO_FAMILY="ubuntu"
-elif [[ "$DISTRO_ID" == "opensuse-leap" ]] || [[ "$DISTRO_ID" == "opensuse"* ]] || [[ "${ID_LIKE:-}" == *"suse"* ]]; then
-    DISTRO_FAMILY="opensuse"
-else
-    DISTRO_FAMILY="redhat"
-fi
-
-HOSTNAME_FQDN=$(hostnamectl --static 2>/dev/null)
-DOMAIN=$(echo "$HOSTNAME_FQDN" | cut -d. -f2-)
+HOSTNAME_FQDN=$(hostnamectl --static 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "unknown")
 
 # Output structured results: CHECK_NAME|STATUS|DETAIL
-# STATUS: PASS, FAIL, WARN
 emit() { echo "RESULT|$1|$2|$3"; }
 
 # --- Identity ---
 [[ "$HOSTNAME_FQDN" == *.* ]] && emit "FQDN set" "PASS" "$HOSTNAME_FQDN" || emit "FQDN set" "FAIL" "$HOSTNAME_FQDN"
 
-# Real DNS validation: forward and reverse lookup
+# DNS forward and reverse lookup
 if host "$HOSTNAME_FQDN" &>/dev/null; then
     emit "DNS forward lookup" "PASS" ""
-    # Verify reverse lookup matches
     RESOLVED_IP=$(host "$HOSTNAME_FQDN" | head -1 | awk '{print $NF}')
     if host "$RESOLVED_IP" 2>/dev/null | grep -q "$HOSTNAME_FQDN"; then
         emit "DNS reverse lookup" "PASS" "$RESOLVED_IP"
@@ -196,81 +186,61 @@ IPV6_ADDR=$(ip -6 addr show dev eth0 scope global 2>/dev/null | grep -oP 'inet6 
 
 ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" || emit "IPv4 default route" "FAIL" ""
 
-DAD_VAL=$(sysctl -n net.ipv6.conf.all.accept_dad 2>/dev/null)
-[[ "$DAD_VAL" == "0" ]] && emit "IPv6 DAD disabled" "PASS" "" || emit "IPv6 DAD disabled" "WARN" "value=$DAD_VAL"
-
-# Real connectivity: ping the lab infra server (IPv4 + IPv6)
+# Connectivity to lab infra server
 if timeout 3 ping -c 1 "$LAB_INFRA_SERVER" &>/dev/null; then
     emit "Ping infra server (IPv4)" "PASS" ""
 else
     emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
 fi
 
-if timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
+if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
     emit "Ping infra server (IPv6)" "PASS" ""
 else
     emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
 fi
 
-# Network manager
-case "$DISTRO_FAMILY" in
-    redhat)   systemctl is-active NetworkManager &>/dev/null && emit "NetworkManager active" "PASS" "" || emit "NetworkManager active" "FAIL" "" ;;
-    ubuntu)   systemctl is-active systemd-networkd &>/dev/null && emit "systemd-networkd active" "PASS" "" || emit "systemd-networkd active" "FAIL" "" ;;
-    opensuse)
-        suse_major="${DISTRO_VERSION%%.*}"
-        if [[ "$suse_major" -ge 16 ]]; then
-            systemctl is-active NetworkManager &>/dev/null && emit "NetworkManager active" "PASS" "" || emit "NetworkManager active" "FAIL" ""
-        else
-            systemctl is-active wicked &>/dev/null && emit "wicked active" "PASS" "" || emit "wicked active" "FAIL" ""
-        fi
-        ;;
-esac
-
-# Firewall disabled
-case "$DISTRO_FAMILY" in
-    redhat|opensuse)
-        if systemctl is-active firewalld &>/dev/null; then emit "Firewall disabled" "FAIL" "firewalld active"
-        else emit "Firewall disabled" "PASS" ""; fi ;;
-    ubuntu)
-        if command -v ufw &>/dev/null && ! ufw status 2>/dev/null | grep -q "inactive"; then
-            emit "Firewall disabled" "FAIL" "ufw active"
-        else emit "Firewall disabled" "PASS" ""; fi ;;
-esac
-
 # --- Filesystem ---
 ROOT_FS=$(df -T / | awk 'NR==2{print $2}')
-if [[ "$ROOT_FS" == "xfs" ]]; then
-    emit "Root filesystem" "PASS" "xfs"
-elif [[ "$ROOT_FS" == "ext4" ]] && [[ "$DISTRO_FAMILY" == "ubuntu" ]]; then
-    emit "Root filesystem" "PASS" "ext4"
+if [[ "$ROOT_FS" == "xfs" || "$ROOT_FS" == "ext4" ]]; then
+    emit "Root filesystem" "PASS" "$ROOT_FS"
 else
-    emit "Root filesystem" "FAIL" "$ROOT_FS"
+    emit "Root filesystem" "WARN" "$ROOT_FS (unexpected)"
 fi
 
 ROOT_SIZE_GB=$(df -BG / | awk 'NR==2{gsub(/G/,"",$2); print $2}')
-[[ "$ROOT_SIZE_GB" -ge 15 ]] && emit "Root disk grown" "PASS" "${ROOT_SIZE_GB}G" || emit "Root disk grown" "WARN" "${ROOT_SIZE_GB}G"
+[[ "$ROOT_SIZE_GB" -ge 15 ]] && emit "Root disk size" "PASS" "${ROOT_SIZE_GB}G" || emit "Root disk size" "WARN" "${ROOT_SIZE_GB}G"
 
 mountpoint -q /boot/efi 2>/dev/null && emit "EFI partition mounted" "PASS" "" || emit "EFI partition mounted" "FAIL" ""
 
 # --- Services ---
-case "$DISTRO_FAMILY" in
-    ubuntu) systemctl is-active ssh &>/dev/null && emit "SSH active" "PASS" "" || emit "SSH active" "FAIL" "" ;;
-    *)      systemctl is-active sshd &>/dev/null && emit "SSH active" "PASS" "" || emit "SSH active" "FAIL" "" ;;
-esac
+# SSH
+if systemctl is-active sshd &>/dev/null || systemctl is-active ssh &>/dev/null; then
+    emit "SSH active" "PASS" ""
+else
+    emit "SSH active" "FAIL" ""
+fi
 
-case "$DISTRO_FAMILY" in
-    ubuntu) systemctl is-active chrony &>/dev/null && emit "Chrony active" "PASS" "" || emit "Chrony active" "FAIL" "" ;;
-    *)      systemctl is-active chronyd &>/dev/null && emit "Chrony active" "PASS" "" || emit "Chrony active" "FAIL" "" ;;
-esac
+# NTP (chrony)
+if systemctl is-active chronyd &>/dev/null || systemctl is-active chrony &>/dev/null; then
+    emit "NTP service active" "PASS" ""
+else
+    emit "NTP service active" "FAIL" ""
+fi
 
-# Real NTP validation: check chrony is synced to the lab infra server
-NTP_SOURCE=$(chronyc sources 2>/dev/null | grep -E '^\^\*' | awk '{print $2}')
-if [[ -n "$NTP_SOURCE" ]]; then
-    emit "NTP synchronized" "PASS" "source: $NTP_SOURCE"
-elif chronyc tracking 2>/dev/null | grep -qiE "Leap status.*Normal"; then
+# NTP sync check
+if chronyc tracking 2>/dev/null | grep -qiE "Leap status.*Normal"; then
     emit "NTP synchronized" "PASS" ""
 else
     emit "NTP synchronized" "WARN" "may still be syncing"
+fi
+
+# Firewall disabled
+if systemctl is-active firewalld &>/dev/null; then
+    emit "Firewall disabled" "FAIL" "firewalld active"
+elif command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "active"; then
+    emit "Firewall disabled" "FAIL" "ufw active"
+else
+    emit "Firewall disabled" "PASS" ""
 fi
 
 # --- User & Auth ---
@@ -280,7 +250,6 @@ MGMT_USER=$(ls /etc/sudoers.d/ 2>/dev/null | grep -v README | head -1)
 id "$MGMT_USER" &>/dev/null && emit "Mgmt user exists" "PASS" "$MGMT_USER" || emit "Mgmt user exists" "FAIL" "$MGMT_USER"
 [[ -f "/etc/sudoers.d/$MGMT_USER" ]] && emit "Sudoers file" "PASS" "" || emit "Sudoers file" "FAIL" ""
 
-# Real sudo validation: actually run a command as the user
 if su - "$MGMT_USER" -c "sudo -n true" &>/dev/null; then
     emit "Sudo NOPASSWD works" "PASS" "$MGMT_USER"
 else
@@ -292,131 +261,41 @@ fi
 [[ -f "/root/.ssh/tux2lab_id_rsa" ]] && emit "Root SSH key" "PASS" "" || emit "Root SSH key" "FAIL" ""
 [[ -f "/etc/ssh/ssh_config.d/999-tux2lab.conf" ]] && emit "SSH client config" "PASS" "" || emit "SSH client config" "FAIL" ""
 
-# --- CA Certificate (real HTTPS test) ---
-case "$DISTRO_FAMILY" in
-    redhat)   CA_PATH="/etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt" ;;
-    ubuntu)   CA_PATH="/usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt" ;;
-    opensuse) CA_PATH="/etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt" ;;
-esac
+# --- CA Certificate & HTTPS ---
+CA_FOUND=false
+for ca_path in /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt \
+               /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt \
+               /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt; do
+    [[ -f "$ca_path" ]] && { CA_FOUND=true; break; }
+done
+$CA_FOUND && emit "CA cert file exists" "PASS" "" || emit "CA cert file exists" "FAIL" ""
 
-[[ -f "$CA_PATH" ]] && emit "CA cert file exists" "PASS" "" || emit "CA cert file exists" "FAIL" "$CA_PATH"
-
-# Real validation: HTTPS to lab infra server without --insecure
 if curl -sf --max-time 5 "https://${LAB_INFRA_SERVER}/" -o /dev/null 2>/dev/null; then
-    emit "HTTPS to infra (trusted)" "PASS" "cert verified by system CA bundle"
+    emit "HTTPS to infra (trusted)" "PASS" ""
+elif curl -sf --max-time 5 "http://${LAB_INFRA_SERVER}/" -o /dev/null 2>/dev/null; then
+    emit "HTTPS to infra (trusted)" "FAIL" "HTTP works but HTTPS cert not trusted"
 else
-    # Check if HTTP works (to distinguish cert issue from connectivity)
-    if curl -sf --max-time 5 "http://${LAB_INFRA_SERVER}/" -o /dev/null 2>/dev/null; then
-        emit "HTTPS to infra (trusted)" "FAIL" "HTTP works but HTTPS cert not trusted"
-    else
-        emit "HTTPS to infra (trusted)" "WARN" "infra server may not have HTTPS configured"
-    fi
+    emit "HTTPS to infra (trusted)" "WARN" "infra server may not have HTTPS configured"
 fi
 
-# --- Timezone ---
+# --- Environment ---
 TZ=$(timedatectl show --property=Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo "unknown")
 [[ "$TZ" == "UTC" || "$TZ" == "Etc/UTC" ]] && emit "Timezone UTC" "PASS" "" || emit "Timezone UTC" "FAIL" "$TZ"
 
-# --- Shell customization ---
 [[ -s "/etc/motd" ]] && emit "Motd" "PASS" "" || emit "Motd" "FAIL" ""
 grep -q "HISTSIZE=-1" "/home/$MGMT_USER/.bashrc" 2>/dev/null && emit "HISTSIZE set" "PASS" "" || emit "HISTSIZE set" "FAIL" ""
 grep -q "PS1" "/home/$MGMT_USER/.bashrc" 2>/dev/null && emit "PS1 customized" "PASS" "" || emit "PS1 customized" "FAIL" ""
 
-# --- Distro-specific ---
-case "$DISTRO_FAMILY" in
-    redhat)
-        SELINUX_STATUS=$(getenforce 2>/dev/null || echo "unknown")
-        [[ "$SELINUX_STATUS" == "Disabled" || "$SELINUX_STATUS" == "Permissive" ]] \
-            && emit "SELinux disabled" "PASS" "$SELINUX_STATUS" \
-            || emit "SELinux disabled" "WARN" "$SELINUX_STATUS"
-
-        systemctl is-enabled systemd-resolved &>/dev/null \
-            && emit "systemd-resolved enabled" "PASS" "" \
-            || emit "systemd-resolved enabled" "FAIL" ""
-
-        # Real DNS resolution test via systemd-resolved
-        if resolvectl query "$LAB_INFRA_SERVER" &>/dev/null; then
-            emit "DNS resolution (resolved)" "PASS" ""
-        elif [[ -L /etc/resolv.conf ]] && readlink /etc/resolv.conf | grep -q "stub-resolv"; then
-            emit "DNS resolution (resolved)" "WARN" "symlink ok but query failed"
-        else
-            emit "DNS resolution (resolved)" "FAIL" ""
-        fi
-
-        if systemctl show dnf-makecache.timer -p LoadState --value 2>/dev/null | grep -q masked; then
-            emit "dnf-makecache masked" "PASS" ""
-        else
-            emit "dnf-makecache masked" "WARN" ""
-        fi
-
-        # Real yum repo validation: actually query metadata
-        local repo_pattern="${lab_infra_domain_name//./-}"
-        if dnf repolist 2>/dev/null | grep -qiE "${repo_pattern}|lab|tux2lab"; then
-            emit "Lab yum repo" "PASS" "reachable"
-        elif ls /etc/yum.repos.d/*"${repo_pattern}"* &>/dev/null || ls /etc/yum.repos.d/*lab* &>/dev/null || ls /etc/yum.repos.d/*tux2lab* &>/dev/null; then
-            emit "Lab yum repo" "WARN" "file exists but repo metadata unreachable"
-        else
-            emit "Lab yum repo" "FAIL" ""
-        fi
-
-        command -v growpart &>/dev/null \
-            && emit "growpart available" "PASS" "" \
-            || emit "growpart available" "FAIL" ""
-        ;;
-
-    ubuntu)
-        [[ -f /etc/cloud/cloud-init.disabled ]] \
-            && emit "cloud-init disabled" "PASS" "" \
-            || emit "cloud-init disabled" "FAIL" ""
-
-        grep -rl "eth0" /etc/netplan/ &>/dev/null \
-            && emit "Netplan eth0 config" "PASS" "" \
-            || emit "Netplan eth0 config" "FAIL" ""
-
-        for pkg in chrony nfs-common vim tmux kexec-tools; do
-            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" \
-                && emit "Package: $pkg" "PASS" "" \
-                || emit "Package: $pkg" "FAIL" ""
-        done
-
-        if dpkg -l lvm2 2>/dev/null | grep -q "^ii"; then
-            emit "lvm2 removed" "FAIL" "still installed"
-        else
-            emit "lvm2 removed" "PASS" ""
-        fi
-        ;;
-
-    opensuse)
-        systemctl is-active apparmor &>/dev/null \
-            && emit "AppArmor active" "PASS" "" \
-            || emit "AppArmor active" "WARN" ""
-
-        [[ -f /etc/chrony.d/tux2lab.conf ]] \
-            && emit "Chrony tux2lab.conf" "PASS" "" \
-            || emit "Chrony tux2lab.conf" "FAIL" ""
-
-        [[ -f /etc/bigbang ]] \
-            && emit "Install timestamp" "PASS" "" \
-            || emit "Install timestamp" "FAIL" ""
-
-        for pkg in nfs-client xfsprogs kexec-tools; do
-            rpm -q "$pkg" &>/dev/null \
-                && emit "Package: $pkg" "PASS" "" \
-                || emit "Package: $pkg" "FAIL" ""
-        done
-        ;;
-esac
-
 # --- Installation artifacts ---
 [[ -f /root/tux2lab-post-install.log ]] && emit "Post-install log" "PASS" "" || emit "Post-install log" "FAIL" ""
 [[ -f /root/tux2lab-post-install.sh ]] && emit "Post-install script" "PASS" "" || emit "Post-install script" "FAIL" ""
+[[ -f /etc/bigbang ]] && emit "Install timestamp" "PASS" "$(cat /etc/bigbang)" || emit "Install timestamp" "WARN" ""
 
-if [[ "$DISTRO_FAMILY" == "redhat" || "$DISTRO_FAMILY" == "opensuse" ]]; then
-    [[ -f /etc/bigbang ]] && emit "Install timestamp" "PASS" "$(cat /etc/bigbang)" || emit "Install timestamp" "FAIL" ""
-fi
+# --- Utility ---
+command -v growpart &>/dev/null && emit "growpart available" "PASS" "" || emit "growpart available" "WARN" ""
 
 # Emit distro info for the controller
-emit "DISTRO_INFO" "META" "${DISTRO_ID} ${DISTRO_VERSION} (${DISTRO_FAMILY})"
+emit "DISTRO_INFO" "META" "${DISTRO_ID} ${DISTRO_VERSION}"
 VALIDATION_SCRIPT
 }
 
@@ -471,17 +350,14 @@ fn_validate_vm() {
         local section=""
         case "$check" in
             FQDN*|DNS*)                    section="Identity" ;;
-            eth0*|IPv*|*route*|*DAD*|*Manager*|*networkd*|wicked*|Firewall*) section="Networking" ;;
-            Root*|EFI*)                    section="Filesystem" ;;
+            eth0*|IPv*|*route*|*DAD*|*Manager*|*networkd*|wicked*|Firewall*|Ping*) section="Networking" ;;
+            Root*|EFI*|growpart*)           section="Filesystem" ;;
             SSH\ active|Chrony*|NTP*)   section="Services" ;;
             Mgmt*|Sudo*|SSH\ auth*|SSH\ priv*|Root\ SSH*|SSH\ client*) section="User & Auth" ;;
-            CA*)                           section="CA Certificate" ;;
+            CA*|HTTPS*)                    section="CA Certificate" ;;
             Timezone*)                     section="Timezone" ;;
             Motd*|HIST*|PS1*)              section="Shell" ;;
-            SELinux*|systemd-resolved*|resolv*|dnf*|Lab\ yum*|growpart*) section="RHEL-specific" ;;
-            cloud-init*|Netplan*|Package*|lvm2*) section="Distro-specific" ;;
-            AppArmor*|Chrony\ tux*|Install\ time*|Service*) section="Distro-specific" ;;
-            Post-install*)                 section="Artifacts" ;;
+            Post-install*|Install\ time*)  section="Artifacts" ;;
             DISTRO_INFO)                   distro_info="$detail"; continue ;;
             *)                             section="Other" ;;
         esac

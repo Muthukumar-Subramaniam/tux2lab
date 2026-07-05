@@ -117,7 +117,7 @@
           <partition_id t="integer">263</partition_id>
           <partition_nr t="integer">1</partition_nr>
           <resize t="boolean">false</resize>
-          <size>134217728</size> <!-- 128 MB -->
+          <size>629145600</size> <!-- 600 MB -->
         </partition>
         <!-- Root partition (plain XFS) -->
         <partition t="map">

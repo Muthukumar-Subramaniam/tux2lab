@@ -18,7 +18,7 @@
         "partitions": [
           {
             "id": "esp",
-            "size": "512 MiB",
+            "size": "600 MiB",
             "filesystem": {
               "type": "vfat",
               "path": "/boot/efi"

@@ -23,8 +23,8 @@ Options:
   -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
   -c, --console        Attach console during installation (single VM only)
   -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
+                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap, azurelinux)
+  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
   -h, --help           Show this help message
 
 Examples:

@@ -64,7 +64,7 @@ if [[ "$REMOTE_HOST" != "localhost" ]]; then
     fi
     print_task_done
 
-    local ssh_args="localhost"
+    ssh_args="localhost"
     [[ -n "$LAB_INFRA_SERVER" ]] && ssh_args="$ssh_args --lab-infra-host=${LAB_INFRA_SERVER}"
     ssh "${SSH_OPTS[@]}" -t "$REMOTE_HOST" "sudo bash -s -- ${ssh_args}" < "${BASH_SOURCE[0]}"
     exit $?
@@ -117,12 +117,31 @@ fn_get_growpart() {
 ROOT_DEV=$(findmnt -n -o SOURCE /)
 print_info "Root device: $ROOT_DEV"
 
-# Only XFS supported
+# Detect filesystem type
 FS_TYPE=$(findmnt -n -o FSTYPE /)
-if [[ "$FS_TYPE" != "xfs" ]]; then
-    print_error "Unsupported filesystem type: $FS_TYPE. This script only supports XFS."
+if [[ "$FS_TYPE" != "xfs" && "$FS_TYPE" != "ext4" ]]; then
+    print_error "Unsupported filesystem type: $FS_TYPE. This script supports XFS and ext4."
     exit 1
 fi
+print_info "Filesystem type: $FS_TYPE"
+
+fn_grow_filesystem() {
+    if [[ "$FS_TYPE" == "xfs" ]]; then
+        print_task "Extending XFS filesystem..."
+        if sudo xfs_growfs / >/dev/null 2>&1; then
+            print_task_done
+        else
+            print_task_fail
+        fi
+    elif [[ "$FS_TYPE" == "ext4" ]]; then
+        print_task "Extending ext4 filesystem..."
+        if sudo resize2fs "$ROOT_DEV" >/dev/null 2>&1; then
+            print_task_done
+        else
+            print_task_fail
+        fi
+    fi
+}
 
 if [[ "$ROOT_DEV" =~ ^/dev/mapper/ ]]; then
     print_info "Detected LVM-based root filesystem."
@@ -167,12 +186,7 @@ if [[ "$ROOT_DEV" =~ ^/dev/mapper/ ]]; then
             print_task_skip
         fi
 
-        print_task "Extending XFS filesystem..."
-        if sudo xfs_growfs / >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
-        fi
+        fn_grow_filesystem
     else
         print_warning "Growpart utility not available - skipping partition growth."
     fi
@@ -199,12 +213,7 @@ else
             print_task_skip
         fi
 
-        print_task "Extending XFS filesystem..."
-        if sudo xfs_growfs / >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
-        fi
+        fn_grow_filesystem
     else
         print_warning "Growpart utility not available - skipping partition growth."
     fi

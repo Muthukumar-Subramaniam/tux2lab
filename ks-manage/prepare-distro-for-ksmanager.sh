@@ -439,10 +439,10 @@ Subcommands:
     cleanup [distro --version|-v ver]       Unmount and remove ISO for a distro
 
 Supported distros:
-    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap
+    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap, azurelinux
 
 Version:
-    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 15.5, 15.6"
+    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 15.5, 15.6, 4"
 }
 
 # ====== HELPER FUNCTIONS ======
@@ -929,6 +929,79 @@ fn_setup_distro() {
         print_task_done
     fi
 
+    # Azure Linux: patch squashfs to support HTTP kickstart URLs
+    if [[ "$distro" == "azurelinux" ]]; then
+        local patched_squashfs_dir="/tux2lab-data/os-repos/${distro}/${version}-live"
+        local patched_squashfs="${patched_squashfs_dir}/squashfs.img"
+        local original_squashfs="${mount_dir}/LiveOS/squashfs.img"
+
+        if [[ -f "$patched_squashfs" ]]; then
+            print_info "Patched squashfs already exists. Skipping."
+        elif [[ ! -f "$original_squashfs" ]]; then
+            print_warning "No LiveOS/squashfs.img found in ISO. Skipping squashfs patching."
+        else
+            local squash_tmp="/tmp/azl-squash-patch-$$"
+            local rootfs_mnt="/tmp/azl-rootfs-$$"
+
+            print_task "Extracting squashfs image..."
+            if sudo unsquashfs -d "$squash_tmp" "$original_squashfs" >/dev/null 2>&1; then
+                print_task_done
+            else
+                print_task_fail
+                print_warning "Failed to unsquash. Ensure 'squashfs-tools' is installed."
+                sudo rm -rf "$squash_tmp"
+                return
+            fi
+
+            # The squashfs contains LiveOS/rootfs.img — mount it to patch files inside
+            local rootfs_img="${squash_tmp}/LiveOS/rootfs.img"
+            if sudo test -f "$rootfs_img"; then
+                print_task "Mounting rootfs image for patching..."
+                sudo mkdir -p "$rootfs_mnt"
+                if sudo mount -o loop,rw "$rootfs_img" "$rootfs_mnt"; then
+                    print_task_done
+
+                    print_task "Patching installer for HTTP kickstart support..."
+                    local install_script="${rootfs_mnt}/usr/local/bin/anaconda-launcher.sh"
+                    if ! sudo test -f "$install_script"; then
+                        install_script="${rootfs_mnt}/usr/local/sbin/install-azl"
+                    fi
+                    if sudo test -f "$install_script"; then
+                        local patch_script="/tmp/azl-patch-sed-$$.sh"
+                        cat > "$patch_script" << 'PATCHEOF'
+#!/bin/bash
+sudo sed -i '/CUSTOM_KS=$(grep -o/a\    if [[ "$CUSTOM_KS" == http* ]]; then curl --retry 10 --retry-delay 2 --retry-connrefused -sf -o /tmp/ks.cfg "$CUSTOM_KS" && CUSTOM_KS="/tmp/ks.cfg"; fi' "$1"
+PATCHEOF
+                        chmod +x "$patch_script"
+                        bash "$patch_script" "$install_script"
+                        rm -f "$patch_script"
+                        print_task_done
+                    else
+                        print_task_fail
+                        print_warning "install-azl/anaconda-launcher.sh not found in rootfs."
+                    fi
+
+                    sudo umount "$rootfs_mnt"
+                else
+                    print_task_fail
+                    print_warning "Failed to mount rootfs.img."
+                fi
+            fi
+
+            print_task "Rebuilding patched squashfs (this may take a few minutes)..."
+            sudo mkdir -p "$patched_squashfs_dir"
+            if sudo mksquashfs "$squash_tmp" "$patched_squashfs" -noappend -comp zstd -quiet -no-progress; then
+                sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$patched_squashfs_dir" "$patched_squashfs"
+                print_task_done
+            else
+                print_task_fail
+                print_warning "Failed to create patched squashfs. PXE kickstart automation will not work."
+            fi
+
+            sudo rm -rf "$squash_tmp" "$rootfs_mnt"
+        fi
+    fi
+
     print_success "Setup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
 }
 
@@ -1020,6 +1093,14 @@ fn_cleanup_distro() {
     # Remove mount directory
     if [[ -d "$mount_dir" ]]; then
         sudo rm -rf "$mount_dir"
+    fi
+
+    # Remove patched squashfs (Azure Linux)
+    local patched_squashfs_dir="/tux2lab-data/os-repos/${distro}/${version}-live"
+    if [[ -d "$patched_squashfs_dir" ]]; then
+        print_task "Removing patched squashfs..."
+        sudo rm -rf "$patched_squashfs_dir"
+        print_task_done
     fi
 
     # Remove ISO file

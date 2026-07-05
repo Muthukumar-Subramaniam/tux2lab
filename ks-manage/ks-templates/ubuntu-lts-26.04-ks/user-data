@@ -58,7 +58,7 @@ autoinstall:
         type: disk
 # EFI partition
       - device: disk-get_disk_type_for_the_vm
-        size: 134217728
+        size: 629145600
         wipe: superblock
         flag: boot
         number: 1
