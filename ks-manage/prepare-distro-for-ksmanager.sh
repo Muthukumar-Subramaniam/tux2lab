@@ -967,10 +967,30 @@ fn_setup_distro() {
                         install_script="${rootfs_mnt}/usr/local/sbin/install-azl"
                     fi
                     if sudo test -f "$install_script"; then
-                        local patch_script="/tmp/azl-patch-sed-$$.sh"
+                        local patch_script="/tmp/azl-patch-$$.sh"
                         cat > "$patch_script" << 'PATCHEOF'
 #!/bin/bash
-sudo sed -i '/CUSTOM_KS=$(grep -o/a\    if [[ "$CUSTOM_KS" == http* ]]; then curl --retry 10 --retry-delay 2 --retry-connrefused -sf -o /tmp/ks.cfg "$CUSTOM_KS" && CUSTOM_KS="/tmp/ks.cfg"; fi' "$1"
+TARGET="$1"
+TMPFILE="${TARGET}.patched"
+sudo awk '
+/CUSTOM_KS=\$\(grep -o/ {
+    print
+    print "    # Support HTTP/HTTPS kickstart URLs for PXE-based deployments"
+    print "    if [[ \"$CUSTOM_KS\" == http* ]]; then"
+    print "        echo \"  Downloading kickstart from: $CUSTOM_KS\""
+    print "        if curl --retry 10 --retry-delay 2 --retry-connrefused -sf -o /tmp/ks.cfg \"$CUSTOM_KS\"; then"
+    print "            CUSTOM_KS=\"/tmp/ks.cfg\""
+    print "        else"
+    print "            echo \"  ERROR: Failed to download kickstart from $CUSTOM_KS\""
+    print "            exec /bin/bash"
+    print "        fi"
+    print "    fi"
+    next
+}
+{print}
+' "$TARGET" | sudo tee "$TMPFILE" > /dev/null
+sudo mv "$TMPFILE" "$TARGET"
+sudo chmod +x "$TARGET"
 PATCHEOF
                         chmod +x "$patch_script"
                         bash "$patch_script" "$install_script"
