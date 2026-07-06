@@ -1001,6 +1001,52 @@ PATCHEOF
                         print_warning "install-azl/anaconda-launcher.sh not found in rootfs."
                     fi
 
+                    # Install xfsprogs into the live rootfs so Anaconda can create XFS filesystems
+                    # Also add it to the offline repo so Anaconda can resolve the package dependency
+                    print_task "Installing xfsprogs into live image for XFS support..."
+                    local rpm_tmp="/tmp/azl-xfs-rpms-$$"
+                    mkdir -p "$rpm_tmp"
+                    # Determine repo channel (prod if available, else beta)
+                    local azl_repo_base="https://packages.microsoft.com/azurelinux/4.0"
+                    local azl_repo_url="${azl_repo_base}/prod/base/x86_64"
+                    if ! curl -sf "${azl_repo_url}/repodata/repomd.xml" -o /dev/null 2>/dev/null; then
+                        azl_repo_url="${azl_repo_base}/beta/base/x86_64"
+                    fi
+                    if sudo dnf download --destdir="$rpm_tmp" --repofrompath="azl-tmp,$azl_repo_url" --repo=azl-tmp xfsprogs inih userspace-rcu 2>/dev/null; then
+                        local xfs_ok=true
+                        # Extract xfsprogs binaries into live rootfs (provides mkfs.xfs for formatting)
+                        if ! (cd "$rootfs_mnt" && sudo rpm2cpio "$rpm_tmp"/xfsprogs-*.rpm | sudo cpio -idmu 2>/dev/null); then
+                            xfs_ok=false
+                        fi
+                        # Add all RPMs (xfsprogs + deps) to offline repo so Anaconda can resolve them
+                        local offline_repo="$rootfs_mnt/opt/azl-offline-repo"
+                        if sudo test -d "$offline_repo"; then
+                            sudo cp "$rpm_tmp"/*.rpm "$offline_repo/"
+                            # Regenerate repo metadata
+                            if sudo chroot "$rootfs_mnt" createrepo_c /opt/azl-offline-repo 2>/dev/null \
+                               || sudo createrepo_c "$offline_repo" 2>/dev/null; then
+                                :
+                            else
+                                # Fallback: update repodata with modifyrepo or simple re-index
+                                print_warning "Could not regenerate repo metadata. Trying rpm-based approach..."
+                                sudo chroot "$rootfs_mnt" rpm -ivh --justdb /opt/azl-offline-repo/xfsprogs*.rpm 2>/dev/null || true
+                            fi
+                        else
+                            xfs_ok=false
+                            print_warning "Offline repo not found at /opt/azl-offline-repo/"
+                        fi
+                        if $xfs_ok; then
+                            print_task_done
+                        else
+                            print_task_fail
+                            print_warning "Failed to install xfsprogs RPMs. XFS will not be available during install."
+                        fi
+                    else
+                        print_task_fail
+                        print_warning "Failed to download xfsprogs. XFS will not be available during install."
+                    fi
+                    rm -rf "$rpm_tmp"
+
                     sudo umount "$rootfs_mnt"
                 else
                     print_task_fail

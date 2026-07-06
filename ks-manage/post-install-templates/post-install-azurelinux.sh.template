@@ -155,7 +155,7 @@ EOF
 # 10. Install additional packages from upstream repo
 ######################################################################
 tdnf install -y vim nfs-utils bind-utils tmux wget tar rsync sysstat tcpdump \
-    traceroute nc lsof cloud-utils-growpart iputils || true
+    traceroute nc lsof cloud-utils-growpart iputils xfsprogs || true
 
 ######################################################################
 # 11. Installation timestamp
