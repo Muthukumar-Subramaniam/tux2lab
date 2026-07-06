@@ -433,6 +433,7 @@ Name=eth0
 
 [Network]
 DHCP=no
+IPv6AcceptRA=no
 Address=${IPv4_ADDRESS}/${IPv4_CIDR}
 Gateway=${IPv4_GATEWAY}
 DNS=${IPv4_DNS_SERVER}
