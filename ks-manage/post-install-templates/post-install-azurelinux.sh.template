@@ -36,6 +36,7 @@ find /etc/systemd/network -name '*.network' -delete 2>/dev/null || true
 Name=eth0
 
 [Network]
+DHCP=no
 Address=get_ipv4_address/get_ipv4_prefix
 Gateway=get_ipv4_gateway
 DNS=get_ipv4_nameserver

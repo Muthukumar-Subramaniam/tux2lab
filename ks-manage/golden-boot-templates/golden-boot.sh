@@ -432,6 +432,7 @@ EOF
 Name=eth0
 
 [Network]
+DHCP=no
 Address=${IPv4_ADDRESS}/${IPv4_CIDR}
 Gateway=${IPv4_GATEWAY}
 DNS=${IPv4_DNS_SERVER}
@@ -445,6 +446,7 @@ EOF
 Name=eth0
 
 [Network]
+DHCP=no
 Address=${IPv4_ADDRESS}/${IPv4_CIDR}
 Gateway=${IPv4_GATEWAY}
 DNS=${IPv4_DNS_SERVER}
@@ -453,7 +455,8 @@ LinkLocalAddressing=no
 EOF
 		fi
 		
-		log "Restarting systemd-networkd to apply configuration"
+		log "Reloading and restarting systemd-networkd to apply configuration"
+		networkctl reload 2>/dev/null || true
 		if ! systemctl restart systemd-networkd; then
 			error_exit "Failed to restart systemd-networkd"
 		fi
