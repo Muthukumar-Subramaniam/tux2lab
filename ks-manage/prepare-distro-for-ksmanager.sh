@@ -1012,7 +1012,7 @@ PATCHEOF
                     if ! curl -sf "${azl_repo_url}/repodata/repomd.xml" -o /dev/null 2>/dev/null; then
                         azl_repo_url="${azl_repo_base}/beta/base/x86_64"
                     fi
-                    if sudo dnf download --destdir="$rpm_tmp" --repofrompath="azl-tmp,$azl_repo_url" --repo=azl-tmp xfsprogs inih userspace-rcu 2>/dev/null; then
+                    if sudo dnf download --destdir="$rpm_tmp" --repofrompath="azl-tmp,$azl_repo_url" --repo=azl-tmp xfsprogs inih userspace-rcu >/dev/null 2>&1; then
                         local xfs_ok=true
                         # Extract xfsprogs binaries into live rootfs (provides mkfs.xfs for formatting)
                         if ! (cd "$rootfs_mnt" && sudo rpm2cpio "$rpm_tmp"/xfsprogs-*.rpm | sudo cpio -idmu 2>/dev/null); then
@@ -1023,8 +1023,8 @@ PATCHEOF
                         if sudo test -d "$offline_repo"; then
                             sudo cp "$rpm_tmp"/*.rpm "$offline_repo/"
                             # Regenerate repo metadata
-                            if sudo chroot "$rootfs_mnt" createrepo_c /opt/azl-offline-repo 2>/dev/null \
-                               || sudo createrepo_c "$offline_repo" 2>/dev/null; then
+                            if sudo chroot "$rootfs_mnt" createrepo_c /opt/azl-offline-repo >/dev/null 2>&1 \
+                               || sudo createrepo_c "$offline_repo" >/dev/null 2>&1; then
                                 :
                             else
                                 # Fallback: update repodata with modifyrepo or simple re-index

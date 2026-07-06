@@ -478,6 +478,18 @@ fi
 log "Network interface configured with IP ${IPv4_ADDRESS}/${IPv4_CIDR}"
 
 log "Verifying network connectivity to lab infrastructure server..."
+# Wait for DNS resolution to become available after network restart
+dns_timeout=10
+dns_counter=0
+while ! getent hosts get_lab_infra_server_hostname >/dev/null 2>&1 && [ $dns_counter -lt $dns_timeout ]; do
+	sleep 1
+	dns_counter=$((dns_counter + 1))
+done
+if [ $dns_counter -gt 0 ]; then
+	log "Waited ${dns_counter}s for DNS resolution to become available"
+else
+	log "DNS resolution available immediately"
+fi
 if ! ping -c 3 get_lab_infra_server_hostname; then
 	error_exit "Cannot reach lab infrastructure server after reconfiguration"
 fi
