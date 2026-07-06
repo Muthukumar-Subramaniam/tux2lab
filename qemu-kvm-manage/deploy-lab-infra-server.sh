@@ -1007,7 +1007,7 @@ deploy_lab_infra_server_host() {
         bash-completion vim git bind-utils bind wget tar cifs-utils
         tftp-server kea kea-hooks radvd nginx nginx-mod-stream openssl tmux
         rsync sysstat tcpdump traceroute nc samba-client lsof nfs-utils
-        nmap tuned tree yum-utils python3-cryptography
+        nmap tuned tree yum-utils python3-cryptography squashfs-tools
     )
 
     # Filter to missing packages only
