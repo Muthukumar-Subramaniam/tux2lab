@@ -86,15 +86,15 @@ if [[ "${1:-}" == "--download-infra-iso" ]]; then
         local iso_name="$1"
         local checksum_file="$2"
         local expected_hash
-        expected_hash=$(grep -i "SHA256" "$checksum_file" | grep "$iso_name" | awk -F'= ' '{print $2}' | tr -d '[:space:]') || true
+        expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -i "$iso_name" | awk -F'= ' '{print $2}' | tr -d '[:space:]') || true
         if [[ -z "$expected_hash" ]]; then
-            expected_hash=$(grep "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
+            expected_hash=$(grep -i "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
         fi
         if [[ -z "$expected_hash" && "$iso_name" == *"latest"* ]]; then
             local pattern="${iso_name//latest/[A-Za-z0-9][^ )]*}"
-            expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -E "$pattern" | awk -F'= ' '{print $2}' | tr -d '[:space:]' | head -1) || true
+            expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -iE "$pattern" | awk -F'= ' '{print $2}' | tr -d '[:space:]' | head -1) || true
             if [[ -z "$expected_hash" ]]; then
-                expected_hash=$(grep -E "$pattern" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
+                expected_hash=$(grep -iE "$pattern" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
             fi
         fi
         if [[ -z "$expected_hash" ]]; then
@@ -517,10 +517,10 @@ fn_extract_expected_hash() {
     local checksum_file="$2"
     local expected_hash
     # Try common checksum formats: "SHA256 (filename) = hash" or "hash  filename"
-    expected_hash=$(grep -i "SHA256" "$checksum_file" | grep "$iso_name" | awk -F'= ' '{print $2}' | tr -d '[:space:]') || true
+    expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -i "$iso_name" | awk -F'= ' '{print $2}' | tr -d '[:space:]') || true
     if [[ -z "$expected_hash" ]]; then
-        # Fallback: "hash  filename" format
-        expected_hash=$(grep "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
+        # Fallback: "hash  filename" format (case-insensitive match)
+        expected_hash=$(grep -i "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
     fi
     # Fallback for 'latest' symlinks: mirrors list the real dated filename
     # e.g., URL has "CentOS-Stream-10-latest-x86_64-dvd1.iso" but checksum has "CentOS-Stream-10-20260513.0-x86_64-dvd1.iso"
