@@ -284,6 +284,8 @@ tux2lab health                    Check all lab service health
 tux2lab deploy                    Deploy a new lab infrastructure server
 tux2lab destroy                   Permanently destroy the entire lab environment
 tux2lab rebuild                   Tear down and redeploy lab using existing config
+tux2lab sync                      Push config updates to infra server (VM mode)
+tux2lab info                      Show lab deployment details
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab distro list               List distributions and setup status
 tux2lab distro setup              Prepare a distro for PXE provisioning
