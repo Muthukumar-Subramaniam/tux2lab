@@ -149,8 +149,10 @@ _tux2lab_completions() {
             esac
         fi
 
-        # Suppress completion for other comma-separated options (no completable values)
-        if [[ "$_comp_prefix" =~ (-d|--disks|-m|--macs)[[:space:]]+[^[:space:]]*$ ]]; then
+        # Suppress completion for comma-separated options that have no completable
+        # values. Only match unambiguous long forms — short forms like -d and -m
+        # are overloaded (-d = --distro in install/reimage, -m = --memory in resize)
+        if [[ "$_comp_prefix" =~ (--disks|--macs)[[:space:]]+[^[:space:]]*$ ]]; then
             return 0
         fi
 
