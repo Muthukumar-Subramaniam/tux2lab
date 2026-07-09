@@ -138,10 +138,8 @@ EMBED_EOF
 fi
 
 ######################################################################
-# 9. Local yum repository
+# 9. Local yum repository (fast fallback alongside upstream repos)
 ######################################################################
-/usr/bin/mkdir -p /etc/yum.repos.d/original
-/usr/bin/mv /etc/yum.repos.d/*.repo /etc/yum.repos.d/original/
 local_lab_info=$(/usr/bin/echo 'get_ipv4_domain' | /usr/bin/sed "s/\./-/g")
 /usr/bin/cat << EOF > /etc/yum.repos.d/${local_lab_info}-get_redhat_based_distro_name.repo
 [${local_lab_info}-get_redhat_based_distro_name-baseos]

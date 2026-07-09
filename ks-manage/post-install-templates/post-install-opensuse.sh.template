@@ -15,19 +15,13 @@ echo "tux2lab post-install started: $(date)"
 /usr/bin/date '+%Y-%m-%d %H:%M:%S %Z' > /etc/bigbang
 
 ######################################################################
-# 2. Zypper repository management
+# 2. Zypper repository management (add local repo alongside upstream)
 ######################################################################
-/usr/bin/mkdir -p /etc/zypp/repos.d/original
-/usr/bin/mv /etc/zypp/repos.d/*.repo /etc/zypp/repos.d/original/ 2>/dev/null || true
-
 local_major_version="get_version"
 local_major_version="${local_major_version%%.*}"
 if [[ "${local_major_version}" -ge 16 ]]; then
     /usr/bin/zypper ar -f http://get_lab_infra_server_hostname/os-repos/opensuse-leap/get_version/install/ lab-repo-oss
-    /usr/bin/zypper ar -f http://download.opensuse.org/distribution/leap/get_opensuse_version_number/repo/non-oss/ online-repo-non-oss
     /usr/bin/zypper ms -d openSUSE
-else
-    /usr/bin/mv /etc/zypp/repos.d/*-update.repo /etc/zypp/repos.d/openSUSE* /etc/zypp/repos.d/original/ 2>/dev/null || true
 fi
 
 ######################################################################
