@@ -11,6 +11,13 @@
 _tux2lab_completions() {
     local cur prev
     COMPREPLY=()
+
+    # Ensure comma is a readline word boundary from the first invocation.
+    # This allows clean display and correct insertion for comma-separated
+    # host lists (-H/--hosts). Safe for other commands — aligns with the
+    # bash-completion package default. Set once, idempotent thereafter.
+    [[ "${COMP_WORDBREAKS}" != *,* ]] && COMP_WORDBREAKS="${COMP_WORDBREAKS},"
+
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
@@ -42,6 +49,47 @@ _tux2lab_completions() {
     # Existing VM names (from filesystem — instant, no virsh overhead)
     local existing_vms
     existing_vms=$(ls /tux2lab-data/vms/ 2>/dev/null || true)
+
+    # Helper: complete comma-separated hostnames with deduplication
+    # Uses COMP_LINE for context detection (immune to COMP_WORDBREAKS changes)
+    # Adds comma to COMP_WORDBREAKS so readline displays only hostnames
+    # and replaces only the part after the last comma.
+    _complete_comma_separated_hosts() {
+        local cur_val="$1"
+        local suffix="${cur_val}"
+        local -a already_used=()
+
+        if [[ "${cur_val}" == *,* ]]; then
+            suffix="${cur_val##*,}"
+            IFS=',' read -ra already_used <<< "${cur_val%,*}"
+        fi
+
+        # Build filtered list excluding already-used hostnames
+        local available=""
+        local vm used h
+        for vm in ${existing_vms}; do
+            used=false
+            for h in "${already_used[@]}"; do
+                if [[ "$vm" == "$h" ]]; then
+                    used=true
+                    break
+                fi
+            done
+            $used || available+="$vm "
+        done
+
+        # Nothing available — all hosts consumed or no match
+        if [[ -z "${available}" ]]; then
+            COMPREPLY=()
+            return
+        fi
+
+        # Return suffix-only matches — readline prepends prefix via COMP_WORDBREAKS
+        COMPREPLY=( $(compgen -W "${available}" -- "${suffix}") )
+
+        # Suppress trailing space — user may type comma for additional hosts
+        [[ ${#COMPREPLY[@]} -gt 0 ]] && compopt -o nospace 2>/dev/null
+    }
 
     # Helper: find distro from COMP_WORDS
     _find_distro_in_words() {
@@ -81,6 +129,31 @@ _tux2lab_completions() {
 
         local vm_subcmd="${COMP_WORDS[2]}"
 
+        # === COMP_LINE-BASED CONTEXT DETECTION ===
+        # With comma in COMP_WORDBREAKS, COMP_WORDS splits at commas making
+        # "prev" unreliable for comma-separated values. Use COMP_LINE (raw
+        # command text) which is always immune to COMP_WORDBREAKS changes.
+        local _comp_prefix="${COMP_LINE:0:COMP_POINT}"
+
+        # Host completion: -H/--hosts/--host with comma-separated deduplication
+        if [[ "$_comp_prefix" =~ (-H|--hosts|--host)[[:space:]]+([^[:space:]]*)$ ]]; then
+            local _host_val="${BASH_REMATCH[2]}"
+            case "${vm_subcmd}" in
+                install-golden|install-pxe) return 0 ;;
+                *)
+                    if [[ -n "$existing_vms" ]]; then
+                        _complete_comma_separated_hosts "$_host_val"
+                    fi
+                    return 0
+                    ;;
+            esac
+        fi
+
+        # Suppress completion for other comma-separated options (no completable values)
+        if [[ "$_comp_prefix" =~ (-d|--disks|-m|--macs)[[:space:]]+[^[:space:]]*$ ]]; then
+            return 0
+        fi
+
         # Complete distro names after -d/--distro
         if [[ "${prev}" == "-d" || "${prev}" == "--distro" ]]; then
             case "${vm_subcmd}" in
@@ -109,20 +182,9 @@ _tux2lab_completions() {
         # After a non-boolean flag, suppress completion (it expects a user value).
         # Distro (-d/--distro) and version (-v/--version) for install/reimage are
         # already handled above with their own completion handlers.
+        # -H/--hosts/--host is handled earlier via COMP_LINE detection.
         case "${prev}" in
             -f|--force|-C|--clean-install|--ignore-ksmanager-cleanup|-h|--help) ;;
-            -H|--hosts|--host)
-                # Offer existing VM names for commands that operate on existing VMs
-                case "${vm_subcmd}" in
-                    install-golden|install-pxe) return 0 ;;
-                    *)
-                        if [[ -n "$existing_vms" ]]; then
-                            COMPREPLY=( $(compgen -W "${existing_vms}" -- "${cur}") )
-                        fi
-                        return 0
-                        ;;
-                esac
-                ;;
             -c|--console)
                 case "${vm_subcmd}" in
                     install-golden|install-pxe|reimage-golden|reimage-pxe) ;;
