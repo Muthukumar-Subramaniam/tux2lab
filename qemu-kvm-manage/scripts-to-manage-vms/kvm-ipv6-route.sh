@@ -198,9 +198,27 @@ fn_enable_host_ipv6_forwarding() {
 }
 
 fn_disable_host_ipv6_forwarding() {
-    print_task "Disabling IPv6 forwarding and NAT rules on host..."
-    
+    # Check if there's anything to disable
+    local forwarding_enabled=false
+    local nat_rules_exist=false
+
+    if [[ "$(cat /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null)" == "1" ]]; then
+        forwarding_enabled=true
+    fi
+
     local primary_if=$(ip route | awk '/default/ {print $5; exit}')
+    if [[ -n "${lab_infra_server_ipv6_ula_subnet:-}" ]] && [[ -n "${primary_if}" ]]; then
+        if sudo ip6tables -t nat -C POSTROUTING -s ${lab_infra_server_ipv6_ula_subnet} -o ${primary_if} -j MASQUERADE 2>/dev/null; then
+            nat_rules_exist=true
+        fi
+    fi
+
+    if ! $forwarding_enabled && ! $nat_rules_exist; then
+        print_info "IPv6 forwarding and NAT rules already disabled on host"
+        return 0
+    fi
+
+    print_task "Disabling IPv6 forwarding and NAT rules on host..."
     
     # Remove NAT66 and forwarding rules
     if [[ -n "${lab_infra_server_ipv6_ula_subnet:-}" ]] && [[ -n "${primary_if}" ]]; then
