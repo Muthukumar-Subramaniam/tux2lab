@@ -10,13 +10,6 @@
         <priority t="integer">99</priority>
         <product_dir>/</product_dir>
       </listentry>
-      <listentry t="map">
-        <alias>online-repo-non-oss</alias>
-        <media_url>http://download.opensuse.org/distribution/leap/get_opensuse_version_number/repo/non-oss/</media_url>
-        <name>Online Non-OSS Repository</name>
-        <priority t="integer">99</priority>
-        <product_dir>/</product_dir>
-      </listentry>
     </add_on_products>
   </add-on>
   <bootloader t="map">
@@ -141,8 +134,6 @@
     <default_target>multi-user</default_target>
     <services t="map">
       <enable t="list">
-        <service>YaST2-Firstboot</service>
-        <service>YaST2-Second-Stage</service>
         <service>apparmor</service>
         <service>auditd</service>
         <service>klog</service>

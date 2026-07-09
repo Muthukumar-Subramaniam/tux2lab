@@ -24,6 +24,9 @@ if [[ "${local_major_version}" -ge 16 ]]; then
     /usr/bin/zypper ms -d openSUSE
 fi
 
+# Disable auto-refresh on all repos — user refreshes on demand via zypper refresh
+/usr/bin/zypper mr --no-refresh --all
+
 ######################################################################
 # 3. Python3 symlink fix (15.6 only)
 ######################################################################
