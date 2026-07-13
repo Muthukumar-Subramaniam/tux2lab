@@ -1,0 +1,49 @@
+{
+  "load_balancers": [
+    {
+      "name": "k8s-api",
+      "port": 6443,
+      "target_port": 6443,
+      "algorithm": "least-conn",
+      "ipv4": "10.28.28.5",
+      "ipv6": "fd28:2808:2020:3000::5",
+      "interface": "eth0",
+      "backends": [
+        "k8s-cp1",
+        "k8s-cp2",
+        "k8s-cp3"
+      ],
+      "created_at": "2026-07-13T14:30:00Z"
+    },
+    {
+      "name": "pg-primary",
+      "port": 5432,
+      "target_port": 5432,
+      "algorithm": "round-robin",
+      "ipv4": "10.28.28.6",
+      "ipv6": "fd28:2808:2020:3000::6",
+      "interface": "eth0",
+      "backends": [
+        "pg1",
+        "pg2",
+        "pg3"
+      ],
+      "created_at": "2026-07-13T14:35:00Z"
+    },
+    {
+      "name": "my-webapp",
+      "port": 443,
+      "target_port": 30443,
+      "algorithm": "round-robin",
+      "ipv4": "10.28.28.7",
+      "ipv6": "fd28:2808:2020:3000::7",
+      "interface": "eth0",
+      "backends": [
+        "k8s-w1",
+        "k8s-w2",
+        "k8s-w3"
+      ],
+      "created_at": "2026-07-13T15:00:00Z"
+    }
+  ]
+}
