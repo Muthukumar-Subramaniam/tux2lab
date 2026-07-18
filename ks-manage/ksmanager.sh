@@ -807,6 +807,10 @@ fn_select_os_distro() {
                 os_distribution="ubuntu-lts"
                 print_info "OS distribution selected via --distro flag: ${os_distribution}"
                 ;;
+            debian) 
+                os_distribution="debian"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
             opensuse-leap|opensuse|suse) 
                 os_distribution="opensuse-leap"
                 print_info "OS distribution selected via --distro flag: ${os_distribution}"
@@ -817,7 +821,7 @@ fn_select_os_distro() {
                 ;;
             *)
                 print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
-                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap, azurelinux"
+                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
                 exit 1
                 ;;
         esac
@@ -832,7 +836,9 @@ fn_select_os_distro() {
         for key in "${DISTRO_KEYS[@]}"; do
             local ready_vers=""
             for ver in ${DISTRO_AVAILABLE_VERSIONS[$key]}; do
-                if mountpoint -q "/tux2lab-data/os-repos/${key}/${ver}" 2>/dev/null; then
+                if [[ "$key" == "debian" ]]; then
+                    [[ -f "/tux2lab-data/os-repos/${key}/${ver}-netboot/vmlinuz" ]] && ready_vers+="${ver} "
+                elif mountpoint -q "/tux2lab-data/os-repos/${key}/${ver}" 2>/dev/null; then
                     ready_vers+="${ver} "
                 fi
             done
@@ -883,7 +889,9 @@ fn_select_os_distro() {
         # Get only PXE-ready versions for this distro
         local available_versions=()
         for ver in ${DISTRO_AVAILABLE_VERSIONS[$os_distribution]}; do
-            if mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${ver}" 2>/dev/null; then
+            if [[ "${os_distribution}" == "debian" ]]; then
+                [[ -f "/tux2lab-data/os-repos/${os_distribution}/${ver}-netboot/vmlinuz" ]] && available_versions+=("$ver")
+            elif mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${ver}" 2>/dev/null; then
                 available_versions+=("$ver")
             fi
         done
@@ -934,7 +942,13 @@ fn_select_os_distro() {
             exit 1
         fi
         # Check if the version is PXE-ready
-        if ! mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${version}" 2>/dev/null; then
+        if [[ "${os_distribution}" == "debian" ]]; then
+            if [[ ! -f "/tux2lab-data/os-repos/${os_distribution}/${version}-netboot/vmlinuz" ]]; then
+                print_error "${DISTRO_DISPLAY_NAMES[$os_distribution]} ${version} is not prepared for PXE installation."
+                print_info "Use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it."
+                exit 1
+            fi
+        elif ! mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${version}" 2>/dev/null; then
             print_error "${DISTRO_DISPLAY_NAMES[$os_distribution]} ${version} is not prepared for PXE installation."
             print_info "Use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it."
             exit 1
@@ -1108,20 +1122,37 @@ fi
 
 mount_dir="/tux2lab-data/os-repos/${os_distribution}/${version}"
 
-while ! mountpoint -q "${mount_dir}"; do
-    print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
-    print_info "Please use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it for PXE-boot."
-    if $invoked_with_qemu_kvm; then
-        print_error "Cannot proceed with unprepared OS distribution in automation mode."
-        exit 1
-    fi
-    fn_select_os_distro
-done
+# Debian uses netboot-only (no ISO mount) — check for netboot files instead
+if [[ "${os_distribution}" == "debian" ]]; then
+    while [[ ! -f "/tux2lab-data/os-repos/${os_distribution}/${version}-netboot/vmlinuz" ]]; do
+        print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
+        print_info "Please use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it for PXE-boot."
+        if $invoked_with_qemu_kvm; then
+            print_error "Cannot proceed with unprepared OS distribution in automation mode."
+            exit 1
+        fi
+        fn_select_os_distro
+    done
+else
+    while ! mountpoint -q "${mount_dir}"; do
+        print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
+        print_info "Please use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it for PXE-boot."
+        if $invoked_with_qemu_kvm; then
+            print_error "Cannot proceed with unprepared OS distribution in automation mode."
+            exit 1
+        fi
+        fn_select_os_distro
+    done
+fi
 
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
     os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.disk/info")
     # Codename mapping centralized in distro-versions.conf
     ubuntu_codename="${UBUNTU_CODENAMES[${version}]:-}"
+elif [[ "${os_distribution}" == "debian" ]]; then
+    os_name_and_version="Debian ${version}"
+    # Codename mapping centralized in distro-versions.conf
+    debian_codename="${DEBIAN_CODENAMES[${version}]:-}"
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     if [[ -f "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo" ]]; then
         os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo")
@@ -1186,6 +1217,12 @@ if ! $invoked_with_golden_image; then
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
         if ! rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
             print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
+    elif [[ "${os_distribution}" == "debian" ]]; then
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/debian-${version}-preseed.cfg" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy preseed template for debian-${version}"
             fn_release_host_lock
             exit 1
         fi
@@ -1265,6 +1302,8 @@ fn_generate_post_install_script() {
     # Select the appropriate template based on distro family
     if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-ubuntu.sh.template"
+    elif [[ "${os_distribution}" == "debian" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-debian.sh.template"
     elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-opensuse.sh.template"
     elif [[ "${os_distribution}" == "azurelinux" ]]; then
@@ -1374,6 +1413,13 @@ fn_set_environment() {
             fn_replace_token_in_file "${working_file}" "get_ipv6_nameserver" "${ipv6_nameserver}"
         fi
         fn_replace_token_in_file "${working_file}" "get_hostname" "${kickstart_short_hostname}"
+
+        # Debian preseed workaround: the directive name 'netcfg/get_hostname' contains
+        # the token 'get_hostname' which gets mangled by the global replacement above.
+        # Restore the directive name after token replacement.
+        if [[ "${os_distribution}" == "debian" && "${working_file}" == *preseed.cfg ]]; then
+            fn_replace_token_in_file "${working_file}" "netcfg/${kickstart_short_hostname}" "netcfg/get_hostname"
+        fi
         fn_replace_token_in_file "${working_file}" "get_lab_infra_server_hostname" "${lab_infra_server_hostname}"
         fn_replace_token_in_file "${working_file}" "get_time_of_last_update" "${time_of_last_update}"
         fn_replace_token_in_file "${working_file}" "get_mgmt_super_user" "${mgmt_super_user}"
@@ -1384,6 +1430,7 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_version" "${version}"
         fn_replace_token_in_file "${working_file}" "get_opensuse_version_number" "${opensuse_version_number}"
         fn_replace_token_in_file "${working_file}" "get_ubuntu_codename" "${ubuntu_codename:-}"
+        fn_replace_token_in_file "${working_file}" "get_debian_codename" "${debian_codename:-}"
         fn_replace_token_in_file "${working_file}" "get_subnets_to_allow_ssh_pub_access" "${subnets_to_allow_ssh_pub_access}"
 
         awk -v val="$shadow_password_super_mgmt_user" '

@@ -46,6 +46,8 @@ Name=e*
 DHCP=yes
 EOF
 elif grep -qi "debian" /etc/os-release; then
+	if command -v netplan &>/dev/null; then
+	# Ubuntu: uses netplan
 	rm -rf /etc/netplan/* 2>>"$LOG"
 	cat << EOF > /etc/netplan/50-golden-boot-dhcp.yaml
 network:
@@ -57,6 +59,26 @@ network:
             dhcp4: true
 EOF
 	chmod 600 /etc/netplan/50-golden-boot-dhcp.yaml
+	else
+	# Debian: uses /etc/network/interfaces
+	# Remove old MAC-specific .link files (clone has a different MAC)
+	# and create a generic one so the first ethernet interface becomes eth0
+	rm -f /etc/systemd/network/7*-eth*.link 2>>"$LOG"
+	cat << EOF > /etc/systemd/network/70-eth0.link
+[Match]
+Type=ether
+
+[Link]
+Name=eth0
+EOF
+	cat << EOF > /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+EOF
+	fi
 elif grep -qi "suse" /etc/os-release; then
 if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
 	# Leap 16+ uses NetworkManager
@@ -74,8 +96,14 @@ fi
 fi
 
 # 6. Remove systemd-networkd configs
+# Skip .link removal for Debian (without netplan) — step 5 already replaced
+# old MAC-specific .link files with a generic eth0 .link needed for first boot
 echo "Removing systemd network configuration files..." | tee -a "$LOG"
-rm -f /etc/systemd/network/*.link 2>>"$LOG"
+if grep -qi "debian" /etc/os-release && ! command -v netplan &>/dev/null; then
+	echo "Skipping .link removal (Debian needs generic eth0 .link for golden boot)" | tee -a "$LOG"
+else
+	rm -f /etc/systemd/network/*.link 2>>"$LOG"
+fi
 
 # 7. Self-disable this service
 echo "Disabling this service after successful run..." | tee -a "$LOG"
