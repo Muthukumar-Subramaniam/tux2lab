@@ -146,7 +146,7 @@ Supported distros (RHEL-based only):
   rhel             Red Hat Enterprise Linux
 
 Note: This RHEL-based restriction applies only to the lab infra server VM.
-      Guest VM deployments also support Ubuntu Server LTS and openSUSE Leap.
+      Guest VM deployments also support Ubuntu Server LTS, Debian, and openSUSE Leap.
 "
                 exit 0
                 ;;
@@ -173,7 +173,7 @@ Available RHEL-based distros for the infra server (version ${version}):
   5) rhel            - Red Hat Enterprise Linux
 
 Note: This applies only to the infra server ISO.
-Guest VMs also support Debian-based (Ubuntu) and SUSE-based (openSUSE) via 'tux2lab distro'.
+Guest VMs also support Debian-based (Ubuntu, Debian) and SUSE-based (openSUSE) via 'tux2lab distro'.
 "
         read -rp "Select distro [1-5] [ default: AlmaLinux ${version} ]: " distro_input
         case "${distro_input}" in
@@ -439,17 +439,23 @@ Subcommands:
     cleanup [distro --version|-v ver]       Unmount and remove ISO for a distro
 
 Supported distros:
-    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, opensuse-leap, azurelinux
+    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux
 
 Version:
-    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 15.5, 15.6, 4"
+    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 11, 12, 13, 15.5, 15.6, 4"
 }
 
 # ====== HELPER FUNCTIONS ======
 
 fn_is_distro_ready() {
     local distro="$1" ver="$2"
-    mountpoint -q "/tux2lab-data/os-repos/${distro}/${ver}" 2>/dev/null
+    # Debian uses netboot-only (no ISO mount) — check for netboot files instead
+    if [[ "$distro" == "debian" ]]; then
+        [[ -f "/tux2lab-data/os-repos/${distro}/${ver}-netboot/vmlinuz" ]] && \
+        [[ -f "/tux2lab-data/os-repos/${distro}/${ver}-netboot/initrd.gz" ]]
+    else
+        mountpoint -q "/tux2lab-data/os-repos/${distro}/${ver}" 2>/dev/null
+    fi
 }
 
 fn_has_golden_image() {
@@ -741,6 +747,52 @@ fn_get_iso_url() {
     echo "$url"
 }
 
+# Debian uses netboot-only PXE install — no ISO needed.
+# The netboot kernel/initrd are downloaded from deb.debian.org and served locally via HTTP.
+# Packages are installed from deb.debian.org during the PXE install (internet required).
+fn_setup_debian_netboot() {
+    local distro="$1" version="$2"
+    local netboot_dir="/tux2lab-data/os-repos/${distro}/${version}-netboot"
+    local debian_codename="${DEBIAN_CODENAMES[${version}]:-}"
+
+    if [[ -z "$debian_codename" ]]; then
+        print_error "No codename configured for Debian ${version}."
+        exit 1
+    fi
+
+    local netboot_base="https://deb.debian.org/debian/dists/${debian_codename}/main/installer-amd64/current/images/netboot/debian-installer/amd64"
+
+    print_task "Creating netboot directory..."
+    sudo mkdir -p "$netboot_dir"
+    print_task_done
+
+    print_task "Downloading Debian ${version} (${debian_codename}) netboot kernel..."
+    if sudo curl -fsSL "${netboot_base}/linux" -o "${netboot_dir}/vmlinuz"; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Failed to download netboot kernel for Debian ${version}."
+        print_info "URL: ${netboot_base}/linux"
+        sudo rm -rf "$netboot_dir"
+        exit 1
+    fi
+
+    print_task "Downloading Debian ${version} (${debian_codename}) netboot initrd..."
+    if sudo curl -fsSL "${netboot_base}/initrd.gz" -o "${netboot_dir}/initrd.gz"; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Failed to download netboot initrd for Debian ${version}."
+        print_info "URL: ${netboot_base}/initrd.gz"
+        sudo rm -rf "$netboot_dir"
+        exit 1
+    fi
+
+    print_success "Debian ${version} (${debian_codename}) is ready for PXE provisioning."
+    print_info "Netboot files: ${netboot_dir}"
+    print_info "Packages will be installed from deb.debian.org during PXE install."
+}
+
 fn_setup_distro() {
     local distro="$1" version="$2"
 
@@ -748,6 +800,12 @@ fn_setup_distro() {
         print_warning "Distro '${DISTRO_DISPLAY_NAMES[$distro]} ${version}' is already set up."
         print_info "To re-setup, run cleanup first: tux2lab distro cleanup ${distro} --version ${version}"
         exit 1
+    fi
+
+    # Debian uses netboot-only PXE install — no ISO needed
+    if [[ "$distro" == "debian" ]]; then
+        fn_setup_debian_netboot "$distro" "$version"
+        return
     fi
 
     local iso_file="${ISO_FILENAMES[${distro}:${version}]:-}"
@@ -1086,6 +1144,26 @@ fn_cleanup_distro() {
         print_error "${DISTRO_DISPLAY_NAMES[$distro]} ${version} is the distro used to build this infra server."
         print_error "Cleanup is blocked to prevent breaking the lab infrastructure."
         exit 1
+    fi
+
+    # Debian uses netboot-only (no ISO) — just remove netboot files
+    if [[ "$distro" == "debian" ]]; then
+        local netboot_dir="/tux2lab-data/os-repos/${distro}/${version}-netboot"
+        if [[ ! -d "$netboot_dir" ]]; then
+            print_info "Nothing to clean up for ${DISTRO_DISPLAY_NAMES[$distro]} ${version} (not set up)."
+            exit 0
+        fi
+        print_warning "This will remove netboot files for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+        read -rp "Are you sure you want to continue? (yes/no): " confirm
+        if [[ "$confirm" != "yes" ]]; then
+            print_info "Cleanup aborted."
+            exit 0
+        fi
+        print_task "Removing netboot files..."
+        sudo rm -rf "$netboot_dir"
+        print_task_done
+        print_success "Cleanup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+        return
     fi
 
     local iso_file="${ISO_FILENAMES[${distro}:${version}]:-}"

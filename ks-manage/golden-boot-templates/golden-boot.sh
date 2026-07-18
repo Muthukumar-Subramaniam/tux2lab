@@ -53,9 +53,24 @@ fi
 log "Starting golden boot configuration for ${DISTRO_ID} (${DISTRO_FAMILY} family)"
 
 log "Checking network connectivity to lab infrastructure server..."
-if ! ping -c 3 get_lab_infra_server_hostname; then
-	error_exit "Cannot reach lab infrastructure server"
+# Wait for network to be fully ready (DHCP may still be in progress on Debian/ifupdown)
+WAIT_SECS=0
+MAX_WAIT=60
+while ! ping -c 1 -W 2 get_lab_infra_server_hostname &>/dev/null; do
+	WAIT_SECS=$((WAIT_SECS + 3))
+	if [ $WAIT_SECS -ge $MAX_WAIT ]; then
+		log "Waited ${MAX_WAIT}s for network connectivity"
+		ping -c 3 get_lab_infra_server_hostname || error_exit "Cannot reach lab infrastructure server"
+	fi
+	log "Waiting for network... (${WAIT_SECS}/${MAX_WAIT}s)"
+	sleep 3
+done
+if [ $WAIT_SECS -gt 0 ]; then
+	log "Network became available after ${WAIT_SECS}s"
+else
+	log "Network available immediately"
 fi
+ping -c 3 get_lab_infra_server_hostname
 log "Network connectivity to lab infrastructure server confirmed"
 
 log "Creating systemd network configuration directory"
@@ -169,13 +184,17 @@ case "${DISTRO_FAMILY}" in
 	
 	debian)
 		log "Performing Debian/Ubuntu network cleanup"
-		
-		log "Creating netplan configuration directory"
-		mkdir -p /etc/netplan
-		
-		log "Backing up existing netplan configurations"
-		mkdir -p /etc/netplan/old
-		mv /etc/netplan/*.yaml /etc/netplan/old/ 2>/dev/null || log "No existing netplan configs to backup"
+		if command -v netplan &>/dev/null; then
+			# Ubuntu: uses netplan
+			log "netplan detected (Ubuntu) — backing up existing configs"
+			mkdir -p /etc/netplan
+			mkdir -p /etc/netplan/old
+			mv /etc/netplan/*.yaml /etc/netplan/old/ 2>/dev/null || log "No existing netplan configs to backup"
+		else
+			# Debian: uses /etc/network/interfaces
+			log "ifupdown detected (Debian) — backing up existing config"
+			cp -p /etc/network/interfaces /etc/network/interfaces.bak.golden 2>/dev/null || true
+		fi
 		;;
 	
 	opensuse)
@@ -295,18 +314,20 @@ case "${DISTRO_FAMILY}" in
 		;;
 	
 	debian)
-		log "Configuring network using netplan"
-		log "Creating netplan configuration for eth0"
-		log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
-		log "  IPv4 Gateway: ${IPv4_GATEWAY}"
-		if [ "$IPV6_ENABLED" = true ]; then
-			log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
-		fi
-		log "  DNS: ${IPv4_DNS_SERVER},${IPv6_DNS_SERVER}"
-		log "  Search domain: ${IPv4_DNS_DOMAIN}"
-		
-		if [ "$IPV6_ENABLED" = true ]; then
-			cat << EOF > /etc/netplan/eth0.yaml
+		if command -v netplan &>/dev/null; then
+			# Ubuntu: uses netplan
+			log "Configuring network using netplan"
+			log "Creating netplan configuration for eth0"
+			log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
+			log "  IPv4 Gateway: ${IPv4_GATEWAY}"
+			if [ "$IPV6_ENABLED" = true ]; then
+				log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
+			fi
+			log "  DNS: ${IPv4_DNS_SERVER},${IPv6_DNS_SERVER}"
+			log "  Search domain: ${IPv4_DNS_DOMAIN}"
+			
+			if [ "$IPV6_ENABLED" = true ]; then
+				cat << EOF > /etc/netplan/eth0.yaml
 network:
     version: 2
     ethernets:
@@ -325,8 +346,8 @@ network:
               addresses: [${IPv4_DNS_SERVER}, ${IPv6_DNS_SERVER}]
               search: [${IPv4_DNS_DOMAIN}]
 EOF
-		else
-			cat << EOF > /etc/netplan/eth0.yaml
+			else
+				cat << EOF > /etc/netplan/eth0.yaml
 network:
     version: 2
     ethernets:
@@ -344,14 +365,62 @@ network:
               addresses: [${IPv4_DNS_SERVER}, ${IPv6_DNS_SERVER}]
               search: [${IPv4_DNS_DOMAIN}]
 EOF
-		fi
-		
-		chmod 600 /etc/netplan/eth0.yaml
-		log "Netplan configuration created"
-		
-		log "Applying netplan configuration"
-		if ! netplan apply; then
-			error_exit "Failed to apply netplan configuration"
+			fi
+			
+			chmod 600 /etc/netplan/eth0.yaml
+			log "Netplan configuration created"
+			
+			log "Applying netplan configuration"
+			if ! netplan apply; then
+				error_exit "Failed to apply netplan configuration"
+			fi
+		else
+			# Debian: uses /etc/network/interfaces
+			log "Configuring network using /etc/network/interfaces"
+			log "Creating interfaces configuration for eth0"
+			log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
+			log "  IPv4 Gateway: ${IPv4_GATEWAY}"
+			if [ "$IPV6_ENABLED" = true ]; then
+				log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
+			fi
+			log "  DNS: ${IPv4_DNS_SERVER}"
+			log "  Search domain: ${IPv4_DNS_DOMAIN}"
+			
+			if [ "$IPV6_ENABLED" = true ]; then
+				cat << EOF > /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address ${IPv4_ADDRESS}/${IPv4_CIDR}
+    gateway ${IPv4_GATEWAY}
+    dns-nameservers ${IPv4_DNS_SERVER} ${IPv6_DNS_SERVER}
+    dns-search ${IPv4_DNS_DOMAIN}
+
+iface eth0 inet6 static
+    address ${IPv6_ADDRESS}/${IPv6_PREFIX}
+EOF
+			else
+				cat << EOF > /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+    address ${IPv4_ADDRESS}/${IPv4_CIDR}
+    gateway ${IPv4_GATEWAY}
+    dns-nameservers ${IPv4_DNS_SERVER}
+    dns-search ${IPv4_DNS_DOMAIN}
+EOF
+			fi
+			
+			log "/etc/network/interfaces configuration created"
+			
+			log "Restarting networking"
+			if ! systemctl restart networking; then
+				error_exit "Failed to restart networking"
+			fi
 		fi
 		;;
 	

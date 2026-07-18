@@ -70,6 +70,7 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 |---|---|---|---|
 | Red Hat-based | AlmaLinux, Rocky, Oracle Linux, RHEL, CentOS Stream | 10, 9, 8 | Kickstart |
 | Debian-based | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
+| Debian-based | Debian | 13, 12, 11 | Preseed (netboot) |
 | SUSE-based | openSUSE Leap | 16.0, 15.6, 15.5 | Agama (16.0), AutoYaST (15.x) |
 | Azure Linux | Microsoft Azure Linux | 4 | Kickstart (patched LiveOS) |
 
