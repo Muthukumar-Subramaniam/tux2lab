@@ -30,6 +30,7 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 1. Ensure all changes are committed
 2. Run syntax checks on modified shell scripts
 3. Verify no uncommitted changes remain
+4. Verify README.md is updated (supported distros table, CLI examples, any user-facing docs)
 
 ## Release Steps
 
