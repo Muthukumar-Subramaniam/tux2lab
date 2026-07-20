@@ -25,41 +25,37 @@ for arg in "$@"; do
     tux2lab rebuild [OPTIONS]
 
 DESCRIPTION:
-    Destroys ALL virtual machines (guests and infra server) and redeploys
-    the lab infrastructure server.
+    Destroys ALL virtual machines (guests) and redeploys the lab
+    infrastructure container using existing configuration.
 
-    By default, the rebuild uses the saved configuration from the
-    environment file — no interactive prompts for hostname, domain,
-    or credentials.
+    By default, the rebuild uses saved lab_environment.json — no
+    interactive prompts.
 
     With --clean-state, the saved configuration is wiped and a fresh
     interactive deployment is launched (equivalent to destroy + deploy).
 
     This command will:
-      1. Destroy ALL guest virtual machines and their data
-      2. Destroy the lab infrastructure server (VM or host services)
-      3. Redeploy the lab infrastructure server
+      1. Stop and remove the tux2lab-engine container
+      2. Destroy ALL guest virtual machines and their data
+      3. Regenerate service configs and restart the container
 
 OPTIONS:
     --clean-state   Wipe saved config and redeploy interactively (fresh start)
     -h, --help      Show this help message
 
 PRESERVED (default mode):
-    - Lab environment configuration (/tux2lab-data/lab_environment_vars)
-    - SSH keys
-    - Downloaded ISO files
+    - Lab environment configuration (lab_environment.json)
+    - SSH keys and SSL certificates
+    - Downloaded boot ISOs
     - Golden images
     - Network bridge definitions
 
 PRESERVED (--clean-state mode):
-    - Downloaded ISO files
+    - Downloaded boot ISOs
     - Network bridge definitions
 
 CONFIRMATION:
-    Default mode:       Type 'REBUILD-THE-LAB-INFRA-SERVER'
-    --clean-state mode: Type 'REBUILD-THE-LAB-INFRA-SERVER'
-
-    Requires an existing lab deployment (environment file must exist)."
+    Type 'REBUILD-THE-LAB-INFRA-SERVER' to proceed."
             exit 0
             ;;
         --clean-state)
@@ -80,23 +76,21 @@ if [[ "$EUID" -eq 0 ]]; then
 fi
 
 # ====== VALIDATE EXISTING DEPLOYMENT ======
-LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
+readonly CONTAINER_NAME="tux2lab-engine"
 
-if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
+if [[ ! -f "$LAB_ENV_JSON" ]]; then
     print_error "No existing lab deployment found."
-    print_info "Cannot rebuild without an existing configuration."
+    print_info "Cannot rebuild without existing configuration."
     print_info "Run 'tux2lab deploy' to create a new lab from scratch."
     exit 1
 fi
 
-source "$LAB_ENV_VARS_FILE"
-
-# Determine mode label
-if ${lab_infra_server_mode_is_host:-false}; then
-    mode_label="HOST"
-else
-    mode_label="VM"
-fi
+lab_infra_server_hostname=$(jq -r '.lab.engine_fqdn' "$LAB_ENV_JSON")
+lab_infra_domain_name=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
+lab_infra_admin_username=$(jq -r '.admin.username' "$LAB_ENV_JSON")
+lab_infra_server_ipv4_address=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON")
+lab_infra_server_ipv6_address=$(jq -r '.network.ipv6.address' "$LAB_ENV_JSON")
 
 # ====== HEADER ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
@@ -111,37 +105,19 @@ echo
 print_cyan "Current lab configuration:
   Hostname  : ${lab_infra_server_hostname}
   Domain    : ${lab_infra_domain_name}
-  Mode      : ${mode_label}
   Admin User: ${lab_infra_admin_username}
   IPv4      : ${lab_infra_server_ipv4_address}
-  IPv6      : ${lab_infra_server_ipv6_address}"
+  IPv6      : ${lab_infra_server_ipv6_address}
+  Container : ${CONTAINER_NAME}"
 
 echo
 print_warning "This operation will DESTROY:
   • ALL guest virtual machines and their data
-  • The lab infrastructure server (${lab_infra_server_hostname})"
+  • The tux2lab-engine container (will be restarted)"
 if $clean_state; then
-    print_warning "  • Saved lab configuration (environment file)
-  • SSH keys for lab access
+    print_warning "  • Saved lab configuration (lab_environment.json)
+  • SSH keys and SSL certificates
   • All golden images"
-fi
-
-echo
-if $clean_state; then
-    print_cyan "After teardown, a FRESH interactive deployment will launch.
-You will be prompted for hostname, domain, and credentials."
-    echo
-    print_cyan "The following will be PRESERVED:
-  • Downloaded ISO files
-  • Network bridge definitions"
-else
-    print_cyan "After teardown, the lab will be redeployed using saved configuration."
-    echo
-    print_cyan "The following will be PRESERVED:
-  • Lab environment configuration
-  • SSH keys
-  • Downloaded ISO files
-  • Network bridge definitions"
 fi
 
 # ====== LIST VMs THAT WILL BE DESTROYED ======
@@ -168,7 +144,17 @@ print_cyan "══════════════════════�
 print_info "Phase 1: Tearing down existing lab..."
 print_cyan "--------------------------------------------------------------"
 
-# ====== STEP 1: FORCE STOP ALL RUNNING VMs ======
+# ====== STEP 1: STOP AND REMOVE CONTAINER ======
+print_task "Stopping tux2lab-engine container..."
+if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
+    sudo podman stop "${CONTAINER_NAME}" &>/dev/null || true
+    sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
+    print_task_done
+else
+    print_task_skip
+fi
+
+# ====== STEP 2: FORCE STOP ALL RUNNING VMs ======
 running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$running_vms" ]]; then
     print_info "Force stopping all running VMs..."
@@ -185,7 +171,7 @@ else
     print_info "No running VMs to stop."
 fi
 
-# ====== STEP 2: UNDEFINE ALL VMs ======
+# ====== STEP 3: UNDEFINE ALL VMs ======
 all_vms=$(sudo virsh list --all --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$all_vms" ]]; then
     print_info "Removing all VMs from libvirt..."
@@ -216,120 +202,30 @@ else
     print_info "No VMs to remove."
 fi
 
-# ====== STEP 3: STOP AND REMOVE SYSTEMD SERVICE ======
-if systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
-    print_task "Stopping and removing tux2lab.service..."
-    sudo systemctl stop tux2lab.service --no-block 2>/dev/null || true
-    sudo systemctl disable tux2lab.service 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/tux2lab.service
-    sudo systemctl daemon-reload
+# ====== STEP 4: WIPE VM DIRECTORIES ======
+if [[ -d "/tux2lab-data/vms" ]]; then
+    print_task "Wiping VM directories..."
+    sudo rm -rf /tux2lab-data/vms/*
     print_task_done
 fi
 
-# ====== STEP 4: STOP HOST-MODE LAB SERVICES (IF APPLICABLE) ======
-if ${lab_infra_server_mode_is_host:-false}; then
-    print_info "Stopping host-mode lab services..."
-    host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
-    for service_name in "${host_services[@]}"; do
-        print_task "Stopping ${service_name}..."
-        if sudo systemctl stop "$service_name" 2>/dev/null; then
-            print_task_done
-        else
-            print_task_fail
-        fi
-    done
-
-    # Stop, disable and remove tux2lab-iso-mounts service
-    if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
-        print_task "Stopping and removing tux2lab-iso-mounts.service..."
-        sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
-        sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
-        sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
-        sudo systemctl daemon-reload
-        print_task_done
-    fi
-
-    # Clean infra server ISO fstab entry
-    if grep -q '/tux2lab-data/os-repos/.*iso9660' /etc/fstab 2>/dev/null; then
-        print_task "Removing infra server ISO fstab entry..."
-        sudo sed -i '\|/tux2lab-data/os-repos/.*iso9660|d' /etc/fstab
-        sudo systemctl daemon-reload
-        print_task_done
-    fi
-
-    # Remove dummy interface
-    if ip link show dummy-vnet &>/dev/null; then
-        print_task "Removing dummy interface dummy-vnet..."
-        sudo ip link set dummy-vnet down 2>/dev/null || true
-        sudo ip link del dummy-vnet 2>/dev/null || true
-        print_task_done
-    fi
-
-    # Wipe DNS zones and dnsbinder state (so rebuild runs full setup path)
-    if [[ -d /var/named/dnsbinder-managed-zone-files ]]; then
-        print_task "Wiping DNS zone files..."
-        sudo rm -rf /var/named/dnsbinder-managed-zone-files
-        print_task_done
-    fi
-    if [[ -d /tux2lab-data/.dnsbinder-zone.lock ]]; then
-        sudo rm -rf /tux2lab-data/.dnsbinder-zone.lock
-    fi
-    if [[ -f /etc/named.conf ]]; then
-        print_task "Removing named.conf (will be regenerated)..."
-        sudo rm -f /etc/named.conf
-        print_task_done
-    fi
-
-    # Wipe SSL certificates (will be regenerated during deploy)
-    if [[ -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key ]]; then
-        print_task "Removing SSL certificates..."
-        sudo rm -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key
-        sudo rm -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt
-        sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
-        sudo update-ca-trust 2>/dev/null || true
-        print_task_done
-    fi
-
-    # Unmount ISO repos and clean os-repos directory
-    if [[ -d /tux2lab-data/os-repos ]]; then
-        print_task "Unmounting ISO repos..."
-        while IFS= read -r mnt; do
-            sudo umount "$mnt" 2>/dev/null || true
-        done < <(findmnt -rn -o TARGET | grep '/tux2lab-data/os-repos/')
-        sudo rm -rf /tux2lab-data/os-repos
-        print_task_done
-    fi
-
-    # Remove iso-mounts.conf (mount registry)
-    sudo rm -f /tux2lab-data/iso-mounts.conf
-
-    # Remove stale distro setup locks
-    sudo rm -rf /tux2lab-data/.distro-setup-*.lock
-
-    # Remove iPXE boot files (regenerated by deploy)
-    if [[ -d /tux2lab-data/ipxe ]]; then
-        print_task "Removing iPXE boot files..."
-        sudo rm -rf /tux2lab-data/ipxe
-        print_task_done
-    fi
-
-    # Unmount and remove /tux2lab bind mount
-    if mountpoint -q /tux2lab-data/tux2lab 2>/dev/null; then
-        print_task "Removing /tux2lab bind mount..."
-        sudo umount /tux2lab-data/tux2lab 2>/dev/null || true
-        sudo rm -rf /tux2lab-data/tux2lab
-        print_task_done
-    fi
-    # Clean bind mount fstab entry
-    if grep -q '/tux2lab-data/tux2lab' /etc/fstab 2>/dev/null; then
-        sudo sed -i '\|/tux2lab-data/tux2lab|d' /etc/fstab
-    fi
-
-    # Remove CLI symlinks (will be recreated by deploy)
-    sudo rm -f /usr/sbin/dnsbinder /usr/local/bin/ksmanager /usr/local/bin/prepare-distro-for-ksmanager
+# ====== STEP 5: WIPE DNS ZONES (will be regenerated) ======
+if [[ -d "/tux2lab-data/named/dnsbinder-managed-zone-files" ]]; then
+    print_task "Wiping DNS zone files..."
+    sudo rm -rf /tux2lab-data/named/dnsbinder-managed-zone-files
+    sudo rm -f /tux2lab-data/named/named.conf
+    print_task_done
 fi
 
-# ====== STEP 5: CLEAN /etc/hosts LAB ENTRIES ======
+# ====== STEP 6: CLEAN KSMANAGER DATA ======
+ksmanager_hub_dir="/tux2lab-data/ksmanager-hub"
+if [[ -d "$ksmanager_hub_dir" ]]; then
+    print_task "Cleaning ksmanager data..."
+    sudo rm -rf "${ksmanager_hub_dir:?}/"*
+    print_task_done
+fi
+
+# ====== STEP 7: CLEAN /etc/hosts LAB ENTRIES ======
 if [[ -n "$lab_infra_domain_name" ]]; then
     print_task "Cleaning lab entries from /etc/hosts..."
     escaped_domain="${lab_infra_domain_name//./\\.}"
@@ -337,30 +233,10 @@ if [[ -n "$lab_infra_domain_name" ]]; then
     print_task_done
 fi
 
-# ====== STEP 6: WIPE VM DIRECTORIES (KEEP ISO, ENV FILE) ======
-if [[ -d "/tux2lab-data/vms" ]]; then
-    print_task "Wiping VM directories..."
-    sudo rm -rf /tux2lab-data/vms/*
-    print_task_done
-fi
-
-# ====== STEP 7: CLEAN KSMANAGER DATA ======
-# In VM mode, ksmanager data lives inside the infra server VM — it's implicitly
-# destroyed when the VM is undefined in step 2. In host mode, the data resides
-# on the local filesystem and must be explicitly cleaned.
-if ${lab_infra_server_mode_is_host:-false}; then
-    ksmanager_hub_dir="/tux2lab-data/ksmanager-hub"
-    if [[ -d "$ksmanager_hub_dir" ]]; then
-        print_task "Cleaning ksmanager data..."
-        sudo rm -rf "${ksmanager_hub_dir:?}/"*
-        print_task_done
-    fi
-fi
-
-# ====== STEP 8: CLEAN STATE — WIPE ENV FILE AND SSH ARTIFACTS ======
+# ====== STEP 8: CLEAN STATE — WIPE CONFIG, KEYS, GOLDEN IMAGES ======
 if $clean_state; then
     print_task "Wiping saved lab configuration..."
-    rm -f "$LAB_ENV_VARS_FILE"
+    rm -rf /tux2lab-data/lab-config
     print_task_done
 
     print_task "Removing golden images..."
@@ -373,11 +249,7 @@ if $clean_state; then
         escaped_domain="${lab_infra_domain_name//./\\.}"
         sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
     fi
-    sudo rm -f /etc/ssh/ssh_config.d/999-tux2lab.conf 2>/dev/null || true
-    if [[ -f "$HOME/.ssh/config.custom" ]]; then
-        sed -i '/# tux2lab SSH Config - Start/,/# tux2lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
-        sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
-    fi
+    rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
     print_task_done
 fi
 
@@ -385,13 +257,13 @@ print_success "Teardown complete."
 
 # ====== PHASE 2: REDEPLOY ======
 print_cyan "--------------------------------------------------------------"
-print_info "Phase 2: Redeploying lab infrastructure server..."
+print_info "Phase 2: Redeploying lab infrastructure..."
 print_cyan "--------------------------------------------------------------"
 
 if $clean_state; then
     # Clean state: launch fresh interactive deployment
-    exec /tux2lab/qemu-kvm-manage/deploy-lab-infra-server.sh
+    exec /tux2lab/setup/deploy-lab.sh
 else
-    # Default: non-interactive rebuild using saved env file
-    exec /tux2lab/qemu-kvm-manage/deploy-lab-infra-server.sh --rebuild
+    # Default: non-interactive rebuild using saved config
+    exec /tux2lab/setup/deploy-lab.sh --rebuild
 fi

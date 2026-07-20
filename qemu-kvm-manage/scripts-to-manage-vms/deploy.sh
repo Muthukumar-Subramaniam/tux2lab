@@ -19,13 +19,14 @@ DESCRIPTION:
     for creating your tux2lab KVM environment.
 
     Guides you through an interactive setup to configure:
-    - Lab infrastructure server hostname and domain
-    - Admin credentials and SSH keys
-    - Deployment mode (VM or direct on host)
+    - Admin credentials (password)
+    - SSH keys and SSL certificates
+    - All service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
+
+    Deploys the tux2lab-engine container with all lab services.
 
     Prerequisites:
-    - QEMU/KVM must be set up first (run setup-qemu-kvm.sh)
-    - For VM mode: download the infra server ISO (tux2lab distro download-infra-iso)"
+    - Run setup/setup-host.sh first to prepare the host"
     exit 0
 fi
 
@@ -41,4 +42,4 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
-exec /tux2lab/qemu-kvm-manage/deploy-lab-infra-server.sh
+exec /tux2lab/setup/deploy-lab.sh
