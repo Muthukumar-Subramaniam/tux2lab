@@ -133,10 +133,10 @@ tux2lab deploy
 
 The interactive wizard handles:
 - Admin password setup
-- SSH key and SSL certificate generation
+- SSH key and SSL certificate generation (cert trusted by host)
 - Service configuration generation (DNS, DHCP, NTP, HTTP, TFTP, NFS)
 - Container image pull and startup
-- Host DNS and SSH configuration
+- Host DNS, SSH, and SSL trust configuration
 
 The hostname is fixed to `tux2lab-engine` and the domain is automatically set to `<your-username>.internal`.
 
@@ -281,7 +281,7 @@ Tab completion is available after installation.
 
 ## Backend Automation
 
-These tools run inside the tux2lab-engine container and power the provisioning pipeline:
+These tools run on the KVM host and power the provisioning pipeline:
 
 | Tool | Purpose |
 |---|---|
