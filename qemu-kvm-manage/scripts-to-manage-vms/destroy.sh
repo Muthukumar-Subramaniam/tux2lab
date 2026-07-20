@@ -220,13 +220,21 @@ else
     print_task_skip
 fi
 
-# ====== STEP 6: REMOVE SSH ARTIFACTS ======
-print_task "Removing SSH artifacts..."
+# ====== STEP 6: REMOVE SSH AND SSL ARTIFACTS ======
+print_task "Removing SSH and SSL artifacts..."
 rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
 rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
 if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_domain" ]]; then
     escaped_domain="${lab_domain//./\\.}"
     sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+fi
+# Remove SSL cert from host trust store
+if [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]]; then
+    sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
+    sudo update-ca-trust &>/dev/null || true
+elif [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]]; then
+    sudo rm -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
+    sudo update-ca-certificates &>/dev/null || true
 fi
 print_task_done
 

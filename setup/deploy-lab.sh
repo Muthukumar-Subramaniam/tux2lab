@@ -291,8 +291,19 @@ generate_ssl_cert() {
     chmod 600 "$key_file"
     chmod 644 "$cert_file"
 
+    # Install cert into host CA trust store (so curl/wget work without -k)
+    if [[ -d /etc/pki/ca-trust/source/anchors ]]; then
+        # RHEL/Fedora/SUSE
+        sudo cp "$cert_file" /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-trust &>/dev/null
+    elif [[ -d /usr/local/share/ca-certificates ]]; then
+        # Debian/Ubuntu
+        sudo cp "$cert_file" /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-certificates &>/dev/null
+    fi
+
     print_task_done
-    print_info "SSL certificate generated (valid 10 years)."
+    print_info "SSL certificate generated and trusted by host."
 }
 
 # ============================================================================
