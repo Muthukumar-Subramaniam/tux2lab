@@ -516,6 +516,7 @@ start_container() {
     fi
 
     print_task "Starting tux2lab-engine container..."
+    local start_begin=$SECONDS
 
     # Remove existing container if present (from failed previous run)
     if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
@@ -540,7 +541,10 @@ start_container() {
     # Wait briefly for services to start
     sleep 2
 
+    local start_elapsed=$((SECONDS - start_begin))
     if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" | grep -q "Up"; then
+        printf "\r\033[K"
+        printf "${MAKE_IT_CYAN}[TASK] Starting tux2lab-engine container (%dm %ds)...${RESET_COLOR}" $((start_elapsed/60)) $((start_elapsed%60))
         print_task_done
         print_info "Container '${CONTAINER_NAME}' is running."
     else
