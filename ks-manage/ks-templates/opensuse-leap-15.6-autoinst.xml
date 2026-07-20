@@ -4,9 +4,9 @@
   <add-on t="map">
     <add_on_products t="list">
       <listentry t="map">
-        <alias>lab-repo-oss</alias>
-        <media_url>http://get_lab_infra_server_hostname/os-repos/opensuse-leap/get_version/</media_url>
-        <name>Lab OSS Repository</name>
+        <alias>oss-repo</alias>
+        <media_url>get_repo_url</media_url>
+        <name>openSUSE OSS Repository</name>
         <priority t="integer">99</priority>
         <product_dir>/</product_dir>
       </listentry>
