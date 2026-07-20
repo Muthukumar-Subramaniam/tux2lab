@@ -515,10 +515,14 @@ start_container() {
         sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
     fi
 
+    sudo mkdir -p "${TUX2LAB_DATA_DIR}/log"
     sudo podman run -d \
         --name "${CONTAINER_NAME}" \
         --network=host \
         --privileged \
+        --log-driver=k8s-file \
+        --log-opt "path=${TUX2LAB_DATA_DIR}/log/tux2lab-engine.log" \
+        --log-opt "max-size=10mb" \
         -v "${TUX2LAB_DATA_DIR}:${TUX2LAB_DATA_DIR}" \
         -v "/tux2lab:${TUX2LAB_DATA_DIR}/tux2lab:ro" \
         -v "/lib/modules:/lib/modules:ro" \
