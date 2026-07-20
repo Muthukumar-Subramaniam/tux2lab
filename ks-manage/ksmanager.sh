@@ -4,11 +4,9 @@
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
 
-source /etc/environment
 if [[ -f /tux2lab-data/lab_environment_vars ]]; then
     source /tux2lab-data/lab_environment_vars
 fi
-# In host mode, mgmt_super_user may come from lab_environment_vars as lab_infra_admin_username
 if [[ -z "${mgmt_super_user:-}" && -n "${lab_infra_admin_username:-}" ]]; then
     mgmt_super_user="${lab_infra_admin_username}"
 fi
@@ -38,8 +36,8 @@ OPTIONS:
 fi
 
 if [[ -z "$mgmt_super_user" ]]; then
-    print_error "Critical: mgmt_super_user is not defined in /etc/environment."
-    print_error "Please ensure the environment is properly configured."
+    print_error "Critical: mgmt_super_user is not defined."
+    print_error "Ensure lab is deployed: tux2lab deploy"
     exit 1
 fi
 
@@ -50,8 +48,8 @@ if [[ "$USER" != "$mgmt_super_user" ]]; then
 fi
 
 if [[ -z "${dnsbinder_server_ipv4_address}" ]]; then
-    print_error "Critical: dnsbinder_server_ipv4_address is not defined in /etc/environment."
-    print_error "DNS server IP address is required for dig queries."
+    print_error "Critical: dnsbinder_server_ipv4_address is not defined."
+    print_error "Ensure lab is deployed: tux2lab deploy"
     exit 1
 fi
 
@@ -76,13 +74,7 @@ dnsbinder_script='/tux2lab/named-manage/dnsbinder.sh'
 ksmanager_main_dir='/tux2lab/ks-manage'
 ksmanager_hub_dir="/tux2lab-data/ksmanager-hub"
 ipxe_web_dir="/tux2lab-data/ipxe"
-shadow_password_super_mgmt_user=$(sudo awk -F: -v user="${mgmt_super_user}" '$1 == user {print $2}' /etc/shadow)
-if [[ -d "/tux2lab-data" ]]; then
-    if [[ -f "/tux2lab-data/lab_environment_vars" ]]; then
-        source /tux2lab-data/lab_environment_vars
-        shadow_password_super_mgmt_user=$lab_admin_shadow_password
-    fi
-fi
+shadow_password_super_mgmt_user="${lab_admin_shadow_password:-}"
 subnets_to_allow_ssh_pub_access=""
 for i in $(seq ${dnsbinder_first24_subnet##*.} ${dnsbinder_last24_subnet##*.}); do
     subnets_to_allow_ssh_pub_access+=" ${dnsbinder_first24_subnet%.*}.$i.*"
@@ -540,7 +532,7 @@ if $remove_host_requested; then
     fi
     
     # 5. Remove KEA DHCP reservation
-    if systemctl is-active --quiet kea-ctrl-agent && [[ -n "$cached_mac" ]]; then
+    if curl -s -o /dev/null http://127.0.0.1:8000/ 2>/dev/null && [[ -n "$cached_mac" ]]; then
         kea_api_url="http://127.0.0.1:8000/"
         kea_api_auth="kea-api:kea-api-password"
         
@@ -604,8 +596,8 @@ if $remove_host_requested; then
         
         # Rebuild KEA DHCPv4 config without this host
         kea_cache_file="${ksmanager_hub_dir}/mac-address-cache"
-        kea_dhcp4_config_file="/etc/kea/kea-dhcp4.conf"
-        kea_dhcp6_config_file="/etc/kea/kea-dhcp6.conf"
+        kea_dhcp4_config_file="/tux2lab-data/kea/kea-dhcp4.conf"
+        kea_dhcp6_config_file="/tux2lab-data/kea/kea-dhcp6.conf"
         kea_temp_config_timestamp=$(date +"%Y%m%d_%H%M%S_%Z")
         kea_config_temp_dir="${ksmanager_hub_dir}/kea_dhcp_temp_configs_with_reservation"
         kea_dhcp4_tmp_config="${kea_config_temp_dir}/kea-dhcp4.conf_${kea_temp_config_timestamp}"
@@ -1261,8 +1253,8 @@ if ! $invoked_with_golden_image; then
         rsync -a -q /home/${mgmt_super_user}/.ssh/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} "${ksmanager_hub_dir}"/addons-for-kickstarts/ && \
         chmod +r "${ksmanager_hub_dir}"/addons-for-kickstarts/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} && \
         mkdir -p "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs && \
-        if [[ -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt ]]; then
-            cp -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs/
+        if [[ -f /tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt ]]; then
+            cp -f /tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs/
         fi && \
         mkdir -p "${ksmanager_hub_dir}"/golden-boot-mac-configs; then
         print_task_done
@@ -1505,8 +1497,8 @@ fi
 fn_update_kea_dhcp_reservations() {
   print_task "Updating KEA DHCP reservations..."
   local kea_cache_file="${ksmanager_hub_dir}/mac-address-cache"
-  local kea_dhcp4_config_file="/etc/kea/kea-dhcp4.conf"
-  local kea_dhcp6_config_file="/etc/kea/kea-dhcp6.conf"
+  local kea_dhcp4_config_file="/tux2lab-data/kea/kea-dhcp4.conf"
+  local kea_dhcp6_config_file="/tux2lab-data/kea/kea-dhcp6.conf"
   local kea_api_url="http://127.0.0.1:8000/"
   local kea_api_auth="kea-api:kea-api-password"
   local kea_temp_config_timestamp=$(date +"%Y%m%d_%H%M%S_%Z")
@@ -1706,7 +1698,7 @@ EOF
   fi
 }
 
-if systemctl is-active --quiet kea-ctrl-agent; then
+if curl -s -o /dev/null http://127.0.0.1:8000/ 2>/dev/null; then
     fn_update_kea_dhcp_reservations
 fi
 

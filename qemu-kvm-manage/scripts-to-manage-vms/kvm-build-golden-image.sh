@@ -156,11 +156,7 @@ if [[ -f "${golden_image_path}" ]]; then
             ;;
         * )
             print_info "Keeping existing golden image \"${qemu_kvm_hostname}\". Cleaning up ksmanager databases..."
-            if $lab_infra_server_mode_is_host; then
-                /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host || true
-            else
-                ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" || true
-            fi
+            /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host || true
             exit 0
             ;;
     esac
@@ -199,11 +195,7 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
     sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
-    if $lab_infra_server_mode_is_host; then
-        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
-    else
-        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" 2>/dev/null || true
-    fi
+    /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
     exit 1
 fi
 
@@ -231,14 +223,8 @@ fi
 
 # Clean up ksmanager databases (DNS, MAC cache, kickstart, iPXE, DHCP)
 print_info "Cleaning up ksmanager databases for temporary VM..."
-if $lab_infra_server_mode_is_host; then
-    if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
-        print_warning "Could not clean up ksmanager databases."
-    fi
-else
-    if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host"; then
-        print_warning "Could not clean up ksmanager databases."
-    fi
+if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
+    print_warning "Could not clean up ksmanager databases."
 fi
 
 print_success "Golden image disk created successfully: ${golden_image_path}"

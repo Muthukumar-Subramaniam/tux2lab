@@ -140,14 +140,8 @@ remove_vm() {
     if [[ "$ignore_ksmanager_cleanup" == true ]]; then
         print_info "Skipping ksmanager cleanup (--ignore-ksmanager-cleanup flag)."
     else
-        if $lab_infra_server_mode_is_host; then
-            if ! /tux2lab/ks-manage/ksmanager.sh "$vm_name" --remove-host; then
-                print_warning "Could not clean up ksmanager databases."
-            fi
-        else
-            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh '${vm_name}' --remove-host"; then
-                print_warning "Could not clean up ksmanager databases."
-            fi
+        if ! /tux2lab/ks-manage/ksmanager.sh "$vm_name" --remove-host; then
+            print_warning "Could not clean up ksmanager databases."
         fi
     fi
     

@@ -9,16 +9,13 @@ set -uo pipefail
 # Source color functions
 source /tux2lab/common-utils/color-functions.sh
 
-# Source lab environment variables
-if [[ -f /tux2lab-data/lab_environment_vars ]]; then
-    source /tux2lab-data/lab_environment_vars
-else
-    print_error "Lab environment not configured. Run 'tux2lab deploy' first."
-    exit 1
-fi
+# Source lab environment
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Validate required variables
-if [[ -z "${lab_infra_server_ipv6_gateway:-}" ]]; then
+lab_infra_server_ipv6_gateway=$(jq -r '.network.ipv6.gateway' "${LAB_ENV_JSON}")
+lab_infra_server_ipv6_ula_subnet=$(jq -r '.network.ipv6.ula_subnet' "${LAB_ENV_JSON}")
+if [[ -z "${lab_infra_server_ipv6_gateway}" || "${lab_infra_server_ipv6_gateway}" == "null" ]]; then
     print_error "IPv6 gateway not configured in lab environment."
     print_info "Redeploy with: tux2lab rebuild"
     exit 1

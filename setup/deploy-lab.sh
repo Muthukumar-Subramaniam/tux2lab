@@ -350,10 +350,44 @@ EOF
     chmod 644 "${LAB_ENV_JSON}"
     print_task_done
     print_info "Lab environment written to ${LAB_ENV_JSON}"
+
+    # Generate compatibility vars file for ksmanager/prepare-distro (legacy format)
+    print_task "Generating compatibility lab_environment_vars..."
+    cat > "${TUX2LAB_DATA_DIR}/lab_environment_vars" <<EOVARS
+# Auto-generated from lab_environment.json — do not edit manually
+lab_infra_server_hostname="${INFRA_FQDN}"
+lab_infra_domain_name="${ADMIN_DOMAIN}"
+lab_infra_admin_username="${ADMIN_USERNAME}"
+lab_admin_shadow_password='${ADMIN_PASSWORD_HASH}'
+lab_infra_server_ipv4_address="${IPV4_ADDRESS}"
+lab_infra_server_ipv6_address="${IPV6_ADDRESS}"
+lab_infra_server_ipv4_gateway="${IPV4_GATEWAY}"
+lab_infra_server_ipv6_gateway="${IPV6_GATEWAY}"
+lab_infra_server_ipv4_subnet="${IPV4_CIDR}"
+lab_infra_server_ipv4_netmask="${IPV4_NETMASK}"
+lab_infra_server_ipv6_prefix="${IPV6_PREFIX}"
+lab_infra_server_ipv6_ula_subnet="${IPV6_ULA_SUBNET}"
+dnsbinder_domain="${ADMIN_DOMAIN}"
+dnsbinder_server_ipv4_address="${IPV4_ADDRESS}"
+dnsbinder_server_ipv6_address="${IPV6_ADDRESS}"
+dnsbinder_server_fqdn="${INFRA_FQDN}"
+dnsbinder_gateway="${IPV4_GATEWAY}"
+dnsbinder_network_cidr="${IPV4_CIDR}"
+dnsbinder_cidr_prefix="${IPV4_PREFIX}"
+dnsbinder_netmask="${IPV4_NETMASK}"
+dnsbinder_first24_subnet="${IPV4_FIRST24}"
+dnsbinder_last24_subnet="${IPV4_LAST24}"
+dnsbinder_ipv6_gateway="${IPV6_GATEWAY}"
+dnsbinder_ipv6_prefix="${IPV6_PREFIX}"
+dnsbinder_ipv6_ula_subnet="${IPV6_ULA_SUBNET}"
+mgmt_super_user="${ADMIN_USERNAME}"
+EOVARS
+    chmod 644 "${TUX2LAB_DATA_DIR}/lab_environment_vars"
+    print_task_done
 }
 
 # ============================================================================
-# GENERATE SERVICE CONFIGS (calls configure-lab-infra-server.sh)
+# GENERATE SERVICE CONFIGS
 # ============================================================================
 generate_service_configs() {
     print_info "Generating service configurations..."

@@ -99,94 +99,9 @@ else
 fi
 
 # ====== INVOKE DNSBINDER ======
-print_info "Invoking dnsbinder utility from lab infra server..."
+print_info "Invoking dnsbinder utility..."
 
 exit_code=0
-
-if $lab_infra_server_mode_is_host; then
-    sudo /tux2lab/named-manage/dnsbinder.sh "$@" || exit_code=$?
-else
-    # SSH connection options
-    ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
-    ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
-
-    # Verify SSH connectivity before proceeding
-    if ! ssh "${ssh_opts[@]}" -o ConnectTimeout=5 "$ssh_target" true &>/dev/null; then
-        print_error "Cannot reach lab infra server via SSH."
-        print_info "Ensure the infra server is running: tux2lab health"
-        exit 1
-    fi
-
-    # Check if this is a file-based operation
-    file_based_option=""
-    file_path=""
-    yes_flag=""
-    inline_flag=""
-
-    # Detect trailing --yes / -y and --inline modifiers
-    for arg in "$@"; do
-        if [[ "$arg" == "--yes" || "$arg" == "-y" ]]; then
-            yes_flag="--yes"
-        elif [[ "$arg" == "--inline" ]]; then
-            inline_flag="--inline"
-        fi
-    done
-
-    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "--create-from-file" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "--delete-from-file" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "--create-with-ip-file" ]] || [[ "$1" == "-cify" ]]; }; then
-        file_based_option="$1"
-        file_path="$2"
-
-        # Validate no unexpected arguments after the file (only --yes/-y/--inline allowed)
-        for arg in "${@:3}"; do
-            if [[ "$arg" != "--yes" && "$arg" != "-y" && "$arg" != "--inline" ]]; then
-                print_error "Unexpected argument: $arg"
-                print_info "'$1' takes only a file argument and optional --yes/--inline flags."
-                exit 1
-            fi
-        done
-
-        # Validate that file exists locally
-        if [[ ! -f "$file_path" ]]; then
-            print_error "File not found: $file_path"
-            exit 1
-        fi
-
-        # Create secure temp file on remote server
-        if ! remote_temp_file=$(ssh "${ssh_opts[@]}" "$ssh_target" "mktemp /tmp/dnsbinder-bulk.XXXXXXXXXX" 2>/dev/null); then
-            print_error "Failed to create temp file on lab infra server."
-            exit 1
-        fi
-        if [[ -z "$remote_temp_file" ]]; then
-            print_error "Failed to create temp file on lab infra server."
-            exit 1
-        fi
-
-        # Ensure remote temp file is cleaned up on exit or interrupt
-        cleanup_remote_temp() {
-            ssh "${ssh_opts[@]}" "$ssh_target" "rm -f '${remote_temp_file}'" >/dev/null 2>&1 || true
-        }
-        trap cleanup_remote_temp EXIT INT TERM
-
-        print_task "Transferring file to lab infra server..."
-        if scp "${ssh_opts[@]}" "$file_path" "${ssh_target}:${remote_temp_file}" >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
-            print_error "Failed to transfer file to lab infra server"
-            exit 1
-        fi
-
-        # Execute dnsbinder with remote temp file
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag} ${inline_flag}" || exit_code=$?
-
-        # Cleanup handled by trap, clear it
-        cleanup_remote_temp
-        trap - EXIT INT TERM
-    else
-        # Regular options - forward as-is
-        args_escaped=$(printf '%q ' "$@")
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${args_escaped% }" || exit_code=$?
-    fi
-fi
+sudo /tux2lab/named-manage/dnsbinder.sh "$@" || exit_code=$?
 
 exit $exit_code

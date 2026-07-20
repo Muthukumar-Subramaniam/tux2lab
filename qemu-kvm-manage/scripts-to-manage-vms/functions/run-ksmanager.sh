@@ -13,38 +13,17 @@ run_ksmanager() {
 
     # Execute ksmanager — output flows directly to terminal
     local ksmanager_exit_code=0
-    if $lab_infra_server_mode_is_host; then
-        if [[ -z "$hostname" ]]; then
-            /tux2lab/ks-manage/ksmanager.sh ${ksmanager_options}
-            ksmanager_exit_code=$?
-        else
-            /tux2lab/ks-manage/ksmanager.sh "${hostname}" ${ksmanager_options}
-            ksmanager_exit_code=$?
-        fi
+    if [[ -z "$hostname" ]]; then
+        /tux2lab/ks-manage/ksmanager.sh ${ksmanager_options} || ksmanager_exit_code=$?
     else
-        if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o ConnectTimeout=5 "${lab_infra_admin_username}@${lab_infra_server_hostname}" true 2>/dev/null; then
-            print_error "Cannot reach the lab infra server (${lab_infra_server_hostname})."
-            return 1
-        fi
-        if [[ -z "$hostname" ]]; then
-            ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${ksmanager_options}"
-            ksmanager_exit_code=$?
-        else
-            ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${hostname} ${ksmanager_options}"
-            ksmanager_exit_code=$?
-        fi
+        /tux2lab/ks-manage/ksmanager.sh "${hostname}" ${ksmanager_options} || ksmanager_exit_code=$?
     fi
 
     # Check if user cancelled (exit code 130)
     if [[ $ksmanager_exit_code -eq 130 ]]; then
         if [[ "$cleanup_on_cancel" == "true" ]] && [[ -n "$hostname" ]]; then
             print_info "Cleaning up resources for '${hostname}' due to cancellation..."
-            if $lab_infra_server_mode_is_host; then
-                /tux2lab/ks-manage/ksmanager.sh "${hostname}" --remove-host || true
-            else
-                ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${hostname} --remove-host" || true
-            fi
+            /tux2lab/ks-manage/ksmanager.sh "${hostname}" --remove-host || true
             print_info "Cleanup completed for '${hostname}' due to cancellation.\n"
         fi
         return 1
