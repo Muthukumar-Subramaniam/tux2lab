@@ -346,7 +346,7 @@ setup_tftpboot() {
     mkdir -p "${DATA_DIR}/tftpboot"
 
     # Copy iPXE EFI binary from project files if not already present
-    local ipxe_source="/tux2lab/configure-lab-infra-server/files/ipxe.efi"
+    local ipxe_source="/tux2lab/common-utils/ipxe-firmware/ipxe.efi"
     if [[ -f "$ipxe_source" && ! -f "${DATA_DIR}/tftpboot/ipxe.efi" ]]; then
         cp "$ipxe_source" "${DATA_DIR}/tftpboot/ipxe.efi"
     fi
