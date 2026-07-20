@@ -6,9 +6,24 @@
 
 source /tux2lab/common-utils/color-functions.sh
 
-# Source environment variables for IPv6 dual-stack support
-if [[ -f /etc/environment ]]; then
-    source /etc/environment
+# Read lab environment from JSON (v2.0.0)
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
+if [[ -f "${LAB_ENV_JSON}" ]]; then
+    dnsbinder_domain=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
+    dnsbinder_server_ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
+    dnsbinder_server_ipv6_address=$(jq -r '.network.ipv6.address' "${LAB_ENV_JSON}")
+    dnsbinder_server_fqdn=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
+    dnsbinder_server_short_name=$(jq -r '.lab.engine_hostname' "${LAB_ENV_JSON}")
+    dnsbinder_gateway=$(jq -r '.network.ipv4.gateway' "${LAB_ENV_JSON}")
+    dnsbinder_network_cidr=$(jq -r '.network.ipv4.cidr' "${LAB_ENV_JSON}")
+    dnsbinder_cidr_prefix=$(jq -r '.network.ipv4.prefix' "${LAB_ENV_JSON}")
+    dnsbinder_netmask=$(jq -r '.network.ipv4.netmask' "${LAB_ENV_JSON}")
+    dnsbinder_broadcast=$(jq -r '.network.ipv4.broadcast' "${LAB_ENV_JSON}")
+    dnsbinder_first24_subnet=$(jq -r '.network.ipv4.first24_subnet' "${LAB_ENV_JSON}")
+    dnsbinder_last24_subnet=$(jq -r '.network.ipv4.last24_subnet' "${LAB_ENV_JSON}")
+    dnsbinder_ipv6_gateway=$(jq -r '.network.ipv6.gateway' "${LAB_ENV_JSON}")
+    dnsbinder_ipv6_prefix=$(jq -r '.network.ipv6.prefix' "${LAB_ENV_JSON}")
+    dnsbinder_ipv6_ula_subnet=$(jq -r '.network.ipv6.ula_subnet' "${LAB_ENV_JSON}")
 fi
 
 if [[ "${UID}" -ne 0 ]]
@@ -20,9 +35,9 @@ fi
 
 v_tmp_file_dnsbinder="$(mktemp /tmp/dnsbinder.XXXXXXXXXX)"
 
-v_domain_name=$(if [[ -f /etc/named.conf ]];then awk '/zones-are-managed-by-dnsbinder/ {print $2}' /etc/named.conf;fi)
-dnsbinder_network=$(if [[ -f /etc/named.conf ]];then awk '/dnsbinder-network/ {print $3}' /etc/named.conf;fi)
-var_zone_dir='/var/named/dnsbinder-managed-zone-files'
+v_domain_name=$(if [[ -f /tux2lab-data/named/named.conf ]];then awk '/zones-are-managed-by-dnsbinder/ {print $2}' /tux2lab-data/named/named.conf;fi)
+dnsbinder_network=$(if [[ -f /tux2lab-data/named/named.conf ]];then awk '/dnsbinder-network/ {print $3}' /tux2lab-data/named/named.conf;fi)
+var_zone_dir='/tux2lab-data/named/dnsbinder-managed-zone-files'
 v_fw_zone="${var_zone_dir}/${v_domain_name}-forward.db"
 
 #--- File Locking Mechanism (mkdir-based spinlock with PID tracking) ---#
@@ -299,11 +314,6 @@ fn_configure_named_dns_server() {
     done
     v_script_dir="$(cd "$(dirname "${v_script_path}")" && pwd)"
 
-    KVM_HOST_MODE_SET=false
-    if ip link show labbr0 &>/dev/null; then
-        KVM_HOST_MODE_SET=true
-    fi
-
     if [[ -n "${v_domain_name}" ]]
     then
         print_error "> Seems like bind dns server and domain is already setup and managed by dnsbinder! "
@@ -336,60 +346,28 @@ fn_configure_named_dns_server() {
 
     print_task "Fetching network information from the system..."
 
-    if [[ "${KVM_HOST_MODE_SET}" == "true" ]]; then
-        source /tux2lab-data/lab_environment_vars
-        v_dns_host_short_name="${lab_infra_server_hostname%%.*}"
-        v_primary_interface='labbr0'
-        v_primary_ip=$lab_infra_server_ipv4_address
-        
-        if [[ -z "${v_primary_ip}" ]]; then
-            print_error "Critical: lab_infra_server_ipv4_address is not defined in /tux2lab-data/lab_environment_vars."
-            print_error "DNS server IP address is required for dig queries."
-            exit 1
-        fi
-        
-        v_network_gateway=$lab_infra_server_ipv4_gateway
-        # Extract IPv6 information for dual-stack support
-        v_ipv6_address=$lab_infra_server_ipv6_address
-        v_ipv6_gateway=$lab_infra_server_ipv6_gateway
-        v_ipv6_prefix=$lab_infra_server_ipv6_prefix
-        if [[ -z "${v_ipv6_ula_subnet}" ]]; then
-            v_ipv6_ula_subnet=$lab_infra_server_ipv6_ula_subnet
-        fi
-    else
-        v_dns_host_short_name=$(hostname -s)
-        v_primary_interface=$(ip r | awk '/default/ {print $5; exit}')
-        v_primary_ip=$(ip r | awk -v iface="${v_primary_interface}" '$0 !~ /default/ && $0 ~ iface {print $9; exit}')
-        v_network_gateway=$(ip r | awk '/default/ {print $3; exit}')
-        
-        if [[ -z "${v_primary_ip}" ]]; then
-            print_error "Critical: Failed to detect primary IP address from network interface."
-            print_error "DNS server IP address is required for dig queries."
-            exit 1
-        fi
-        
-        # Auto-detect IPv6 from system (lab infra server VM must have IPv6 configured)
-        # Try to get IPv6 from primary interface (exclude link-local fe80 and loopback ::1)
-        v_ipv6_address=$(ip -6 addr show "${v_primary_interface}" | awk '/inet6 fd[0-9a-f:]+/ && !/fe80/ && !/::1/ {for(i=1;i<=NF;i++) if($i ~ /^fd/) {sub(/\/.*/, "", $i); print $i; exit}}')
-        if [[ -n "${v_ipv6_address}" ]]; then
-            # Extract prefix length
-            v_ipv6_prefix=$(ip -6 addr show "${v_primary_interface}" | grep -oP 'fd[0-9a-f:]+/\K[0-9]+' | head -1 || true)
-            # Build ULA subnet
-            if [[ -n "${v_ipv6_address}" && ! -z "${v_ipv6_prefix}" ]]; then
-                # Calculate the network address properly by applying the prefix mask
-                v_ipv6_network=$(fn_calculate_ipv6_network "${v_ipv6_address}" "${v_ipv6_prefix}")
-                v_ipv6_ula_subnet="${v_ipv6_network}/${v_ipv6_prefix}"
-                # Gateway is always ::1 in the subnet (no default route needed for detection)
-                v_ipv6_gateway="${v_ipv6_network%::}::1"
-            fi
-        fi
-        
-        # Verify dual-stack configuration is present on the system
-        if [[ -z "${v_ipv6_ula_subnet}" ]]; then
-            print_error "IPv6 configuration not found. Dual-stack (IPv4+IPv6) is required."
-            print_error "Please configure IPv6 on ${v_primary_interface} before running this script."
-            exit 1
-        fi
+    # v2.0.0: Always read from lab_environment.json (no VM/host mode distinction)
+    v_dns_host_short_name="${dnsbinder_server_short_name}"
+    v_primary_interface='labbr0'
+    v_primary_ip="${dnsbinder_server_ipv4_address}"
+
+    if [[ -z "${v_primary_ip}" ]]; then
+        print_error "Critical: IPv4 address not found in lab_environment.json."
+        print_error "DNS server IP address is required."
+        exit 1
+    fi
+
+    v_network_gateway="${dnsbinder_gateway}"
+    v_ipv6_address="${dnsbinder_server_ipv6_address:-}"
+    v_ipv6_gateway="${dnsbinder_ipv6_gateway:-}"
+    v_ipv6_prefix="${dnsbinder_ipv6_prefix:-}"
+    v_ipv6_ula_subnet="${dnsbinder_ipv6_ula_subnet:-}"
+
+    # Verify dual-stack configuration is present
+    if [[ -z "${v_ipv6_ula_subnet}" ]]; then
+        print_error "IPv6 configuration not found. Dual-stack (IPv4+IPv6) is required."
+        print_error "Please configure IPv6 on ${v_primary_interface} before running this script."
+        exit 1
     fi
 
     fn_split_network_into_cidr24subnets
@@ -418,8 +396,8 @@ fn_configure_named_dns_server() {
 
     print_task "Taking backup of named.conf..."
 
-    if [[ -f /etc/named.conf ]]; then
-        cp -p /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
+    if [[ -f /tux2lab-data/named/named.conf ]]; then
+        cp -p /tux2lab-data/named/named.conf /tux2lab-data/named/named.conf_bkp_by_dnsbinder
     fi
     
     print_task_done
@@ -433,19 +411,11 @@ fn_configure_named_dns_server() {
         exit 1
     fi
 
-    # Prepare listen addresses
-    if [[ "${KVM_HOST_MODE_SET}" == "true" ]]; then
-        v_listen_ipv4="${v_primary_ip}"
-    else
-        v_listen_ipv4="127.0.0.1; ${v_primary_ip}"
-    fi
+    # Prepare listen addresses (v2.0.0: always bind to service IP + localhost)
+    v_listen_ipv4="127.0.0.1; ${v_primary_ip}"
 
     if [[ -n "${v_ipv6_address}" ]]; then
-        if [[ "${KVM_HOST_MODE_SET}" == "true" ]]; then
-            v_listen_ipv6="${v_ipv6_address}"
-        else
-            v_listen_ipv6="::1; ${v_ipv6_address}"
-        fi
+        v_listen_ipv6="::1; ${v_ipv6_address}"
     else
         v_listen_ipv6="none"
     fi
@@ -464,14 +434,14 @@ fn_configure_named_dns_server() {
             -e "s|LISTEN_IPV6_ADDRESSES|${v_listen_ipv6}|g" \
             -e "s|ALLOW_QUERY_NETWORKS|${v_allow_networks}|g" \
             -e "s|ALLOW_RECURSION_NETWORKS|${v_allow_networks}|g" \
-            "${v_template_file}" > /etc/named.conf
+            "${v_template_file}" > /tux2lab-data/named/named.conf
     else
         # IPv6 not available - remove listen-on-v6 line entirely
         sed -e "s|LISTEN_IPV4_ADDRESSES|${v_listen_ipv4}|g" \
             -e "/listen-on-v6 port 53/d" \
             -e "s|ALLOW_QUERY_NETWORKS|${v_allow_networks}|g" \
             -e "s|ALLOW_RECURSION_NETWORKS|${v_allow_networks}|g" \
-            "${v_template_file}" > /etc/named.conf
+            "${v_template_file}" > /tux2lab-data/named/named.conf
     fi
 
     print_task_done
@@ -479,9 +449,9 @@ fn_configure_named_dns_server() {
     print_task "Downloading latest root hints file (named.root)..."
 
     # Download the latest named.root from IANA
-    if curl -s -o /var/named/named.root https://www.internic.net/domain/named.root; then
-        chown root:named /var/named/named.root
-        chmod 640 /var/named/named.root
+    if curl -s -o /tux2lab-data/named/named.root https://www.internic.net/domain/named.root; then
+        chown root:named /tux2lab-data/named/named.root
+        chmod 640 /tux2lab-data/named/named.root
         print_task_done
     else
         print_warning "Failed to download named.root, using system default"
@@ -490,14 +460,14 @@ fn_configure_named_dns_server() {
     print_task "Adding DNS zones to named.conf..."
 
 
-    tee -a /etc/named.conf > /dev/null << EOF
+    tee -a /tux2lab-data/named/named.conf > /dev/null << EOF
 # BEGIN zones-of-${v_given_domain}-domain
 # dnsbinder-network ${v_network}/${v_cidr}$([[ -n "${v_ipv6_ula_subnet}" ]] && echo " ${v_ipv6_ula_subnet}")
 # ${v_given_domain} zones-are-managed-by-dnsbinder
 //Forward Zone for ${v_given_domain}
 zone "${v_given_domain}" IN {
     type master;
-    file "/var/named/dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
+    file "/tux2lab-data/named/dnsbinder-managed-zone-files/${v_given_domain}-forward.db";
     allow-update { none; };
 };
 //Reverse Zones
@@ -510,10 +480,10 @@ EOF
         fi
 
         v_reverse_subnet_part=$(echo "${v_subnet_part}" | awk -F. '{print $3"."$2"."$1}')
-        tee -a /etc/named.conf > /dev/null << EOF
+        tee -a /tux2lab-data/named/named.conf > /dev/null << EOF
 zone "${v_reverse_subnet_part}.in-addr.arpa" IN {
     type master;
-    file "/var/named/dnsbinder-managed-zone-files/${v_subnet_part}.${v_given_domain}-reverse.db";
+    file "/tux2lab-data/named/dnsbinder-managed-zone-files/${v_subnet_part}.${v_given_domain}-reverse.db";
     allow-update { none; };
 };
 EOF
@@ -537,17 +507,17 @@ EOF
             }
         }' | sed 's/\.$//')
         
-        tee -a /etc/named.conf > /dev/null << EOF
+        tee -a /tux2lab-data/named/named.conf > /dev/null << EOF
 //IPv6 Reverse Zone
 zone "${v_ipv6_reverse_zone}.ip6.arpa" IN {
     type master;
-    file "/var/named/dnsbinder-managed-zone-files/${v_given_domain}-ipv6-reverse.db";
+    file "/tux2lab-data/named/dnsbinder-managed-zone-files/${v_given_domain}-ipv6-reverse.db";
     allow-update { none; };
 };
 EOF
     fi
 
-    echo -e "# END zones-of-${v_given_domain}-domain" | tee -a /etc/named.conf > /dev/null
+    echo -e "# END zones-of-${v_given_domain}-domain" | tee -a /tux2lab-data/named/named.conf > /dev/null
 
     print_task_done
 
@@ -648,90 +618,18 @@ print(ptr)
 
     print_task "Enabling and starting named DNS Service..."
 
-    systemctl enable --now named &>/dev/null    
+    # named runs inside container (auto-started by entrypoint)    
     
     print_task_done
 
     print_task "Doing a final restart of named DNS Service..."
 
-    systemctl restart named &>/dev/null 
+    sudo podman exec tux2lab-engine rndc reload &>/dev/null 
 
     print_task_done
 
-    print_task "Updating dnsbinder related global variables to /etc/environment..."
-    declare -A dnsbinder_environment_map=(
-        ["dnsbinder_domain"]="$v_given_domain"
-        ["dnsbinder_network_cidr"]="$v_network_and_cidr"
-        ["dnsbinder_cidr_prefix"]="$v_cidr"
-        ["dnsbinder_first24_subnet"]="$v_first_subnet_part"
-        ["dnsbinder_last24_subnet"]="$v_last_subnet_part"
-        ["dnsbinder_netmask"]="$dnsbinder_netmask"
-        ["dnsbinder_gateway"]="$v_network_gateway"
-        ["dnsbinder_broadcast"]="${v_last_subnet_part}.255"
-        ["dnsbinder_server_ipv4_address"]="$v_primary_ip"
-        ["dnsbinder_server_short_name"]="$v_dns_host_short_name"
-        ["dnsbinder_server_fqdn"]="${v_dns_host_short_name}.${v_given_domain}"
-    )
-
-    # Add IPv6 variables if configured
-    if [[ -n "${v_ipv6_address}" ]]; then
-        dnsbinder_environment_map["dnsbinder_server_ipv6_address"]="$v_ipv6_address"
-        dnsbinder_environment_map["dnsbinder_ipv6_gateway"]="$v_ipv6_gateway"
-        dnsbinder_environment_map["dnsbinder_ipv6_prefix"]="$v_ipv6_prefix"
-        dnsbinder_environment_map["dnsbinder_ipv6_ula_subnet"]="$v_ipv6_ula_subnet"
-    fi
-
-    target_environment_file="/etc/environment"
-
-    # Ensure the environment file exists
-    touch "$target_environment_file"
-
-    # Iterate through all key-value pairs and update or append as necessary
-    for environment_key in "${!dnsbinder_environment_map[@]}"; do
-        environment_value="${dnsbinder_environment_map[$environment_key]}"
-        if grep -q "^${environment_key}=" "$target_environment_file"; then
-            # Update existing variable line
-            sed -i "s|^${environment_key}=.*|${environment_key}=\"${environment_value}\"|" "$target_environment_file"
-        else
-            # Append new variable if not already present
-            echo "${environment_key}=\"${environment_value}\"" | tee -a "$target_environment_file" > /dev/null
-        fi
-    done
-
-    source /etc/environment
-
-    print_task_done
-
-    if [[ "${KVM_HOST_MODE_SET}" != "true" ]]; then
-        print_task "Updating Network Manager to point the local dns server and domain..."
-        v_active_connection_name=$(nmcli connection show --active | awk -v iface="${v_primary_interface}" '$0 ~ iface {print $1; exit}')
-        nmcli connection modify "${v_active_connection_name}" ipv4.dns-search "${v_given_domain}" &>/dev/null
-        nmcli connection modify "${v_active_connection_name}" ipv4.dns "127.0.0.1,8.8.8.8,1.1.1.1"  &>/dev/null
-        
-        # Configure IPv6 address if dual-stack is configured (but use IPv4 for DNS)
-        if [[ -n "${v_ipv6_address}" ]]; then
-            nmcli connection modify "${v_active_connection_name}" ipv6.method "manual" &>/dev/null
-            nmcli connection modify "${v_active_connection_name}" ipv6.addresses "${v_ipv6_address}/${v_ipv6_prefix}" &>/dev/null
-            # Clear any IPv6 DNS servers (we only use IPv4 DNS)
-            nmcli connection modify "${v_active_connection_name}" ipv6.dns "" &>/dev/null
-        fi
-        
-        # Reapply settings without restarting the connection
-        nmcli connection reload "${v_active_connection_name}" &>/dev/null
-        nmcli device reapply "${v_primary_interface}" &>/dev/null
-        print_task_done
-    else
-        print_task "Updating systemd-resolvd to point the local dns server and domain..."
-        if command -v resolvectl &>/dev/null; then
-                if [[ -n "${v_ipv6_address}" ]]; then
-                    resolvectl dns labbr0 "$v_primary_ip" "$v_ipv6_address"
-                else
-                    resolvectl dns labbr0 "$v_primary_ip"
-                fi
-                resolvectl domain labbr0 "$v_given_domain"
-        fi
-        print_task_done
-    fi
+    # v2.0.0: No /etc/environment writes needed — lab_environment.json is source of truth
+    # DNS resolution for the host is configured by deploy-lab.sh (resolvectl)
 
     print_task "Creating the command dnsbinder..."
 
@@ -927,9 +825,9 @@ fn_reload_named_dns_service() {
 
     print_task "Reloading the DNS service (named)..."
 
-    systemctl reload named &>/dev/null
+    sudo podman exec tux2lab-engine rndc reload &>/dev/null
 
-    if systemctl is-active named &>/dev/null;
+    if sudo podman exec tux2lab-engine rndc status &>/dev/null;
     then 
         print_task_done
     else
@@ -2204,8 +2102,8 @@ fn_handle_multiple_host_record_with_ip() {
 
     if [[ "${v_pre_execution_serial_fw_zone}" -ne "${v_post_execution_serial_fw_zone}" ]]; then
         print_task "Reloading the DNS service (named) for the changes to take effect..."
-        systemctl reload named &>/dev/null
-        if systemctl is-active named &>/dev/null; then
+        sudo podman exec tux2lab-engine rndc reload &>/dev/null
+        if sudo podman exec tux2lab-engine rndc status &>/dev/null; then
             print_task_done
         else
             print_task_fail
@@ -2487,9 +2385,9 @@ fn_handle_multiple_host_record() {
     then
         print_task "Reloading the DNS service (named) for the changes to take effect..."
     
-        systemctl reload named &>/dev/null
+        sudo podman exec tux2lab-engine rndc reload &>/dev/null
     
-        if systemctl is-active named &>/dev/null;
+        if sudo podman exec tux2lab-engine rndc status &>/dev/null;
         then 
             print_task_done
         else

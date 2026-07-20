@@ -358,11 +358,27 @@ EOF
 generate_service_configs() {
     print_info "Generating service configurations..."
 
-    if [[ -x /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh ]]; then
-        bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh
+    if [[ -x /tux2lab/setup/generate-service-configs.sh ]]; then
+        bash /tux2lab/setup/generate-service-configs.sh
     else
         print_warning "Config generator not yet implemented — skipping."
         print_info "Service configs will need to be created manually for testing."
+    fi
+}
+
+# ============================================================================
+# SETUP DNS (calls dnsbinder --setup)
+# ============================================================================
+setup_dns() {
+    print_info "Setting up DNS with dnsbinder..."
+
+    if [[ -x /tux2lab/named-manage/dnsbinder.sh ]]; then
+        bash /tux2lab/named-manage/dnsbinder.sh --setup "${ADMIN_DOMAIN}" || {
+            print_error "Failed to setup DNS with dnsbinder."
+            exit 1
+        }
+    else
+        print_warning "dnsbinder not found — skipping DNS setup."
     fi
 }
 
@@ -575,6 +591,7 @@ main() {
     generate_ssl_cert
     generate_lab_environment_json
     generate_service_configs
+    setup_dns
     start_container
     configure_host_dns
     configure_host_ssh

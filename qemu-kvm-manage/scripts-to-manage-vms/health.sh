@@ -30,47 +30,30 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # ====== PREREQUISITE CHECKS ======
-# In VM mode, verify the infra server VM is running
-if ! $lab_infra_server_mode_is_host; then
-    if ! sudo virsh list --state-running --name 2>/dev/null | grep -Fxq "$lab_infra_server_hostname"; then
-        print_error "Lab infra server VM '$lab_infra_server_hostname' is not running."
-        print_info "Start it with: tux2lab start"
-        exit 2
-    fi
+if ! sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+    print_error "Container '${CONTAINER_NAME}' is not running."
+    print_info "Start it with: tux2lab start"
+    exit 2
 fi
+
+# Helper: run command inside the container
+fn_exec() {
+    sudo podman exec "${CONTAINER_NAME}" bash -c "$1" 2>/dev/null
+}
 
 # -------------------------------------------------------------
 # Header
 # -------------------------------------------------------------
-if $lab_infra_server_mode_is_host; then
-    lab_infra_server_mode="HOST"
-else
-    lab_infra_server_mode="VM"
-fi
-
 print_cyan "--------------------------------------------------------------
 tux2lab Health Check
-Lab Infra Server Mode: ${lab_infra_server_mode}
 Lab Infra Server     : ${lab_infra_server_hostname}
 IPv4 Address         : ${lab_infra_server_ipv4_address}
 IPv6 Address         : ${lab_infra_server_ipv6_address}
+Container            : ${CONTAINER_NAME}
 --------------------------------------------------------------"
 
-# Helper: run command on infra server (locally with sudo or via SSH)
-ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5)
-ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
-
-fn_run_on_infra() {
-    if $lab_infra_server_mode_is_host; then
-        sudo bash -c "$1" 2>/dev/null
-    else
-        local escaped_cmd="${1//\'/\'\\\'\'}"
-        ssh "${ssh_opts[@]}" "$ssh_target" "sudo bash -c '${escaped_cmd}'" 2>/dev/null
-    fi
-}
-
 # -------------------------------------------------------------
-# Deep Validation of Services (runs on infra server)
+# Deep Validation of Services
 # -------------------------------------------------------------
 print_cyan "Deep Validation of Services:
 --------------------------------------------------------------"
@@ -88,15 +71,15 @@ fn_deep_fail() {
     ((deep_fail++))
 }
 
-# --- DNS: Forward + Reverse lookup ---
-dns_forward_result=$(fn_run_on_infra "dig +short ${lab_infra_server_hostname} A @${lab_infra_server_ipv4_address}")
+# --- DNS: Forward + Reverse lookup (from host against bridge IP) ---
+dns_forward_result=$(dig +short "${lab_infra_server_hostname}" A "@${lab_infra_server_ipv4_address}" 2>/dev/null)
 if [[ "$dns_forward_result" == "$lab_infra_server_ipv4_address" ]]; then
     fn_deep_pass "DNS forward lookup ($lab_infra_server_hostname → $lab_infra_server_ipv4_address)"
 else
     fn_deep_fail "DNS forward lookup ($lab_infra_server_hostname → expected $lab_infra_server_ipv4_address, got ${dns_forward_result:-NXDOMAIN})"
 fi
 
-dns_reverse_result=$(fn_run_on_infra "dig +short -x ${lab_infra_server_ipv4_address} @${lab_infra_server_ipv4_address}")
+dns_reverse_result=$(dig +short -x "${lab_infra_server_ipv4_address}" "@${lab_infra_server_ipv4_address}" 2>/dev/null)
 expected_ptr="${lab_infra_server_hostname}."
 if [[ "$dns_reverse_result" == "$expected_ptr" ]]; then
     fn_deep_pass "DNS reverse lookup ($lab_infra_server_ipv4_address → $lab_infra_server_hostname)"
@@ -104,54 +87,50 @@ else
     fn_deep_fail "DNS reverse lookup ($lab_infra_server_ipv4_address → expected $expected_ptr, got ${dns_reverse_result:-NXDOMAIN})"
 fi
 
-# --- DHCP: kea-dhcp4 and kea-dhcp6 service active ---
-kea_dhcp4_status=$(fn_run_on_infra "systemctl is-active kea-dhcp4")
-if [[ "$kea_dhcp4_status" == "active" ]]; then
-    fn_deep_pass "Kea DHCPv4 service active"
+# --- DHCP: kea-dhcp4 and kea-dhcp6 process running ---
+if fn_exec "pgrep -x kea-dhcp4 >/dev/null"; then
+    fn_deep_pass "Kea DHCPv4 process running"
 else
-    fn_deep_fail "Kea DHCPv4 service (status: ${kea_dhcp4_status:-unknown})"
+    fn_deep_fail "Kea DHCPv4 process not running"
 fi
 
-kea_dhcp6_status=$(fn_run_on_infra "systemctl is-active kea-dhcp6")
-if [[ "$kea_dhcp6_status" == "active" ]]; then
-    fn_deep_pass "Kea DHCPv6 service active"
+if fn_exec "pgrep -x kea-dhcp6 >/dev/null"; then
+    fn_deep_pass "Kea DHCPv6 process running"
 else
-    fn_deep_fail "Kea DHCPv6 service (status: ${kea_dhcp6_status:-unknown})"
+    fn_deep_fail "Kea DHCPv6 process not running"
 fi
 
-# --- NTP: chronyd active and synchronized ---
-chrony_status=$(fn_run_on_infra "systemctl is-active chronyd")
-if [[ "$chrony_status" == "active" ]]; then
-    fn_deep_pass "Chronyd service active"
+# --- NTP: chronyd running and synchronized ---
+if fn_exec "pgrep -x chronyd >/dev/null"; then
+    fn_deep_pass "Chronyd process running"
 else
-    fn_deep_fail "Chronyd service (status: ${chrony_status:-unknown})"
+    fn_deep_fail "Chronyd process not running"
 fi
 
-chrony_sync=$(fn_run_on_infra "chronyc tracking 2>/dev/null | grep -c 'Leap status.*Normal'")
+chrony_sync=$(fn_exec "chronyc tracking 2>/dev/null | grep -c 'Leap status.*Normal'")
 if [[ "$chrony_sync" == "1" ]]; then
     fn_deep_pass "NTP synchronized (chrony leap status normal)"
 else
     fn_deep_fail "NTP not synchronized (chrony leap status abnormal)"
 fi
 
-# --- TFTP: ipxe.efi exists in TFTP root ---
-tftp_file_check=$(fn_run_on_infra "test -f /var/lib/tftpboot/ipxe.efi && echo yes")
-if [[ "$tftp_file_check" == "yes" ]]; then
-    fn_deep_pass "TFTP boot file exists (/var/lib/tftpboot/ipxe.efi)"
+# --- TFTP: ipxe.efi exists (host volume) ---
+if [[ -f /tux2lab-data/tftpboot/ipxe.efi ]]; then
+    fn_deep_pass "TFTP boot file exists (/tux2lab-data/tftpboot/ipxe.efi)"
 else
-    fn_deep_fail "TFTP boot file missing (/var/lib/tftpboot/ipxe.efi)"
+    fn_deep_fail "TFTP boot file missing (/tux2lab-data/tftpboot/ipxe.efi)"
 fi
 
 # --- NFS: expected export exists ---
-nfs_export_check=$(fn_run_on_infra "exportfs -v 2>/dev/null | grep -c /tux2lab-data")
+nfs_export_check=$(fn_exec "exportfs -v 2>/dev/null | grep -c /tux2lab-data")
 if [[ "$nfs_export_check" -ge 1 ]] 2>/dev/null; then
     fn_deep_pass "NFS export available (/tux2lab-data)"
 else
     fn_deep_fail "NFS export not found (/tux2lab-data)"
 fi
 
-# --- Web/Nginx: HTTP and HTTPS responses ---
-http_code=$(fn_run_on_infra "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://${lab_infra_server_hostname}/")
+# --- Web/Nginx: HTTP and HTTPS responses (from host) ---
+http_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 "http://${lab_infra_server_ipv4_address}/" 2>/dev/null)
 if [[ "$http_code" == "200" ]]; then
     fn_deep_pass "Nginx HTTP response (200 OK)"
 elif [[ "$http_code" == "000" ]]; then
@@ -160,17 +139,17 @@ else
     fn_deep_fail "Nginx HTTP response (got HTTP ${http_code})"
 fi
 
-https_code=$(fn_run_on_infra "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 https://${lab_infra_server_hostname}/")
+https_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 -k "https://${lab_infra_server_ipv4_address}/" 2>/dev/null)
 if [[ "$https_code" == "200" ]]; then
-    fn_deep_pass "Nginx HTTPS response (200 OK, cert trusted by system CA)"
+    fn_deep_pass "Nginx HTTPS response (200 OK)"
 elif [[ "$https_code" == "000" ]]; then
-    fn_deep_fail "Nginx HTTPS response (SSL handshake failed — cert not in trust store or service unreachable)"
+    fn_deep_fail "Nginx HTTPS (connection refused or timeout)"
 else
     fn_deep_fail "Nginx HTTPS response (got HTTP ${https_code})"
 fi
 
 # --- Grab DHCPv6 socket binding for port check section ---
-dhcpv6_socket_bound=$(fn_run_on_infra "ss -ulnp sport = :547 2>/dev/null | grep -q kea-dhcp6 && echo yes")
+dhcpv6_socket_bound=$(fn_exec "ss -ulnp sport = :547 2>/dev/null | grep -q kea-dhcp6 && echo yes")
 
 # -------------------------------------------------------------
 # Port Reachability (dual-stack: IPv4 + IPv6)

@@ -34,10 +34,11 @@ mkdir -p "${DATA_DIR}/chrony"
 mkdir -p "${DATA_DIR}/log/nginx"
 mkdir -p "${DATA_DIR}/tftpboot"
 # Symlink service state to persistent volume (survive container restarts)
-ln -sf "${DATA_DIR}/kea/leases" /var/lib/kea
-ln -sf "${DATA_DIR}/nfs/state" /var/lib/nfs
-ln -sf "${DATA_DIR}/chrony" /var/lib/chrony
-ln -sf "${DATA_DIR}/log/nginx" /var/log/nginx
+# Must rm first — packages create these as real directories in the image
+rm -rf /var/lib/kea && ln -sf "${DATA_DIR}/kea/leases" /var/lib/kea
+rm -rf /var/lib/nfs && ln -sf "${DATA_DIR}/nfs/state" /var/lib/nfs
+rm -rf /var/lib/chrony && ln -sf "${DATA_DIR}/chrony" /var/lib/chrony
+rm -rf /var/log/nginx && ln -sf "${DATA_DIR}/log/nginx" /var/log/nginx
 
 # Enable IPv6 forwarding on bridge (required for radvd)
 sysctl -w "net.ipv6.conf.${BRIDGE_IF}.forwarding=1" &>/dev/null || true
@@ -162,6 +163,8 @@ echo "============================================"
 
 # --- Keep container alive ---
 # Wait for any background process to exit (means a service crashed)
+# Disable errexit — wait -n returns the child's exit code, which may be non-zero
+set +e
 wait -n
 echo "[ERROR] A service has exited unexpectedly. Container stopping."
 exit 1

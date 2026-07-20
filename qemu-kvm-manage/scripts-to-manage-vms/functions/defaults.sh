@@ -6,10 +6,20 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
-LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
-if [[ -f "$LAB_ENV_VARS_FILE" ]]; then
-    source "$LAB_ENV_VARS_FILE"
-else
-    print_error "Lab environment variables file not found at $LAB_ENV_VARS_FILE"
+# Read lab environment from JSON (v2.0.0)
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
+if [[ ! -f "${LAB_ENV_JSON}" ]]; then
+    print_error "Lab environment file not found: ${LAB_ENV_JSON}"
+    print_info "Run 'tux2lab deploy' to generate lab configuration."
     exit 1
 fi
+
+readonly CONTAINER_NAME="tux2lab-engine"
+
+# Extract variables from JSON
+lab_infra_server_hostname=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
+lab_infra_domain_name=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
+lab_infra_admin_username=$(jq -r '.admin.username' "${LAB_ENV_JSON}")
+lab_infra_server_ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
+lab_infra_server_ipv6_address=$(jq -r '.network.ipv6.address' "${LAB_ENV_JSON}")
+lab_infra_bridge_interface=$(jq -r '.network.bridge_interface' "${LAB_ENV_JSON}")
