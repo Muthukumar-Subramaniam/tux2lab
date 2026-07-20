@@ -138,24 +138,7 @@ EMBED_EOF
 fi
 
 ######################################################################
-# 9. Local yum repository (fast fallback alongside upstream repos)
-######################################################################
-/usr/bin/cat << EOF > /etc/yum.repos.d/tux2lab-local.repo
-[tux2lab-local-baseos]
-name=tux2lab Local - BaseOS
-baseurl=http://get_lab_infra_server_hostname/os-repos/get_redhat_based_distro_name/get_version/BaseOS
-enabled=1
-gpgcheck=0
-
-[tux2lab-local-appstream]
-name=tux2lab Local - AppStream
-baseurl=http://get_lab_infra_server_hostname/os-repos/get_redhat_based_distro_name/get_version/AppStream
-enabled=1
-gpgcheck=0
-EOF
-
-######################################################################
-# 10. SSH client config
+# 9. SSH client config
 ######################################################################
 /bin/mkdir -p /etc/ssh/ssh_config.d
 /usr/bin/cat << EOF > /etc/ssh/ssh_config.d/999-tux2lab.conf
