@@ -625,12 +625,6 @@ print(ptr)
     # v2.0.0: No /etc/environment writes needed — lab_environment.json is source of truth
     # DNS resolution for the host is configured by deploy-lab.sh (resolvectl)
 
-    print_task "Creating the command dnsbinder..."
-
-    ln -s /tux2lab/named-manage/dnsbinder.sh /usr/sbin/dnsbinder
-
-    print_task_done
-
     # Display success message
     if [[ -n "${v_ipv6_address}" ]]; then
         print_success "DNS domain \"${v_given_domain}\" configured successfully.
