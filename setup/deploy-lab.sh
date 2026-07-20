@@ -431,7 +431,7 @@ setup_dns() {
     print_info "Setting up DNS with dnsbinder..."
 
     if [[ -x /tux2lab/named-manage/dnsbinder.sh ]]; then
-        bash /tux2lab/named-manage/dnsbinder.sh --setup "${ADMIN_DOMAIN}" || {
+        sudo bash /tux2lab/named-manage/dnsbinder.sh --setup "${ADMIN_DOMAIN}" || {
             print_error "Failed to setup DNS with dnsbinder."
             exit 1
         }
