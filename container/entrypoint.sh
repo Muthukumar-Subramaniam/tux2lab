@@ -205,15 +205,10 @@ else
     echo "    → SKIPPED: no radvd.conf found"
 fi
 
-# --- 10. Start sshd (debugging access) ---
-# Pub key only, binds to bridge IP
-echo "[*] Starting sshd..."
-/usr/sbin/sshd -o "ListenAddress=${BRIDGE_IP}" -o "PasswordAuthentication=no"
-echo "    → sshd started on ${BRIDGE_IP}:22"
-
 echo "============================================"
 echo " tux2lab-engine: all services started"
 echo " Listening on: ${BRIDGE_IP} (${BRIDGE_IF})"
+echo " Debug access: sudo podman exec -it tux2lab-engine bash"
 echo "============================================"
 
 # --- Keep container alive ---

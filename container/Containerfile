@@ -31,8 +31,6 @@ RUN dnf install -y \
         chrony \
         # IPv6 Router Advertisements (dual-stack support)
         radvd \
-        # SSH server (debugging access)
-        openssh-server \
         # SSL/TLS (nginx HTTPS)
         openssl \
         # Utilities
@@ -48,9 +46,6 @@ RUN mkdir -p /tux2lab-data \
     && chown named:named /run/named \
     && mkdir -p /run/kea \
     && mkdir -p /var/lib/kea
-
-# Generate SSH host keys for the container's sshd
-RUN ssh-keygen -A
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
