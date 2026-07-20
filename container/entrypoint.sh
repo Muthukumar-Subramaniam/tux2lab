@@ -170,21 +170,13 @@ fi
 echo "[*] Starting NFS..."
 if [[ -f "${DATA_DIR}/nfs/exports" ]]; then
     cp "${DATA_DIR}/nfs/exports" /etc/exports
-    # Restrict NFS to bridge IPs only (dual-stack)
-    cat > /etc/nfs.conf <<NFSCONF
-[nfsd]
-host = ${BRIDGE_IP}
-host = ${BRIDGE_IPV6:-::1}
-[mountd]
-host = ${BRIDGE_IP}
-host = ${BRIDGE_IPV6:-::1}
-NFSCONF
-    /usr/sbin/rpcbind -w || true
+    # Restrict rpcbind and mountd to bridge IPs
+    /usr/sbin/rpcbind -w -h "${BRIDGE_IP}" -h "${BRIDGE_IPV6:-::1}" || true
     # Load NFS kernel module if needed, then start NFS daemon with timeout
     modprobe nfsd 2>/dev/null || true
-    timeout 10 /usr/sbin/rpc.nfsd 4 || echo "    → WARNING: rpc.nfsd failed (NFS kernel module may not be available)"
+    timeout 10 /usr/sbin/rpc.nfsd -H "${BRIDGE_IP}" -H "${BRIDGE_IPV6:-::1}" 4 || echo "    → WARNING: rpc.nfsd failed (NFS kernel module may not be available)"
     /usr/sbin/rpc.idmapd || true
-    /usr/sbin/rpc.mountd --no-nfs-version 2 --no-nfs-version 3 || true
+    /usr/sbin/rpc.mountd --no-nfs-version 2 --no-nfs-version 3 -H "${BRIDGE_IP}" -H "${BRIDGE_IPV6:-::1}" || true
     /usr/sbin/exportfs -ra || true
     echo "    → NFS started (exports from ${DATA_DIR}/nfs/exports)"
 else
