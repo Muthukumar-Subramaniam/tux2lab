@@ -157,10 +157,12 @@ echo "[*] Starting NFS..."
 if [[ -f "${DATA_DIR}/nfs/exports" ]]; then
     cp "${DATA_DIR}/nfs/exports" /etc/exports
     /usr/sbin/rpcbind -w || true
-    /usr/sbin/rpc.nfsd 4
+    # Load NFS kernel module if needed, then start NFS daemon with timeout
+    modprobe nfsd 2>/dev/null || true
+    timeout 10 /usr/sbin/rpc.nfsd 4 || echo "    → WARNING: rpc.nfsd failed (NFS kernel module may not be available)"
     /usr/sbin/rpc.idmapd || true
-    /usr/sbin/rpc.mountd --no-nfs-version 2 --no-nfs-version 3
-    /usr/sbin/exportfs -ra
+    /usr/sbin/rpc.mountd --no-nfs-version 2 --no-nfs-version 3 || true
+    /usr/sbin/exportfs -ra || true
     echo "    → NFS started (exports from ${DATA_DIR}/nfs/exports)"
 else
     echo "    → SKIPPED: no exports file found"
