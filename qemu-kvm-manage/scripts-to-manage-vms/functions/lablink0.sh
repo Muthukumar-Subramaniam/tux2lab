@@ -22,26 +22,35 @@ ensure_lablink0() {
 
     # Wait for bridge to reach UP state
     local timeout=10
+    # Wait for bridge to reach UP state
+    print_task "Waiting for ${bridge_if} to be UP..."
     local elapsed=0
     while ! ip link show "${bridge_if}" 2>/dev/null | grep -q "state UP"; do
         if ((elapsed >= timeout)); then
+            print_task_fail
             print_error "${bridge_if} did not reach UP state."
             return 1
         fi
         sleep 1
         ((++elapsed))
     done
+    print_task_done
 
     # Wait for IPv6 DAD to complete (tentative → permanent)
+    print_task "Waiting for IPv6 DAD to complete..."
     elapsed=0
     while ip -6 addr show dev "${bridge_if}" 2>/dev/null | grep -q "tentative"; do
         if ((elapsed >= timeout)); then
+            print_task_done
             print_warning "IPv6 DAD did not complete within ${timeout}s, proceeding anyway."
             break
         fi
         sleep 1
         ((++elapsed))
     done
+    if ((elapsed < timeout)); then
+        print_task_done
+    fi
 }
 
 # Remove lablink0 dummy interface. Idempotent — skips if not present.
