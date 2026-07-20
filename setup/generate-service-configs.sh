@@ -311,8 +311,6 @@ generate_chrony() {
 pool time.google.com iburst
 
 driftfile /var/lib/chrony/drift
-makestep 1.0 3
-rtcsync
 ntsdumpdir /var/lib/chrony
 logdir /var/log/chrony
 
