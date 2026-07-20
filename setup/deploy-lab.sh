@@ -113,7 +113,7 @@ capture_network_config() {
     # In v2.0.0: services run on the GATEWAY IP (.1) — no separate .2
     IPV4_ADDRESS="${IPV4_GATEWAY}"
 
-    # Calculate CIDR prefix from netmask (portable — no gawk dependency)
+    # Calculate CIDR prefix from netmask (count the 1-bits)
     local mask_binary=""
     IFS=. read -r mm1 mm2 mm3 mm4 <<< "$IPV4_NETMASK"
     for octet in $mm1 $mm2 $mm3 $mm4; do
@@ -123,7 +123,8 @@ capture_network_config() {
             val=$(( (val % 128) * 2 ))
         done
     done
-    IPV4_PREFIX="${#mask_binary//0/}"
+    local ones_only="${mask_binary//0/}"
+    IPV4_PREFIX="${#ones_only}"
 
     # Calculate network address
     IFS=. read -r g1 g2 g3 g4 <<< "$IPV4_GATEWAY"
