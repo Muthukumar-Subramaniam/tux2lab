@@ -541,10 +541,6 @@ EOF
 
     echo -e "${v_network_adjusted_space} IN A ${v_first_subnet_part}.0" | tee -a  "${v_zone_file_name}" > /dev/null
 
-    v_gateway_adjusted_space=$(printf "%-*s" 63 "gateway")
-
-    echo -e "${v_gateway_adjusted_space} IN A ${v_first_subnet_part}.1" | tee -a  "${v_zone_file_name}" > /dev/null
-
     v_dns_host_short_name_adjusted_space=$(printf "%-*s" 63 "${v_dns_host_short_name}")
     
     echo -e "${v_dns_host_short_name_adjusted_space} IN A ${v_primary_ip}" | tee -a "${v_zone_file_name}" > /dev/null
@@ -557,12 +553,14 @@ EOF
     if [[ -n "${v_ipv6_address}" ]]; then
         echo -e "\n;AAAA-Records (IPv6)" | tee -a "${v_zone_file_name}" > /dev/null
         
-        v_ipv6_gateway_adjusted_space=$(printf "%-*s" 63 "gateway")
-        echo -e "${v_ipv6_gateway_adjusted_space} IN AAAA ${v_ipv6_gateway}" | tee -a "${v_zone_file_name}" > /dev/null
-        
         v_dns_host_short_name_adjusted_space=$(printf "%-*s" 63 "${v_dns_host_short_name}")
         echo -e "${v_dns_host_short_name_adjusted_space} IN AAAA ${v_ipv6_address}" | tee -a "${v_zone_file_name}" > /dev/null
     fi
+
+    # Add CNAME aliases
+    echo -e "\n;CNAME-Records" | tee -a "${v_zone_file_name}" > /dev/null
+    v_gateway_cname_space=$(printf "%-*s" 63 "gateway")
+    echo -e "${v_gateway_cname_space} IN CNAME ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
 
     echo -e "\n;CNAME-Records" | tee -a "${v_zone_file_name}" > /dev/null
 
@@ -574,7 +572,6 @@ EOF
         if [[ "${v_subnet_part}" == "${v_first_subnet_part}" ]]
         then
             echo -e "0   IN PTR network.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
-            echo -e "1   IN PTR gateway.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
             v_get_ip_part_primary_ip=$(echo "${v_primary_ip}" | awk -F. '{print $4}')
             v_ip_part_primary_ip_adjusted_space=$(printf "%-*s" 3 "${v_get_ip_part_primary_ip}")
             echo -e "${v_ip_part_primary_ip_adjusted_space} IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
@@ -589,9 +586,6 @@ EOF
         v_ipv6_zone_file="${var_zone_dir}/${v_given_domain}-ipv6-reverse.db"
         fn_update_dns_server_data_to_zone_file "${v_ipv6_zone_file}"
         echo -e "\n;IPv6 PTR-Records" | tee -a "${v_ipv6_zone_file}" > /dev/null
-        
-        # Add PTR record for gateway (::1) - only 16 nibbles for /64 host portion
-        echo -e "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0 IN PTR gateway.${v_given_domain}." | tee -a "${v_ipv6_zone_file}" > /dev/null
         
         # Add PTR record for DNS server's IPv6 address
         # Convert IPv6 address to full expanded form, then extract host part and reverse it
