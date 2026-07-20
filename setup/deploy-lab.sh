@@ -187,8 +187,20 @@ collect_credentials() {
     ADMIN_DOMAIN="${USER}.internal"
     INFRA_FQDN="${INFRA_HOSTNAME}.${ADMIN_DOMAIN}"
 
-    print_info "Lab Hostname : ${INFRA_FQDN}"
-    print_info "Admin User   : ${ADMIN_USERNAME}"
+    print_info "Lab Infra Server : ${INFRA_FQDN}"
+    print_info "Admin User       : ${ADMIN_USERNAME}"
+
+    print_warning "The following will be configured:
+  - Generate SSH keypair for lab access
+  - Generate self-signed SSL certificate
+  - Generate all service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
+  - Pull and start tux2lab-engine container
+  - Configure host DNS resolution and SSH"
+    read -p "Are you sure you want to continue? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+        print_info "Deploy cancelled by user."
+        exit 0
+    fi
 
     # Prompt for password
     local password_plain=""
@@ -602,16 +614,13 @@ rebuild_lab() {
 
     # Health check
     print_info "Running health check..."
-    echo
     if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
         /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
     fi
 
-    echo
     print_green "═══════════════════════════════════════════════════════════════════
   Lab infrastructure rebuilt successfully!
 ═══════════════════════════════════════════════════════════════════"
-    echo
 }
 
 # ============================================================================
@@ -628,7 +637,6 @@ main() {
     print_green "═══════════════════════════════════════════════════════════════════
   tux2lab — Lab Infrastructure Deployment
 ═══════════════════════════════════════════════════════════════════"
-    echo
 
     preflight_checks
     capture_network_config
@@ -644,12 +652,10 @@ main() {
 
     # Run health check
     print_info "Running health check..."
-    echo
     if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
         /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
     fi
 
-    echo
     print_green "═══════════════════════════════════════════════════════════════════
   Lab Infrastructure deployed successfully!
 ═══════════════════════════════════════════════════════════════════
@@ -660,7 +666,6 @@ main() {
   IPv6      : ${IPV6_ADDRESS}
   Container : ${CONTAINER_NAME}
 ═══════════════════════════════════════════════════════════════════"
-    echo
 }
 
 main "$@"

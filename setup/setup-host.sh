@@ -42,7 +42,7 @@ fi
 print_warning "This script will configure the tux2lab host environment.
 The following actions will be performed:
   - Grant passwordless sudo privileges to user '$USER'
-  - Install QEMU/KVM, libvirt, podman, jq, and dependencies
+  - Install QEMU/KVM, libvirt, podman, and dependencies
   - Enable and configure libvirtd
   - Create /tux2lab-data directory
   - Set up labbr0 bridge network with dual-stack (IPv4/IPv6)
