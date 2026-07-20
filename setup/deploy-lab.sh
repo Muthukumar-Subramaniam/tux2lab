@@ -526,6 +526,8 @@ start_container() {
     sudo mkdir -p "${TUX2LAB_DATA_DIR}/log"
     sudo podman run -d \
         --name "${CONTAINER_NAME}" \
+        --hostname "${INFRA_FQDN}" \
+        --uts=private \
         --network=host \
         --privileged \
         --log-driver=k8s-file \
