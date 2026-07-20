@@ -39,6 +39,9 @@ ln -sf "${DATA_DIR}/nfs/state" /var/lib/nfs
 ln -sf "${DATA_DIR}/chrony" /var/lib/chrony
 ln -sf "${DATA_DIR}/log/nginx" /var/log/nginx
 
+# Enable IPv6 forwarding on bridge (required for radvd)
+sysctl -w "net.ipv6.conf.${BRIDGE_IF}.forwarding=1" &>/dev/null || true
+
 # --- Helper: wait for a process to be ready ---
 wait_for_pid() {
     local pidfile="$1"
