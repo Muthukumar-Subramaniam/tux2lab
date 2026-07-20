@@ -48,14 +48,12 @@ The following actions will be performed:
   - Set up labbr0 bridge network with dual-stack (IPv4/IPv6)
   - Enable IPv6 forwarding
   - Install tux2lab CLI and bash completion"
-echo ""
 if ! $AUTO_YES; then
     read -p "Are you sure you want to continue? (yes/no): " confirm
     if [[ "$confirm" != "yes" ]]; then
         print_info "Setup cancelled by user."
         exit 0
     fi
-    echo ""
 fi
 
 # ============================================================================
@@ -282,9 +280,7 @@ fi
 # ============================================================================
 # DONE
 # ============================================================================
-echo
 print_success "Host setup completed!"
 print_info "Next: run 'tux2lab deploy' to deploy the lab infrastructure."
-echo
 
 exit 0
