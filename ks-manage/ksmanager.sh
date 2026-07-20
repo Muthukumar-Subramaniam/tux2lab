@@ -1420,6 +1420,8 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_golden_image_creation_not_requested" "${golden_image_creation_not_requested}"
         fn_replace_token_in_file "${working_file}" "get_redhat_based_distro_name" "${redhat_based_distro_name}"
         fn_replace_token_in_file "${working_file}" "get_version" "${version}"
+        fn_replace_token_in_file "${working_file}" "get_repo_url" "${REPO_URLS[${os_distribution}:${version}]:-}"
+        fn_replace_token_in_file "${working_file}" "get_appstream_repo_url" "${APPSTREAM_REPO_URLS[${os_distribution}:${version}]:-}"
         fn_replace_token_in_file "${working_file}" "get_opensuse_version_number" "${opensuse_version_number}"
         fn_replace_token_in_file "${working_file}" "get_ubuntu_codename" "${ubuntu_codename:-}"
         fn_replace_token_in_file "${working_file}" "get_debian_codename" "${debian_codename:-}"
