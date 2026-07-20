@@ -142,7 +142,7 @@ else
 fi
 
 # --- 6. Start TFTP ---
-# Serves iPXE binaries for PXE boot — binds to bridge IP
+# Serves iPXE binaries for PXE boot — binds to bridge IP (dual-stack)
 echo "[*] Starting in.tftpd (TFTP)..."
 mkdir -p "${DATA_DIR}/tftpboot"
 /usr/sbin/in.tftpd \
@@ -151,7 +151,19 @@ mkdir -p "${DATA_DIR}/tftpboot"
     --address "${BRIDGE_IP}:69" \
     --secure \
     "${DATA_DIR}/tftpboot" &
-echo "    → tftpd started on ${BRIDGE_IP}:69"
+# IPv6 TFTP instance
+BRIDGE_IPV6=$(ip -6 addr show dev "${BRIDGE_IF}" scope global 2>/dev/null | grep -oP 'inet6 \K[^/]+' | head -1)
+if [[ -n "${BRIDGE_IPV6}" ]]; then
+    /usr/sbin/in.tftpd \
+        --foreground \
+        --listen \
+        --address "[${BRIDGE_IPV6}]:69" \
+        --secure \
+        "${DATA_DIR}/tftpboot" &
+    echo "    → tftpd started on ${BRIDGE_IP}:69 + [${BRIDGE_IPV6}]:69"
+else
+    echo "    → tftpd started on ${BRIDGE_IP}:69 (IPv6 not available)"
+fi
 
 # --- 7. Start NFS ---
 # Exports /tux2lab-data for stage2 (RHEL) and casper-root (Ubuntu)
