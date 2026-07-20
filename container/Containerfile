@@ -1,0 +1,64 @@
+# tux2lab-engine container image
+# This container runs all lab infrastructure services:
+# DNS (bind), DHCP (kea), HTTP (nginx), TFTP, NFS, NTP (chrony), SSH
+#
+# Usage:
+#   podman build -t tux2lab-engine:latest -f Containerfile .
+#   podman run -d --name tux2lab-engine --network=host --privileged \
+#     -v /tux2lab-data:/tux2lab-data \
+#     tux2lab-engine:latest
+
+# Start from AlmaLinux 10 (minimal, RHEL-compatible)
+FROM docker.io/library/almalinux:10
+
+# Install all required services in a single layer (keeps image small)
+RUN dnf install -y \
+        # DNS server
+        bind \
+        bind-utils \
+        # DHCP server (Kea - modern, JSON-configured)
+        kea \
+        kea-hooks \
+        # Web server (serves boot ISOs, kickstarts, lab-config)
+        nginx \
+        nginx-mod-stream \
+        # TFTP server (iPXE chainload for PXE boot)
+        tftp-server \
+        # NFS server (stage2 for RHEL, casper-root for Ubuntu)
+        nfs-utils \
+        rpcbind \
+        # NTP server
+        chrony \
+        # IPv6 Router Advertisements (dual-stack support)
+        radvd \
+        # SSH server (debugging access)
+        openssh-server \
+        # SSL/TLS (nginx HTTPS)
+        openssl \
+        # Utilities
+        procps-ng \
+        iproute \
+        jq \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# Create directories that services expect
+RUN mkdir -p /tux2lab-data \
+    && mkdir -p /run/named \
+    && chown named:named /run/named \
+    && mkdir -p /run/kea \
+    && mkdir -p /var/lib/kea
+
+# Generate SSH host keys for the container's sshd
+RUN ssh-keygen -A
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Expose service ports (documentation only — with --network=host these are on the host)
+# DNS: 53/tcp+udp | DHCPv4: 67/udp | DHCPv6: 547/udp | HTTP: 80/tcp | HTTPS: 443/tcp
+# TFTP: 69/udp | NFS: 2049/tcp, 111/tcp+udp, 20048/tcp+udp | NTP: 123/udp | SSH: 22/tcp
+EXPOSE 22/tcp 53/tcp 53/udp 67/udp 69/udp 80/tcp 111/tcp 111/udp 123/udp 443/tcp 547/udp 2049/tcp 20048/tcp
+
+ENTRYPOINT ["/entrypoint.sh"]
