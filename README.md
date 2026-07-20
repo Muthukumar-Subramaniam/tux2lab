@@ -27,14 +27,15 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 - Complete VM lifecycle management — deploy, resize, snapshot, destroy
 - Multi-distribution support across Red Hat, Debian, and SUSE families
 - Dual-stack networking (IPv4 + IPv6) out of the box
+- Containerized infrastructure — all lab services in a single rootful Podman container
 
 ---
 
 ## Architecture Overview
 
 tux2lab runs on your Linux workstation (the **KVM host**) and creates a private
-virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:3000::/64`) with a central
-**lab infrastructure server** that provides all lab services:
+virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:3000::/64`) with a
+**tux2lab-engine** container that provides all lab services on the gateway IP (`10.28.28.1`):
 
 | Service | Software | Purpose |
 |---|---|---|
@@ -43,26 +44,27 @@ virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:300
 | PXE/TFTP | tftp-server + iPXE | Network boot for OS installs |
 | NTP | chrony | Time synchronization |
 | NFS | nfs-server | Shared storage |
-| HTTP | nginx | ISO & kickstart file serving |
+| HTTP/HTTPS | nginx | Boot ISO & kickstart serving |
 | IPv6 RA | radvd | Router advertisements |
+| SSH | sshd | Debug access to container |
 
-### Lab Infrastructure Server — Deployment Modes
+### Infrastructure Container
 
-| | **VM Mode** (Recommended) | **Host Mode** (Advanced) |
-|---|---|---|
-| **Where** | Dedicated KVM VM | Directly on KVM host |
-| **Isolation** | Complete — easy to delete/recreate | None — modifies host system |
-| **Resources** | 2 GB RAM, 2 vCPUs, 30 GB disk | Minimal overhead |
-| **Best for** | Most users, shared systems | Owned systems with limited RAM |
-| **Cleanup** | Delete the VM | Manual service/package removal |
+All lab services run inside a single **rootful Podman container** (`tux2lab-engine`)
+based on AlmaLinux 10. The container uses `--network=host` to bind directly to the
+lab bridge interface, providing seamless network access for all guest VMs.
+
+| Feature | Detail |
+|---|---|
+| **Image** | `ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.0.0` |
+| **Runtime** | Podman (rootful, `--network=host --privileged`) |
+| **Persistence** | All state in `/tux2lab-data/` (bind-mounted into container) |
+| **Lifecycle** | Start/stop/rebuild without touching the host |
+| **Resources** | Minimal — shares host kernel, no VM overhead |
 
 ---
 
 ## Supported Distributions
-
-### Infra Server OS — VM Mode (RHEL-based only)
-
-AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 10.
 
 ### Guest VM Provisioning
 
@@ -74,9 +76,6 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 | SUSE-based | openSUSE Leap | 16.0, 15.6, 15.5 | Agama (16.0), AutoYaST (15.x) |
 | Azure Linux | Microsoft Azure Linux | 4 | Kickstart (patched LiveOS) |
 
-> **VM mode:** The distro used to build the infra server is available for guest provisioning immediately.
-> **Host mode:** No distros are pre-configured — set up your first distro after deployment.
->
 > Additional distros can be set up anytime via `tux2lab distro setup`.
 
 ---
@@ -85,11 +84,10 @@ AlmaLinux 10 (default), Rocky Linux 10, Oracle Linux 10, CentOS Stream 10, RHEL 
 
 > These are the minimum recommended values. Adjust based on your workload.
 
-**Central Infra Server VM:** 2 GB RAM · 2 vCPUs · 30 GB disk
-
 **Guest VMs (each):** 2 GB RAM · 2 vCPUs · 20 GB disk
 
-**KVM Host:** RHEL-based, Ubuntu, or openSUSE (hardware virtualization required; host mode is RHEL-based only).
+**KVM Host:** RHEL-based, Ubuntu, or openSUSE (hardware virtualization required).
+Podman must be available (installed automatically by setup).
 
 ---
 
@@ -114,55 +112,35 @@ sudo chown "${USER}:$(id -g)" /tux2lab
 git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
 ```
 
-### Step 2 — Install QEMU/KVM
+### Step 2 — Prepare the Host
 
 ```bash
-/tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh
+/tux2lab/setup/setup-host.sh
 ```
 
 This script:
-- Installs QEMU/KVM, libvirt, and all dependencies (supports both `apt` and `dnf`)
+- Installs QEMU/KVM, libvirt, Podman, jq, and all dependencies (supports `apt`, `dnf`, `zypper`)
 - Grants passwordless sudo to the current user
 - Creates the `labbr0` bridge network with dual-stack (IPv4/IPv6) NAT
 - Sets up the `/tux2lab-data/` data directory
 - Installs the `tux2lab` CLI and bash completion
 
-### Step 3 — Download Infra Server ISO (VM mode only)
-
-> Skip this step if you plan to deploy in **Host mode**.
-
-```bash
-tux2lab distro download-infra-iso
-```
-
-Downloads the ISO, fetches the checksum, and verifies integrity via SHA256.
-The ISO is used as the install medium for the infra server VM.
-
-### Step 4 — Deploy the Lab Infrastructure Server
+### Step 3 — Deploy the Lab
 
 ```bash
 tux2lab deploy
 ```
 
 The interactive wizard handles:
-- Deploy mode selection — VM (recommended) or Host
 - Admin password setup
+- SSH key and SSL certificate generation
+- Service configuration generation (DNS, DHCP, NTP, HTTP, TFTP, NFS)
+- Container image pull and startup
+- Host DNS and SSH configuration
 
 The hostname is fixed to `tux2lab-engine` and the domain is automatically set to `<your-username>.internal`.
 
-The deploy process (VM mode):
-- Validates the infra server ISO is available
-- Generates SSH keys for passwordless access
-- Prepares a kickstart file from your inputs
-- Mounts the ISO and extracts kernel/initrd for PXE-style boot
-- Launches the infra server VM via `virt-install` (console output shown live)
-- Waits for OS installation to complete and starts the VM
-- Waits for SSH to become reachable on the new VM
-- Syncs tux2lab to the VM and configures all lab infra services remotely
-- Configures DNS resolution on the KVM host (`resolvectl`)
-- Runs a health check to verify all lab services are up
-
-### Step 5 — Verify Your Lab
+### Step 4 — Verify Your Lab
 
 ```bash
 tux2lab health
@@ -173,9 +151,6 @@ tux2lab health
 ## Using tux2lab
 
 ### Prepare a Distribution for Provisioning
-
-In VM mode, the distro used to build the infra server is available for guest provisioning immediately.
-In Host mode, or to provision VMs with a different distro, set it up first:
 
 ```bash
 tux2lab distro setup                             # Interactive
@@ -277,7 +252,7 @@ tux2lab golden-image cleanup      Remove golden image(s)
 ### Infrastructure & Network
 
 ```
-tux2lab start                     Start lab infrastructure
+tux2lab start                     Start lab infrastructure (container)
 tux2lab stop                      Stop lab infrastructure and shut down all VMs
 tux2lab enable                    Enable lab infrastructure auto-start on boot
 tux2lab disable                   Disable lab infrastructure auto-start on boot
@@ -285,13 +260,11 @@ tux2lab health                    Check all lab service health
 tux2lab deploy                    Deploy a new lab infrastructure server
 tux2lab destroy                   Permanently destroy the entire lab environment
 tux2lab rebuild                   Tear down and redeploy lab using existing config
-tux2lab sync                      Push config updates to infra server (VM mode)
 tux2lab info                      Show lab deployment details
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab distro list               List distributions and setup status
 tux2lab distro setup              Prepare a distro for PXE provisioning
 tux2lab distro cleanup            Remove a distro's PXE setup
-tux2lab distro download-infra-iso Download infra server ISO (VM mode)
 tux2lab ipv6-route enable         Add IPv6 route to lab network
 tux2lab ipv6-route disable        Remove IPv6 route
 tux2lab ipv6-route check          Check IPv6 connectivity and route status
@@ -307,13 +280,13 @@ Tab completion is available after installation.
 
 ## Backend Automation
 
-These tools run on the infrastructure server and power the provisioning pipeline:
+These tools run inside the tux2lab-engine container and power the provisioning pipeline:
 
 | Tool | Purpose |
 |---|---|
 | **dnsbinder** | Manages BIND DNS zone records — automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
 | **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
-| **prepare-distro-for-ksmanager** | Downloads ISOs, mounts them, and registers distributions with ksmanager for PXE provisioning |
+| **prepare-distro-for-ksmanager** | Downloads boot ISOs, registers distributions with ksmanager for PXE provisioning |
 
 ---
 
@@ -321,16 +294,31 @@ These tools run on the infrastructure server and power the provisioning pipeline
 
 ```
 tux2lab/
-├── qemu-kvm-manage/           KVM host scripts (deploy, setup, VM management)
-│   ├── deploy-lab-infra-server.sh
-│   ├── setup-qemu-kvm.sh
-│   └── scripts-to-manage-vms/  CLI dispatcher and all tux2lab vm subcommands
-├── configure-lab-infra-server/ Bash scripts and config files for infra server setup
-├── ks-manage/                  Kickstart/cloud-init templates and ksmanager
-├── named-manage/               DNS zone management (dnsbinder)
-├── common-utils/               Shared utilities (color output, disk tools)
-└── vendor/                     Vendored virt-manager (no system package needed)
+├── container/                   Container image (Containerfile + entrypoint.sh)
+├── setup/                       Host setup and lab deployment scripts
+│   ├── setup-host.sh             Prepare KVM host (packages, bridge, podman)
+│   ├── deploy-lab.sh             Deploy lab (configs, container, DNS, health)
+│   └── generate-service-configs.sh  Generate all service configs from JSON
+├── qemu-kvm-manage/             KVM host scripts (VM management)
+│   └── scripts-to-manage-vms/    CLI dispatcher and all tux2lab subcommands
+├── ks-manage/                   Kickstart/cloud-init templates and ksmanager
+├── named-manage/                DNS zone management (dnsbinder)
+├── common-utils/                Shared utilities (color output, disk tools)
+└── vendor/                      Vendored virt-manager (no system package needed)
 ```
+
+### Key Data Paths
+
+| Path | Purpose |
+|---|---|
+| `/tux2lab/` | Project source (scripts, templates) |
+| `/tux2lab-data/` | Persistent data volume (mounted into container) |
+| `/tux2lab-data/lab-config/` | `lab_environment.json`, SSH keys, SSL certs |
+| `/tux2lab-data/named/` | DNS zone files and named.conf |
+| `/tux2lab-data/kea/` | DHCP config and lease database |
+| `/tux2lab-data/nginx/` | Nginx config |
+| `/tux2lab-data/tftpboot/` | iPXE boot files |
+| `/tux2lab-data/vms/` | VM disk images |
 
 ---
 
