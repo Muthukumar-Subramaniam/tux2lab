@@ -44,30 +44,52 @@ preflight_checks() {
 
     # Check podman
     if ! command -v podman &>/dev/null; then
-        print_error "podman is not installed."
-        print_info "Run setup/setup-host.sh to install all dependencies."
-        exit 1
+        print_warning "podman is not installed. Running setup-host.sh..."
+        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
+            bash /tux2lab/setup/setup-host.sh --yes || { print_error "setup-host.sh failed."; exit 1; }
+        else
+            print_error "setup-host.sh not found. Install podman manually."
+            exit 1
+        fi
     fi
 
     # Check /tux2lab-data exists
     if [[ ! -d "${TUX2LAB_DATA_DIR}" ]]; then
-        print_error "Directory ${TUX2LAB_DATA_DIR} does not exist."
-        print_info "Run setup/setup-host.sh to configure your environment."
-        exit 1
+        print_warning "Directory ${TUX2LAB_DATA_DIR} does not exist. Running setup-host.sh..."
+        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
+            bash /tux2lab/setup/setup-host.sh --yes || { print_error "setup-host.sh failed."; exit 1; }
+        else
+            print_error "setup-host.sh not found."
+            exit 1
+        fi
     fi
 
-    # Check labbr0 bridge exists
+    # Check labbr0 bridge exists — auto-recover by running setup-host.sh
     if ! ip link show "${BRIDGE_INTERFACE}" &>/dev/null; then
-        print_error "Bridge ${BRIDGE_INTERFACE} does not exist."
-        print_info "Run setup/setup-host.sh to create the lab network."
-        exit 1
+        print_warning "Bridge ${BRIDGE_INTERFACE} does not exist. Running setup-host.sh to create it..."
+        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
+            bash /tux2lab/setup/setup-host.sh --yes || {
+                print_error "setup-host.sh failed."
+                exit 1
+            }
+        else
+            print_error "setup-host.sh not found at /tux2lab/setup/setup-host.sh"
+            exit 1
+        fi
     fi
 
     # Check libvirt network exists (for reading network config)
     if ! sudo virsh net-info "${LIBVIRT_NETWORK_NAME}" &>/dev/null 2>&1; then
-        print_error "Libvirt network '${LIBVIRT_NETWORK_NAME}' not found."
-        print_info "Run setup/setup-host.sh to create the lab network."
-        exit 1
+        print_warning "Libvirt network '${LIBVIRT_NETWORK_NAME}' not found. Running setup-host.sh..."
+        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
+            bash /tux2lab/setup/setup-host.sh --yes || {
+                print_error "setup-host.sh failed."
+                exit 1
+            }
+        else
+            print_error "setup-host.sh not found at /tux2lab/setup/setup-host.sh"
+            exit 1
+        fi
     fi
 
     # Check jq
