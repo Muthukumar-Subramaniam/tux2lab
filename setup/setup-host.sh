@@ -259,14 +259,14 @@ if sudo virsh net-info default &>/dev/null; then
 fi
 
 # ============================================================================
-# ENABLE IPv6 FORWARDING (required for radvd in container)
+# ENABLE IPv6 FORWARDING ON LAB BRIDGE (required for radvd in container)
 # ============================================================================
-print_task "Enabling IPv6 forwarding..."
-if [[ "$(cat /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null)" != "1" ]]; then
-    sudo sysctl -w net.ipv6.conf.all.forwarding=1 &>/dev/null
+print_task "Enabling IPv6 forwarding on labbr0..."
+if [[ "$(cat /proc/sys/net/ipv6/conf/labbr0/forwarding 2>/dev/null)" != "1" ]]; then
+    sudo sysctl -w net.ipv6.conf.labbr0.forwarding=1 &>/dev/null
     # Persist across reboots
-    if ! grep -q "net.ipv6.conf.all.forwarding" /etc/sysctl.conf 2>/dev/null; then
-        echo "net.ipv6.conf.all.forwarding=1" | sudo tee -a /etc/sysctl.conf &>/dev/null
+    if ! grep -q "net.ipv6.conf.labbr0.forwarding" /etc/sysctl.conf 2>/dev/null; then
+        echo "net.ipv6.conf.labbr0.forwarding=1" | sudo tee -a /etc/sysctl.conf &>/dev/null
     fi
     print_task_done
 else
