@@ -411,11 +411,11 @@ fn_configure_named_dns_server() {
         exit 1
     fi
 
-    # Prepare listen addresses (v2.0.0: always bind to service IP + localhost)
-    v_listen_ipv4="127.0.0.1; ${v_primary_ip}"
+    # Prepare listen addresses (v2.0.0: bridge IP only — rndc uses port 953, not 53)
+    v_listen_ipv4="${v_primary_ip}"
 
     if [[ -n "${v_ipv6_address}" ]]; then
-        v_listen_ipv6="::1; ${v_ipv6_address}"
+        v_listen_ipv6="${v_ipv6_address}"
     else
         v_listen_ipv6="none"
     fi
