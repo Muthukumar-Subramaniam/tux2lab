@@ -184,15 +184,15 @@ fi
 
 # --- 8. Start chrony (NTP) ---
 # Serves time to lab VMs — binds to bridge IP
+# -x = don't adjust system clock (host's chronyd handles that)
+# -u root = stay as root (avoids UID mismatch between container and host)
 echo "[*] Starting chronyd (NTP)..."
 if [[ -f "${DATA_DIR}/chrony/chrony.conf" ]]; then
-    chown -R chrony:chrony "${DATA_DIR}/chrony"
-    /usr/sbin/chronyd -f "${DATA_DIR}/chrony/chrony.conf" -d &
-    echo "    → chronyd started on ${BRIDGE_IP}"
+    /usr/sbin/chronyd -f "${DATA_DIR}/chrony/chrony.conf" -d -x -u root &
+    echo "    → chronyd started on ${BRIDGE_IP} (time server only, no clock adjust)"
 else
-    # Fallback: start with default config allowing bridge subnet
-    /usr/sbin/chronyd -d &
-    echo "    → chronyd started (default config)"
+    /usr/sbin/chronyd -d -x -u root &
+    echo "    → chronyd started (default config, no clock adjust)"
 fi
 
 # --- 9. Start radvd (IPv6 Router Advertisements) ---
