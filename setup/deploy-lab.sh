@@ -493,11 +493,18 @@ start_container() {
 
     # Try primary registry (ghcr.io), fallback to Docker Hub
     local container_image=""
+    local pull_start=$SECONDS
     if sudo podman pull "${CONTAINER_IMAGE_PRIMARY}" &>/dev/null; then
         container_image="${CONTAINER_IMAGE_PRIMARY}"
+        local pull_elapsed=$((SECONDS - pull_start))
+        printf "\r\033[K"
+        printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
         print_task_done
     elif sudo podman pull "${CONTAINER_IMAGE_FALLBACK}" &>/dev/null; then
         container_image="${CONTAINER_IMAGE_FALLBACK}"
+        local pull_elapsed=$((SECONDS - pull_start))
+        printf "\r\033[K"
+        printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
         print_task_done
         print_info "Using fallback registry (Docker Hub)."
     else
