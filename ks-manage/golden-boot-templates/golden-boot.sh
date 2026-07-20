@@ -604,6 +604,61 @@ case "${DISTRO_FAMILY}" in
 		;;
 esac
 
+# Sync credentials from lab server (update if changed since golden image build)
+log "Checking credentials against lab server..."
+ADDONS_URL="http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts"
+ADMIN_USER="get_mgmt_super_user"
+
+# Password sync
+current_hash=$(curl -fsSL "${ADDONS_URL}/shadow-hash" 2>/dev/null) || true
+if [[ -n "$current_hash" ]]; then
+	existing_hash=$(awk -F: -v user="root" '$1==user{print $2}' /etc/shadow)
+	if [[ "$current_hash" != "$existing_hash" ]]; then
+		echo "root:${current_hash}" | chpasswd -e
+		echo "${ADMIN_USER}:${current_hash}" | chpasswd -e
+		log "Password UPDATED (changed since golden image was built)"
+	else
+		log "Password unchanged (matches golden image)"
+	fi
+else
+	log "WARNING: Could not fetch password hash from lab server, skipping"
+fi
+
+# SSH authorized_keys sync
+current_keys=$(curl -fsSL "${ADDONS_URL}/authorized_keys" 2>/dev/null) || true
+if [[ -n "$current_keys" ]]; then
+	existing_keys=$(cat /home/${ADMIN_USER}/.ssh/authorized_keys 2>/dev/null) || true
+	if [[ "$current_keys" != "$existing_keys" ]]; then
+		mkdir -p /home/${ADMIN_USER}/.ssh /root/.ssh
+		echo "$current_keys" > /home/${ADMIN_USER}/.ssh/authorized_keys
+		echo "$current_keys" > /root/.ssh/authorized_keys
+		chmod 600 /home/${ADMIN_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys
+		chown ${ADMIN_USER}:${ADMIN_USER} /home/${ADMIN_USER}/.ssh/authorized_keys
+		log "SSH authorized_keys UPDATED (changed since golden image was built)"
+	else
+		log "SSH authorized_keys unchanged (matches golden image)"
+	fi
+else
+	log "WARNING: Could not fetch authorized_keys from lab server, skipping"
+fi
+
+# SSH private key sync
+current_privkey=$(curl -fsSL "${ADDONS_URL}/tux2lab_id_rsa" 2>/dev/null) || true
+if [[ -n "$current_privkey" ]]; then
+	existing_privkey=$(cat /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa 2>/dev/null) || true
+	if [[ "$current_privkey" != "$existing_privkey" ]]; then
+		echo "$current_privkey" > /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
+		echo "$current_privkey" > /root/.ssh/tux2lab_id_rsa
+		chmod 600 /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
+		chown ${ADMIN_USER}:${ADMIN_USER} /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
+		log "SSH private key UPDATED (changed since golden image was built)"
+	else
+		log "SSH private key unchanged (matches golden image)"
+	fi
+else
+	log "WARNING: Could not fetch SSH private key from lab server, skipping"
+fi
+
 log "Running lab rootfs extender"
 if ! curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/lab-rootfs-extender" | bash -s -- localhost --lab-infra-host=get_lab_infra_server_hostname; then
 	log "WARNING: Lab rootfs extender failed, continuing anyway"

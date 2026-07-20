@@ -1252,6 +1252,7 @@ if ! $invoked_with_golden_image; then
     if rsync -a -q --delete "${ksmanager_main_dir}"/addons-for-kickstarts/ "${ksmanager_hub_dir}"/addons-for-kickstarts/ && \
         rsync -a -q /home/${mgmt_super_user}/.ssh/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} "${ksmanager_hub_dir}"/addons-for-kickstarts/ && \
         chmod +r "${ksmanager_hub_dir}"/addons-for-kickstarts/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} && \
+        echo -n "${shadow_password_super_mgmt_user}" > "${ksmanager_hub_dir}"/addons-for-kickstarts/shadow-hash && \
         mkdir -p "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs && \
         if [[ -f /tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt ]]; then
             cp -f /tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs/
