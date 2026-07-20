@@ -16,7 +16,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab enable
 
 DESCRIPTION:
-    Enables the lab infrastructure to auto-start on boot."
+    Enables the lab infrastructure to auto-start on boot.
+    Creates a systemd service that starts the tux2lab-engine container
+    after libvirtd and the lab bridge are ready."
     exit 0
 fi
 
@@ -27,19 +29,40 @@ if [[ $# -gt 0 ]]; then
 fi
 
 readonly SERVICE_NAME="tux2lab.service"
+readonly SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
 
-if ! systemctl list-unit-files "$SERVICE_NAME" &>/dev/null; then
-    print_error "$SERVICE_NAME is not installed."
-    print_info "Run the deploy script to install it."
-    exit 1
+# ====== Create systemd service unit if missing ======
+if [[ ! -f "${SERVICE_FILE}" ]]; then
+    print_task "Creating ${SERVICE_NAME}..."
+    sudo tee "${SERVICE_FILE}" &>/dev/null <<EOF
+[Unit]
+Description=tux2lab Lab Infrastructure (container)
+After=libvirtd.service network-online.target
+Wants=libvirtd.service
+Requires=libvirtd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/bash -c 'until ip link show ${lab_infra_bridge_interface} 2>/dev/null; do sleep 1; done'
+ExecStart=/usr/bin/podman start ${CONTAINER_NAME}
+ExecStop=/usr/bin/podman stop ${CONTAINER_NAME}
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    print_task_done
 fi
 
 # ====== Enable the service ======
-if sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+if sudo systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
     print_info "${SERVICE_NAME} auto-start is already enabled."
 else
     print_task "Enabling ${SERVICE_NAME}..."
-    if sudo systemctl enable "$SERVICE_NAME" >/dev/null 2>&1; then
+    if sudo systemctl enable "${SERVICE_NAME}" >/dev/null 2>&1; then
         print_task_done
     else
         print_task_fail
@@ -48,11 +71,11 @@ else
     fi
 fi
 
-# ====== Enable libvirtd and sockets ======
+# ====== Enable libvirtd ======
 if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
     print_info "libvirtd auto-start is already enabled."
 else
-    print_task "Enabling libvirtd and sockets..."
+    print_task "Enabling libvirtd..."
     if sudo systemctl enable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket >/dev/null 2>&1; then
         print_task_done
     else

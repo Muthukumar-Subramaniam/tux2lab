@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: sync.sh                                                                  #
-# Description: Sync /tux2lab from the KVM host to the lab infra server VM                #
+# Description: Sync project updates into the running tux2lab-engine container            #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#
 set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # ====== HELP ======
 if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
@@ -15,80 +16,75 @@ if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
     tux2lab sync
 
 DESCRIPTION:
-    Syncs the /tux2lab directory from the KVM host to the lab infra server VM
-    and applies the lab infra services configuration.
+    Regenerates service configurations from lab_environment.json and
+    restarts the tux2lab-engine container to pick up changes.
 
-    Use this after pulling updates on the host (git pull) to push the
-    latest code to the infra server VM. The .git directory is excluded.
+    Use this after pulling updates on the host (git pull) to apply
+    the latest templates and configuration logic.
 
-    If the server is already at the same version, you will be prompted
-    before proceeding.
-
-    In host mode, sync is skipped (code is already local) but lab infra
-    services configuration is still applied."
+    The /tux2lab directory is already bind-mounted into the container
+    as read-only, so code changes are visible immediately. This command
+    regenerates derived configs (nginx, kea, DNS, etc.) and restarts
+    services to apply them."
     exit 0
 fi
 
-# ====== VALIDATE ======
-LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
+if [[ $# -gt 0 ]]; then
+    print_error "Unknown argument: $1"
+    echo "Run 'tux2lab sync --help' for usage information."
+    exit 1
+fi
 
-if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
-    print_error "No lab deployment found."
+# ====== VALIDATE ======
+if ! sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
+    print_error "Container '${CONTAINER_NAME}' does not exist."
     print_info "Run 'tux2lab deploy' first."
     exit 1
 fi
 
-source "$LAB_ENV_VARS_FILE"
+# ====== VERSION INFO ======
+local_version=$(jq -r '.version' /tux2lab/project_version.json)
+print_info "Syncing tux2lab v${local_version} into running lab..."
 
-if ${lab_infra_server_mode_is_host:-false}; then
-    print_info "Running in host mode — /tux2lab is already local. Skipping sync."
-    read -rp "Re-apply lab infra services configuration? (y/N): " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        exit 0
-    fi
-    if ! bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh; then
-        print_error "Failed to apply lab infra services configuration"
+# ====== STEP 1: Regenerate service configs ======
+print_task "Regenerating service configurations..."
+if [[ -x /tux2lab/setup/generate-service-configs.sh ]]; then
+    bash /tux2lab/setup/generate-service-configs.sh
+else
+    print_task_fail
+    print_error "generate-service-configs.sh not found."
+    exit 1
+fi
+
+# ====== STEP 2: Regenerate DNS (if zone files need update) ======
+print_task "Refreshing DNS configuration..."
+if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+    sudo podman exec "${CONTAINER_NAME}" rndc reload &>/dev/null || true
+fi
+print_task_done
+
+# ====== STEP 3: Restart container to pick up config changes ======
+print_task "Restarting tux2lab-engine container..."
+if sudo podman restart "${CONTAINER_NAME}" &>/dev/null; then
+    sleep 2
+    if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Container failed to restart. Check: sudo podman logs ${CONTAINER_NAME}"
         exit 1
     fi
-    exit 0
-fi
-
-# ====== VERSION CHECK ======
-local_ssh_opts="-i ${HOME}/.ssh/tux2lab_id_rsa -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
-
-local_version=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"' -f4)
-
-print_task "Checking version on ${lab_infra_server_hostname}..."
-remote_version=$(ssh $local_ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
-    "grep -o '\"version\": *\"[^\"]*\"' /tux2lab/project_version.json | cut -d'\"' -f4" 2>/dev/null) || {
+else
     print_task_fail
-    print_error "Failed to connect to infra server VM"
-    print_info "Is the VM running? Try: tux2lab health"
-    exit 1
-}
-print_task_done
-
-if [[ "$local_version" == "$remote_version" ]]; then
-    print_info "Server is already at v${remote_version} (same as host)"
-    read -rp "Sync anyway? (y/N): " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        exit 0
-    fi
-fi
-
-# ====== SYNC ======
-print_task "Syncing /tux2lab to ${lab_infra_server_hostname} (v${local_version})..."
-if ! rsync -a --delete --exclude='.git' -e "ssh $local_ssh_opts" /tux2lab/ "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}:/tux2lab/" 2>/dev/null; then
-    print_task_fail
-    print_error "Failed to sync /tux2lab to infra server VM"
-    print_info "Is the VM running? Try: tux2lab health"
+    print_error "Failed to restart container."
     exit 1
 fi
-print_task_done
 
-# ====== APPLY CONFIGURATION ======
-if ! ssh $local_ssh_opts "${lab_infra_admin_username}@${lab_infra_server_ipv4_address}" \
-    "bash /tux2lab/configure-lab-infra-server/configure-lab-infra-server.sh" 2>/dev/null; then
-    print_error "Failed to apply lab infra services configuration"
-    exit 1
+# ====== STEP 4: Health check ======
+print_cyan "--------------------------------------------------------------"
+if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
+    /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi
+
+print_cyan "--------------------------------------------------------------"
+print_success "Sync complete. Lab services updated to v${local_version}."

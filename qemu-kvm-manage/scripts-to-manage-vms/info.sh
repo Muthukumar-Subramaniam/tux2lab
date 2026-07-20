@@ -21,7 +21,7 @@ DESCRIPTION:
 fi
 
 # ====== VERSION HEADER ======
-VERSION=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"' -f4)
+VERSION=$(jq -r '.version' /tux2lab/project_version.json)
 
 print_cyan "tux2lab - Lab Management Tool
 ├─ Version    : $VERSION
@@ -29,38 +29,37 @@ print_cyan "tux2lab - Lab Management Tool
 └─ Issues     : https://github.com/Muthukumar-Subramaniam/tux2lab/issues"
 
 # ====== VALIDATE ======
-LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
 
-if [[ ! -f "$LAB_ENV_VARS_FILE" ]]; then
+if [[ ! -f "$LAB_ENV_JSON" ]]; then
     echo ""
     print_error "No lab deployment found."
     print_info "Run 'tux2lab deploy' first."
     exit 1
 fi
 
-source "$LAB_ENV_VARS_FILE"
+# ====== READ CONFIG ======
+readonly CONTAINER_NAME="tux2lab-engine"
+lab_hostname=$(jq -r '.lab.engine_fqdn' "$LAB_ENV_JSON")
+lab_domain=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
+lab_admin=$(jq -r '.admin.username' "$LAB_ENV_JSON")
+lab_ipv4=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON")
+lab_ipv6=$(jq -r '.network.ipv6.address' "$LAB_ENV_JSON")
+lab_ipv4_cidr=$(jq -r '.network.ipv4.cidr' "$LAB_ENV_JSON")
+lab_ipv6_subnet=$(jq -r '.network.ipv6.ula_subnet' "$LAB_ENV_JSON")
+lab_bridge=$(jq -r '.network.bridge_interface' "$LAB_ENV_JSON")
 
-# ====== GATHER INFO ======
-
-# Deploy mode
-if ${lab_infra_server_mode_is_host:-false}; then
-    deploy_mode="Host"
+# ====== CONTAINER STATUS ======
+if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+    container_status="Running"
+elif sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
+    container_status="Stopped"
 else
-    deploy_mode="VM"
+    container_status="Not found"
 fi
 
-# Server status (VM mode only)
-if [[ "$deploy_mode" == "VM" ]]; then
-    if sudo virsh list --state-running --name 2>/dev/null | grep -Fxq "$lab_infra_server_hostname"; then
-        server_status="Running"
-    elif sudo virsh list --all --name 2>/dev/null | grep -Fxq "$lab_infra_server_hostname"; then
-        server_status="Stopped"
-    else
-        server_status="Not found"
-    fi
-else
-    server_status="Local (host mode)"
-fi
+# Container image
+container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "N/A")
 
 # Auto-start
 if sudo systemctl is-enabled --quiet tux2lab.service 2>/dev/null; then
@@ -71,7 +70,7 @@ fi
 
 # Data directory size
 if [[ -d /tux2lab-data ]]; then
-    data_size=$(du -sh /tux2lab-data 2>/dev/null | awk '{print $1}')
+    data_size=$(sudo du -sh /tux2lab-data 2>/dev/null | awk '{print $1}') || data_size="N/A"
 else
     data_size="N/A"
 fi
@@ -81,7 +80,6 @@ total_vms=0
 running_vms=0
 stopped_vms=0
 if command -v virsh &>/dev/null; then
-    # Count all VMs (including infra server)
     while IFS= read -r vm_name; do
         [[ -z "$vm_name" ]] && continue
         total_vms=$((total_vms + 1))
@@ -102,7 +100,7 @@ if [[ -d "$golden_images_dir" ]]; then
     golden_images=$(find "$golden_images_dir" -name "*.qcow2" 2>/dev/null | wc -l)
 fi
 
-# SSH key type
+# SSH key
 ssh_key_path="${HOME}/.ssh/tux2lab_id_rsa"
 if [[ -f "$ssh_key_path" ]]; then
     ssh_key_info="$ssh_key_path"
@@ -110,32 +108,21 @@ else
     ssh_key_info="Not found"
 fi
 
-ssh_pub_key_path="${HOME}/.ssh/tux2lab_id_rsa.pub"
-if [[ -f "$ssh_pub_key_path" ]]; then
-    ssh_pub_info="$ssh_pub_key_path"
-else
-    ssh_pub_info="Not found"
-fi
-
-# ====== DISPLAY INFO ======
+# ====== DISPLAY ======
 echo ""
 print_cyan "Lab Deployment Info:"
-echo -e "  ${MAKE_IT_CYAN}Deploy Mode:${RESET_COLOR}       $deploy_mode"
-echo -e "  ${MAKE_IT_CYAN}Server:${RESET_COLOR}            $lab_infra_server_hostname"
-echo -e "  ${MAKE_IT_CYAN}Server Status:${RESET_COLOR}     $server_status"
-echo -e "  ${MAKE_IT_CYAN}Admin User:${RESET_COLOR}        $lab_infra_admin_username"
-echo -e "  ${MAKE_IT_CYAN}Domain:${RESET_COLOR}            $lab_infra_domain_name"
-echo -e "  ${MAKE_IT_CYAN}Server IPv4:${RESET_COLOR}       $lab_infra_server_ipv4_address"
-echo -e "  ${MAKE_IT_CYAN}Server IPv6:${RESET_COLOR}       $lab_infra_server_ipv6_address"
-echo -e "  ${MAKE_IT_CYAN}Gateway IPv4:${RESET_COLOR}      $lab_infra_server_ipv4_gateway"
-echo -e "  ${MAKE_IT_CYAN}Gateway IPv6:${RESET_COLOR}      $lab_infra_server_ipv6_gateway"
-echo -e "  ${MAKE_IT_CYAN}Network:${RESET_COLOR}           labbr0"
-echo -e "  ${MAKE_IT_CYAN}IPv4 Subnet:${RESET_COLOR}       $lab_infra_server_ipv4_subnet"
-echo -e "  ${MAKE_IT_CYAN}IPv6 Subnet:${RESET_COLOR}       $lab_infra_server_ipv6_ula_subnet"
-echo -e "  ${MAKE_IT_CYAN}SSH Private Key:${RESET_COLOR}   $ssh_key_info"
-echo -e "  ${MAKE_IT_CYAN}SSH Pub Key:${RESET_COLOR}       $ssh_pub_info"
+echo -e "  ${MAKE_IT_CYAN}Hostname:${RESET_COLOR}          $lab_hostname"
+echo -e "  ${MAKE_IT_CYAN}Domain:${RESET_COLOR}            $lab_domain"
+echo -e "  ${MAKE_IT_CYAN}Admin User:${RESET_COLOR}        $lab_admin"
+echo -e "  ${MAKE_IT_CYAN}IPv4 Address:${RESET_COLOR}      $lab_ipv4"
+echo -e "  ${MAKE_IT_CYAN}IPv6 Address:${RESET_COLOR}      $lab_ipv6"
+echo -e "  ${MAKE_IT_CYAN}IPv4 Network:${RESET_COLOR}      $lab_ipv4_cidr"
+echo -e "  ${MAKE_IT_CYAN}IPv6 Subnet:${RESET_COLOR}       $lab_ipv6_subnet"
+echo -e "  ${MAKE_IT_CYAN}Bridge:${RESET_COLOR}            $lab_bridge"
+echo -e "  ${MAKE_IT_CYAN}Container:${RESET_COLOR}         ${CONTAINER_NAME} (${container_status})"
+echo -e "  ${MAKE_IT_CYAN}Container Image:${RESET_COLOR}   $container_image"
 echo -e "  ${MAKE_IT_CYAN}Auto-start:${RESET_COLOR}        $auto_start"
-echo -e "  ${MAKE_IT_CYAN}Project Dir:${RESET_COLOR}       /tux2lab"
+echo -e "  ${MAKE_IT_CYAN}SSH Key:${RESET_COLOR}           $ssh_key_info"
 echo -e "  ${MAKE_IT_CYAN}Data Directory:${RESET_COLOR}    /tux2lab-data ($data_size)"
 echo -e "  ${MAKE_IT_CYAN}VMs:${RESET_COLOR}               $running_vms running, $stopped_vms stopped ($total_vms total)"
 echo -e "  ${MAKE_IT_CYAN}Golden Images:${RESET_COLOR}     $golden_images available"

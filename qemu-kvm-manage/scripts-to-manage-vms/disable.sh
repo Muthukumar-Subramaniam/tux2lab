@@ -29,14 +29,17 @@ fi
 
 readonly SERVICE_NAME="tux2lab.service"
 
-if ! systemctl list-unit-files "$SERVICE_NAME" &>/dev/null; then
-    print_error "$SERVICE_NAME is not installed."
-    print_info "Run the deploy script to install it."
-    exit 1
+# Check current state
+tux2lab_enabled=false
+libvirtd_enabled=false
+if sudo systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
+    tux2lab_enabled=true
+fi
+if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
+    libvirtd_enabled=true
 fi
 
-if ! sudo systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null && \
-   ! sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
+if ! $tux2lab_enabled && ! $libvirtd_enabled; then
     print_info "Auto-start is already disabled."
     exit 0
 fi
@@ -50,19 +53,23 @@ if [[ "${confirmation}" != "CONFIRM" ]]; then
     exit 0
 fi
 
-# ====== Disable the service ======
-print_task "Disabling ${SERVICE_NAME}..."
-if sudo systemctl disable "$SERVICE_NAME" >/dev/null 2>&1; then
-    print_task_done
+# ====== Disable tux2lab service ======
+if $tux2lab_enabled; then
+    print_task "Disabling ${SERVICE_NAME}..."
+    if sudo systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Failed to disable ${SERVICE_NAME}."
+        exit 1
+    fi
 else
-    print_task_fail
-    print_error "Failed to disable ${SERVICE_NAME}."
-    exit 1
+    print_info "${SERVICE_NAME} is already disabled."
 fi
 
-# ====== Disable libvirtd and sockets ======
-if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
-    print_task "Disabling libvirtd and sockets..."
+# ====== Disable libvirtd ======
+if $libvirtd_enabled; then
+    print_task "Disabling libvirtd..."
     if sudo systemctl disable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket >/dev/null 2>&1; then
         print_task_done
     else
@@ -71,7 +78,7 @@ if sudo systemctl is-enabled --quiet libvirtd 2>/dev/null; then
         exit 1
     fi
 else
-    print_info "libvirtd auto-start is already disabled."
+    print_info "libvirtd is already disabled."
 fi
 
 print_success "Lab infrastructure will no longer auto-start on boot."
