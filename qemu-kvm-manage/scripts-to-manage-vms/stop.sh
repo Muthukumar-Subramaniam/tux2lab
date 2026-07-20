@@ -118,12 +118,16 @@ else
     print_task_skip
 fi
 
-# ====== STEP 3: Destroy virtual network ======
+# ====== STEP 3: Remove lablink0 dummy interface ======
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+remove_lablink0
+
+# ====== STEP 4: Destroy virtual network ======
 print_task "Destroying tux2lab virtual network..."
 sudo virsh net-destroy tux2lab &>/dev/null || true
 print_task_done
 
-# ====== STEP 4: Stop libvirtd ======
+# ====== STEP 5: Stop libvirtd ======
 print_task "Stopping libvirtd..."
 if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
     print_task_done

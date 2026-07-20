@@ -238,7 +238,11 @@ elif [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]]; the
 fi
 print_task_done
 
-# ====== STEP 7: DESTROY VIRTUAL NETWORK ======
+# ====== STEP 7: REMOVE LABLINK0 DUMMY INTERFACE ======
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+remove_lablink0
+
+# ====== STEP 8: DESTROY VIRTUAL NETWORK ======
 print_task "Destroying tux2lab virtual network..."
 if sudo virsh net-info tux2lab &>/dev/null 2>&1 || ip link show labbr0 &>/dev/null 2>&1; then
     sudo virsh net-destroy tux2lab &>/dev/null || true
@@ -248,7 +252,7 @@ else
     print_task_skip
 fi
 
-# ====== STEP 8: REMOVE STORAGE POOLS AND STOP LIBVIRTD ======
+# ====== STEP 9: REMOVE STORAGE POOLS AND STOP LIBVIRTD ======
 if systemctl is-active libvirtd &>/dev/null; then
     for pool_name in $(sudo virsh pool-list --all --name 2>/dev/null | grep -v "^$" || true); do
         print_task "Removing storage pool \"${pool_name}\"..."
@@ -267,7 +271,7 @@ else
     print_task_skip
 fi
 
-# ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
+# ====== STEP 10: WIPE /tux2lab-data/ CONTENTS ======
 if [[ -d "/tux2lab-data" ]]; then
     if $wipe_iso_files; then
         print_task "Wiping /tux2lab-data/ contents (including ISOs)..."
@@ -298,7 +302,7 @@ if [[ -d "/tux2lab-data" ]]; then
     fi
 fi
 
-# ====== STEP 10: REMOVE CONTAINER IMAGE ======
+# ====== STEP 11: REMOVE CONTAINER IMAGE ======
 print_task "Removing tux2lab-engine container image..."
 if sudo podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep -q "tux2lab-engine"; then
     sudo podman rmi --all --force &>/dev/null || true

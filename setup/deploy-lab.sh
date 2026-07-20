@@ -463,27 +463,26 @@ setup_dns() {
 }
 
 # ============================================================================
-# ENSURE BRIDGE IS UP (dummy interface keeps labbr0 in UP state)
+# ENSURE BRIDGE IS UP
 # ============================================================================
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+
 ensure_bridge_up() {
-    if ! ip link show dummy-vnet &>/dev/null; then
-        print_task "Creating dummy interface to keep ${BRIDGE_INTERFACE} UP..."
-        sudo ip link add name dummy-vnet type dummy
-        sudo ip link set dummy-vnet master "${BRIDGE_INTERFACE}"
-        sudo ip link set dummy-vnet up
-        print_task_done
+    # Validate bridge exists and has IPs
+    if ! ip link show "${BRIDGE_INTERFACE}" &>/dev/null; then
+        print_error "Bridge ${BRIDGE_INTERFACE} does not exist."
+        exit 1
+    fi
+    if ! ip -4 addr show dev "${BRIDGE_INTERFACE}" 2>/dev/null | grep -q "inet "; then
+        print_error "No IPv4 address on ${BRIDGE_INTERFACE}."
+        exit 1
+    fi
+    if ! ip -6 addr show dev "${BRIDGE_INTERFACE}" 2>/dev/null | grep -q "inet6.*scope global"; then
+        print_error "No IPv6 address on ${BRIDGE_INTERFACE}."
+        exit 1
     fi
 
-    # Wait for IPv6 DAD to complete (tentative → permanent)
-    local dad_timeout=10
-    local dad_elapsed=0
-    while ip -6 addr show dev "${BRIDGE_INTERFACE}" 2>/dev/null | grep -q "tentative"; do
-        if ((dad_elapsed >= dad_timeout)); then
-            break
-        fi
-        sleep 1
-        ((dad_elapsed++))
-    done
+    ensure_lablink0 "${BRIDGE_INTERFACE}"
 }
 
 # ============================================================================

@@ -256,6 +256,10 @@ if sudo virsh net-info default &>/dev/null; then
     print_task_done
 fi
 
+# Attach dummy interface to keep labbr0 UP (provides carrier for bridge)
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+ensure_lablink0 labbr0
+
 # ============================================================================
 # INSTALL tux2lab CLI
 # ============================================================================

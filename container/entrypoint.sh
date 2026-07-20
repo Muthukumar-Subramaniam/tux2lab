@@ -53,7 +53,7 @@ while ! ip link show "${BRIDGE_IF}" 2>/dev/null | grep -q "state UP"; do
         exit 1
     fi
     sleep 1
-    ((elapsed++))
+    ((++elapsed))
 done
 echo "    → ${BRIDGE_IF} is UP"
 
@@ -65,7 +65,7 @@ while ! ip -4 addr show dev "${BRIDGE_IF}" 2>/dev/null | grep -q "${BRIDGE_IP}";
         exit 1
     fi
     sleep 1
-    ((elapsed++))
+    ((++elapsed))
 done
 echo "    → IPv4 ${BRIDGE_IP} ready"
 
@@ -77,7 +77,7 @@ while ip -6 addr show dev "${BRIDGE_IF}" 2>/dev/null | grep -q "tentative"; do
         break
     fi
     sleep 1
-    ((elapsed++))
+    ((++elapsed))
 done
 echo "    → IPv6 ready"
 
