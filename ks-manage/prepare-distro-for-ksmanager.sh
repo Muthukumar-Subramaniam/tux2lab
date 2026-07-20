@@ -41,7 +41,7 @@ set -euo pipefail
 readonly ISO_DIR="/tux2lab-data/iso-files"
 readonly ISO_MOUNTS_CONF="/tux2lab-data/iso-mounts.conf"
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
-readonly MIN_DISK_SPACE_RHEL_GB=16
+readonly MIN_DISK_SPACE_RHEL_GB=5
 readonly MIN_DISK_SPACE_OTHER_GB=5
 
 # ====== DEPENDENCY CHECK ======
@@ -155,7 +155,7 @@ fn_extract_expected_hash() {
         expected_hash=$(grep -i "$iso_name" "$checksum_file" | awk '{print $1}' | head -1 | tr -d '[:space:]') || true
     fi
     # Fallback for 'latest' symlinks: mirrors list the real dated filename
-    # e.g., URL has "CentOS-Stream-10-latest-x86_64-dvd1.iso" but checksum has "CentOS-Stream-10-20260513.0-x86_64-dvd1.iso"
+    # e.g., URL has "CentOS-Stream-10-latest-x86_64-boot.iso" but checksum has "CentOS-Stream-10-20260513.0-x86_64-boot.iso"
     if [[ -z "$expected_hash" && "$iso_name" == *"latest"* ]]; then
         local pattern="${iso_name//latest/[A-Za-z0-9][^ )]*}"
         expected_hash=$(grep -i "SHA256" "$checksum_file" | grep -E "$pattern" | awk -F'= ' '{print $2}' | tr -d '[:space:]' | head -1) || true
@@ -319,7 +319,7 @@ fn_get_iso_url() {
         print_info "RHEL ISOs are not publicly downloadable. You have two options:"
         print_info "  1. Log in at https://access.redhat.com/downloads/content/rhel"
         print_info "     (a free Red Hat Developer subscription is sufficient)"
-        print_info "     Download the DVD ISO and place it at: ${iso_path}"
+        print_info "     Download the Boot ISO and place it at: ${iso_path}"
         print_info "  2. Paste a direct download URL below (from your Red Hat account)"
         echo
         read -rp "Paste direct ISO download URL, or press Enter if you placed the ISO manually: " iso_url
@@ -327,16 +327,15 @@ fn_get_iso_url() {
             # Validate the URL filename matches expected distro, version, and type
             local url_basename
             url_basename=$(basename "${iso_url%%\?*}")
-            if [[ "$url_basename" != *dvd* ]]; then
-                print_error "The URL points to '${url_basename}' which is not a DVD ISO."
-                print_info "A full DVD ISO is required (filename must contain 'dvd')."
-                print_info "Boot and minimal ISOs do not contain the packages needed for installation."
+            if [[ "$url_basename" != *boot* ]]; then
+                print_error "The URL points to '${url_basename}' which is not a Boot ISO."
+                print_info "A Boot ISO is required (filename must contain 'boot')."
                 exit 1
             fi
             if [[ "$url_basename" != rhel-${version}* ]]; then
                 print_error "The URL points to '${url_basename}' which does not match RHEL ${version}."
                 print_info "You selected RHEL ${version}, but the URL points to a different version."
-                print_info "Expected a filename starting with 'rhel-${version}' (e.g., rhel-${version}.1-x86_64-dvd.iso)."
+                print_info "Expected a filename starting with 'rhel-${version}' (e.g., rhel-${version}.1-x86_64-boot.iso)."
                 exit 1
             fi
             echo "$iso_url"
