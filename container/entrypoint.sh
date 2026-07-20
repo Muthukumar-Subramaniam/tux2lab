@@ -94,6 +94,7 @@ wait_for_pid() {
 # Binds to bridge IP only — configured via named.conf
 echo "[*] Starting named (DNS)..."
 if [[ -f "${DATA_DIR}/named/named.conf" ]]; then
+    chown -R named:named "${DATA_DIR}/named"
     /usr/sbin/named -u named -c "${DATA_DIR}/named/named.conf" -f &
     echo "    → named started (config from ${DATA_DIR}/named/named.conf)"
 else
@@ -172,6 +173,7 @@ fi
 # Serves time to lab VMs — binds to bridge IP
 echo "[*] Starting chronyd (NTP)..."
 if [[ -f "${DATA_DIR}/chrony/chrony.conf" ]]; then
+    chown -R chrony:chrony "${DATA_DIR}/chrony"
     /usr/sbin/chronyd -f "${DATA_DIR}/chrony/chrony.conf" -d &
     echo "    → chronyd started on ${BRIDGE_IP}"
 else
