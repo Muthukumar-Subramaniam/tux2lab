@@ -146,6 +146,7 @@ fi
 echo "[*] Starting in.tftpd (TFTP)..."
 mkdir -p "${DATA_DIR}/tftpboot"
 /usr/sbin/in.tftpd \
+    --foreground \
     --listen \
     --address "${BRIDGE_IP}:69" \
     --secure \
