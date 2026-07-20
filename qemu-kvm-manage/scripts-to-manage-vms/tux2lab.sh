@@ -52,7 +52,7 @@ LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
     destroy          Permanently destroy the entire lab environment
     rebuild          Tear down and redeploy lab using existing config
-    sync             Sync /tux2lab from host to infra server VM
+    sync             Sync project updates into the running lab
 
 OPTIONS:
     -h, --help       Show this help message

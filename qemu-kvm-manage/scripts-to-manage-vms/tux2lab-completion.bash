@@ -28,10 +28,10 @@ _tux2lab_completions() {
     local options="-h --help -v --version"
 
     # VM subcommands
-    local vm_subcommands="install-golden install-pxe reimage-golden reimage-pxe start stop shutdown restart reboot remove list info validate console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove snapshot-create snapshot-list snapshot-info snapshot-delete snapshot-revert"
+    local vm_subcommands="install reimage start stop shutdown restart reboot remove list info validate console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove snapshot-create snapshot-list snapshot-info snapshot-delete snapshot-revert"
 
     # Distro subcommands
-    local distro_subcommands="list setup cleanup download-infra-iso"
+    local distro_subcommands="list setup cleanup"
 
     # Golden image subcommands
     local golden_image_subcommands="build create rebuild list cleanup"
@@ -139,7 +139,7 @@ _tux2lab_completions() {
         if [[ "$_comp_prefix" =~ (-H|--hosts|--host)[[:space:]]+([^[:space:]]*)$ ]]; then
             local _host_val="${BASH_REMATCH[2]}"
             case "${vm_subcmd}" in
-                install-golden|install-pxe) return 0 ;;
+                install) return 0 ;;
                 *)
                     if [[ -n "$existing_vms" ]]; then
                         _complete_comma_separated_hosts "$_host_val"
@@ -159,7 +159,7 @@ _tux2lab_completions() {
         # Complete distro names after -d/--distro
         if [[ "${prev}" == "-d" || "${prev}" == "--distro" ]]; then
             case "${vm_subcmd}" in
-                install-golden|install-pxe|reimage-golden|reimage-pxe)
+                install|reimage)
                     COMPREPLY=( $(compgen -W "${all_distros}" -- "${cur}") )
                     return 0
                     ;;
@@ -169,7 +169,7 @@ _tux2lab_completions() {
         # Complete version values after -v/--version
         if [[ "${prev}" == "-v" || "${prev}" == "--version" ]]; then
             case "${vm_subcmd}" in
-                install-golden|install-pxe|reimage-golden|reimage-pxe)
+                install|reimage)
                     local found_distro
                     found_distro=$(_find_distro_in_words)
                     if [[ -n "$found_distro" ]]; then
@@ -189,7 +189,7 @@ _tux2lab_completions() {
             -f|--force|-C|--clean-install|--ignore-ksmanager-cleanup|-h|--help) ;;
             -c|--console)
                 case "${vm_subcmd}" in
-                    install-golden|install-pxe|reimage-golden|reimage-pxe) ;;
+                    install|reimage) ;;
                     *) return 0 ;;
                 esac
                 ;;
@@ -204,11 +204,11 @@ _tux2lab_completions() {
 
         # Complete options per vm subcommand
         case "${vm_subcmd}" in
-            install-golden|install-pxe)
-                COMPREPLY=( $(compgen -W "-H --hosts -c --console -d --distro -v --version -h --help" -- "${cur}") )
+            install)
+                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console -d --distro -v --version -h --help" -- "${cur}") )
                 ;;
-            reimage-golden|reimage-pxe)
-                COMPREPLY=( $(compgen -W "-H --hosts -c --console -C --clean-install -d --distro -v --version -f --force -h --help" -- "${cur}") )
+            reimage)
+                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console -C --clean-install -d --distro -v --version -f --force -h --help" -- "${cur}") )
                 ;;
             start)
                 COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )

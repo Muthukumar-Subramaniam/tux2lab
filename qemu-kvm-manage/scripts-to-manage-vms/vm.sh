@@ -34,10 +34,8 @@ show_usage() {
     tux2lab vm <subcommand> [options] [arguments]
 
 VM DEPLOYMENT:
-    install-golden          Deploy VM(s) from golden image
-    install-pxe             Deploy VM(s) using PXE boot
-    reimage-golden          Reinstall VM(s) from golden image
-    reimage-pxe             Reinstall VM(s) using PXE boot
+    install                 Deploy VM(s) [--via-golden (default) | --via-pxe]
+    reimage                 Reinstall VM(s) [--via-golden (default) | --via-pxe]
 
 VM OPERATIONS:
     list                    List all VMs and their status
@@ -99,7 +97,7 @@ main() {
         start|stop|shutdown|restart|reboot|remove|list|console|resize|info|validate)
             script_name="kvm-${subcommand}.sh"
             ;;
-        install-pxe|install-golden|reimage-pxe|reimage-golden)
+        install|reimage)
             script_name="kvm-${subcommand}.sh"
             ;;
         disk-add|disk-resize|disk-attach|disk-detach|disk-delete|nic-add|nic-remove)
