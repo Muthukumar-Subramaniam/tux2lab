@@ -43,6 +43,44 @@ rm -rf /var/log/nginx && ln -sf "${DATA_DIR}/log/nginx" /var/log/nginx
 # Enable IPv6 forwarding on bridge (required for radvd)
 sysctl -w "net.ipv6.conf.${BRIDGE_IF}.forwarding=1" &>/dev/null || true
 
+# --- Wait for bridge interface and IPs to be ready ---
+echo "[*] Waiting for ${BRIDGE_IF} to be ready..."
+timeout=30
+elapsed=0
+while ! ip link show "${BRIDGE_IF}" 2>/dev/null | grep -q "state UP"; do
+    if ((elapsed >= timeout)); then
+        echo "[ERROR] Timeout waiting for ${BRIDGE_IF} to come UP"
+        exit 1
+    fi
+    sleep 1
+    ((elapsed++))
+done
+echo "    → ${BRIDGE_IF} is UP"
+
+# Wait for IPv4 address
+elapsed=0
+while ! ip -4 addr show dev "${BRIDGE_IF}" 2>/dev/null | grep -q "${BRIDGE_IP}"; do
+    if ((elapsed >= timeout)); then
+        echo "[ERROR] Timeout waiting for IPv4 ${BRIDGE_IP} on ${BRIDGE_IF}"
+        exit 1
+    fi
+    sleep 1
+    ((elapsed++))
+done
+echo "    → IPv4 ${BRIDGE_IP} ready"
+
+# Wait for IPv6 address (DAD completion — no "tentative" flag)
+elapsed=0
+while ip -6 addr show dev "${BRIDGE_IF}" 2>/dev/null | grep -q "tentative"; do
+    if ((elapsed >= timeout)); then
+        echo "[WARN] IPv6 DAD did not complete within ${timeout}s, proceeding anyway"
+        break
+    fi
+    sleep 1
+    ((elapsed++))
+done
+echo "    → IPv6 ready"
+
 # --- Helper: wait for a process to be ready ---
 wait_for_pid() {
     local pidfile="$1"

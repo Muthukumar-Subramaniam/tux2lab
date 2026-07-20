@@ -463,6 +463,30 @@ setup_dns() {
 }
 
 # ============================================================================
+# ENSURE BRIDGE IS UP (dummy interface keeps labbr0 in UP state)
+# ============================================================================
+ensure_bridge_up() {
+    if ! ip link show dummy-vnet &>/dev/null; then
+        print_task "Creating dummy interface to keep ${BRIDGE_INTERFACE} UP..."
+        sudo ip link add name dummy-vnet type dummy
+        sudo ip link set dummy-vnet master "${BRIDGE_INTERFACE}"
+        sudo ip link set dummy-vnet up
+        print_task_done
+    fi
+
+    # Wait for IPv6 DAD to complete (tentative → permanent)
+    local dad_timeout=10
+    local dad_elapsed=0
+    while ip -6 addr show dev "${BRIDGE_INTERFACE}" 2>/dev/null | grep -q "tentative"; do
+        if ((dad_elapsed >= dad_timeout)); then
+            break
+        fi
+        sleep 1
+        ((dad_elapsed++))
+    done
+}
+
+# ============================================================================
 # START CONTAINER
 # ============================================================================
 start_container() {
@@ -631,7 +655,8 @@ rebuild_lab() {
     # Regenerate service configs
     generate_service_configs
 
-    # Start fresh container
+    # Ensure bridge is UP and start container
+    ensure_bridge_up
     start_container
 
     # Health check
@@ -667,6 +692,7 @@ main() {
     generate_lab_environment_json
     generate_service_configs
     setup_dns
+    ensure_bridge_up
     start_container
     configure_host_dns
     configure_host_ssh

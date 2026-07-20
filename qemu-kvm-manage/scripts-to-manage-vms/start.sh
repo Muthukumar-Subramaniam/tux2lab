@@ -69,7 +69,24 @@ until ip link show "${lab_infra_bridge_interface}" &>/dev/null; do
 done
 print_task_done
 
-# ====== STEP 3: Start container ======
+# ====== STEP 3: Ensure bridge is UP ======
+if ! ip link show dummy-vnet &>/dev/null; then
+    print_task "Creating dummy interface to keep ${lab_infra_bridge_interface} UP..."
+    sudo ip link add name dummy-vnet type dummy
+    sudo ip link set dummy-vnet master "${lab_infra_bridge_interface}"
+    sudo ip link set dummy-vnet up
+    print_task_done
+fi
+
+# Wait for IPv6 DAD to complete
+dad_elapsed=0
+while ip -6 addr show dev "${lab_infra_bridge_interface}" 2>/dev/null | grep -q "tentative"; do
+    if ((dad_elapsed >= 10)); then break; fi
+    sleep 1
+    ((dad_elapsed++))
+done
+
+# ====== STEP 4: Start container ======
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     print_info "Container '${CONTAINER_NAME}' is already running."
 else
