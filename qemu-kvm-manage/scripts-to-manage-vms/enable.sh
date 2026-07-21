@@ -36,19 +36,17 @@ if [[ ! -f "${SERVICE_FILE}" ]]; then
     print_task "Creating ${SERVICE_NAME}..."
     sudo tee "${SERVICE_FILE}" &>/dev/null <<EOF
 [Unit]
-Description=tux2lab Lab Infrastructure (container)
-After=libvirtd.service network-online.target
-Wants=libvirtd.service
-Requires=libvirtd.service
+Description=tux2lab Lab Infrastructure
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=/usr/bin/bash -c 'until ip link show ${lab_infra_bridge_interface} 2>/dev/null; do sleep 1; done'
-ExecStart=/usr/bin/podman start ${CONTAINER_NAME}
-ExecStop=/usr/bin/podman stop ${CONTAINER_NAME}
-TimeoutStartSec=60
-TimeoutStopSec=30
+ExecStart=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
+ExecStop=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/stop.sh -y
+TimeoutStartSec=120
+TimeoutStopSec=120
 
 [Install]
 WantedBy=multi-user.target

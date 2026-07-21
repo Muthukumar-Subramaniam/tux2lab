@@ -13,23 +13,33 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 # ====== GLOBAL CONFIGURATION ======
 vm_shutdown_timeout=120
 
-# ====== HELP ======
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    print_cyan "USAGE:
-    tux2lab stop
+# ====== FLAG PARSING ======
+skip_confirm=false
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            print_cyan "USAGE:
+    tux2lab stop [-y]
 
 DESCRIPTION:
     Gracefully shuts down all running VMs, stops the tux2lab-engine
     container, and tears down the lab infrastructure.
-    VMs that do not shut down within ${vm_shutdown_timeout}s are force stopped."
-    exit 0
-fi
+    VMs that do not shut down within ${vm_shutdown_timeout}s are force stopped.
 
-if [[ $# -gt 0 ]]; then
-    print_error "Unknown argument: $1"
-    echo "Run 'tux2lab stop --help' for usage information."
-    exit 1
-fi
+OPTIONS:
+    -y, --yes    Skip confirmation prompt"
+            exit 0
+            ;;
+        -y|--yes)
+            skip_confirm=true
+            ;;
+        *)
+            print_error "Unknown argument: $arg"
+            echo "Run 'tux2lab stop --help' for usage information."
+            exit 1
+            ;;
+    esac
+done
 
 # ====== SOURCE SHUTDOWN FUNCTION ======
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
@@ -39,23 +49,25 @@ print_cyan "--------------------------------------------------------------"
 print_cyan "tux2lab Infrastructure Shutdown"
 print_cyan "--------------------------------------------------------------"
 
-print_warning "This will shut down all running VMs and stop all tux2lab services."
+if [[ "${skip_confirm}" != "true" ]]; then
+    print_warning "This will shut down all running VMs and stop all tux2lab services."
 
-# Show running VMs if any
-running_vms_list=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
-if [[ -n "$running_vms_list" ]]; then
-    print_warning "The following VMs will be shut down:"
-    while IFS= read -r vm; do
-        [[ -z "$vm" ]] && continue
-        print_warning "  - $vm"
-    done <<< "$running_vms_list"
-fi
+    # Show running VMs if any
+    running_vms_list=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+    if [[ -n "$running_vms_list" ]]; then
+        print_warning "The following VMs will be shut down:"
+        while IFS= read -r vm; do
+            [[ -z "$vm" ]] && continue
+            print_warning "  - $vm"
+        done <<< "$running_vms_list"
+    fi
 
-echo -n "Type CONFIRM to proceed: "
-read -r confirmation
-if [[ "${confirmation}" != "CONFIRM" ]]; then
-    print_info "Operation cancelled."
-    exit 0
+    echo -n "Type CONFIRM to proceed: "
+    read -r confirmation
+    if [[ "${confirmation}" != "CONFIRM" ]]; then
+        print_info "Operation cancelled."
+        exit 0
+    fi
 fi
 
 print_cyan "--------------------------------------------------------------"
