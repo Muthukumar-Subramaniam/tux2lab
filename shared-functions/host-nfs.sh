@@ -68,13 +68,25 @@ start_host_nfs() {
 
 # Stop NFS server on host and restore config
 stop_host_nfs() {
+    # Check if there's anything NFS-related to stop
+    local svc
+    svc=$(_nfs_service_name)
+    local nfs_active=false
+    if [[ -n "${svc}" ]] && systemctl is-active "${svc}" &>/dev/null; then
+        nfs_active=true
+    fi
+    if ! $nfs_active && [[ ! -f "${NFS_EXPORTS_DROPIN}" ]] && [[ ! -f "${NFS_CONF_BACKUP}" ]]; then
+        print_task "Stopping NFS server on host..."
+        print_task_skip
+        return 0
+    fi
+
     print_task "Stopping NFS server on host..."
     sudo exportfs -ua 2>/dev/null || true
     sudo rm -f "${NFS_EXPORTS_DROPIN}"
-
-    local svc
-    svc=$(_nfs_service_name)
-    [[ -n "${svc}" ]] && sudo systemctl stop "${svc}" 2>/dev/null || true
+    if $nfs_active; then
+        sudo systemctl stop "${svc}" 2>/dev/null || true
+    fi
     _restore_nfs_conf
     print_task_done
 }

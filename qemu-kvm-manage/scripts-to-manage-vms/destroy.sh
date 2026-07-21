@@ -77,26 +77,7 @@ if [[ -f "$LAB_ENV_JSON" ]]; then
     lab_ipv6=$(jq -r '.network.ipv6.address' "$LAB_ENV_JSON")
 fi
 
-# ====== EARLY EXIT IF NO LAB EXISTS ======
-lab_exists=false
-if [[ -f "$LAB_ENV_JSON" ]]; then
-    lab_exists=true
-elif sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-    lab_exists=true
-elif sudo virsh list --all --name 2>/dev/null | grep -q .; then
-    lab_exists=true
-elif sudo virsh net-info tux2lab &>/dev/null 2>&1; then
-    lab_exists=true
-elif ip link show labbr0 &>/dev/null 2>&1; then
-    lab_exists=true
-elif systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
-    lab_exists=true
-fi
-
-if ! $lab_exists; then
-    print_info "No lab detected — nothing to destroy."
-    exit 0
-fi
+# ====== DETECT LAB STATE (for display only, not for early exit) ======
 
 # ====== HEADER ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
@@ -210,7 +191,23 @@ else
     print_task_skip
 fi
 
-# ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
+# ====== STEP 5.1: STOP NFS AND CLEAN HOST CONFIG ======
+source /tux2lab/shared-functions/host-nfs.sh
+stop_host_nfs
+
+# ====== STEP 5.2: STOP AND REMOVE ISO MOUNTS SERVICE ======
+print_task "Stopping and removing tux2lab-iso-mounts.service..."
+if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
+    sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
+    sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
+    sudo systemctl daemon-reload
+    print_task_done
+else
+    print_task_skip
+fi
+
+# ====== STEP 6: CLEAN /etc/hosts ENTRIES ======
 print_task "Cleaning lab entries from /etc/hosts..."
 if [[ -n "$lab_domain" ]] && grep -q "${lab_domain}" /etc/hosts 2>/dev/null; then
     escaped_domain="${lab_domain//./\\.}"
@@ -222,21 +219,31 @@ fi
 
 # ====== STEP 6: REMOVE SSH AND SSL ARTIFACTS ======
 print_task "Removing SSH and SSL artifacts..."
-rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
-rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
-if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_domain" ]]; then
-    escaped_domain="${lab_domain//./\\.}"
-    sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+has_artifacts=false
+[[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] && has_artifacts=true
+[[ -f "$HOME/.ssh/config.d/tux2lab.conf" ]] && has_artifacts=true
+[[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
+[[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
+
+if $has_artifacts; then
+    rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
+    rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
+    if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_domain" ]]; then
+        escaped_domain="${lab_domain//./\\.}"
+        sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+    fi
+    # Remove SSL cert from host trust store
+    if [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-trust &>/dev/null || true
+    elif [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-certificates &>/dev/null || true
+    fi
+    print_task_done
+else
+    print_task_skip
 fi
-# Remove SSL cert from host trust store
-if [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]]; then
-    sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
-    sudo update-ca-trust &>/dev/null || true
-elif [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]]; then
-    sudo rm -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
-    sudo update-ca-certificates &>/dev/null || true
-fi
-print_task_done
 
 # ====== STEP 7: REMOVE LABLINK0 DUMMY INTERFACE ======
 source /tux2lab/shared-functions/lablink0.sh
@@ -271,7 +278,16 @@ else
     print_task_skip
 fi
 
-# ====== STEP 10: WIPE /tux2lab-data/ CONTENTS ======
+# ====== UNMOUNT ISOs AND WIPE /tux2lab-data/ CONTENTS ======
+# Unmount any loop-mounted ISOs under /tux2lab-data/os-repos/
+if mount | grep -q "/tux2lab-data/os-repos/"; then
+    print_task "Unmounting ISO mounts..."
+    mount | grep "/tux2lab-data/os-repos/" | awk '{print $3}' | while read -r mnt; do
+        sudo umount "$mnt" 2>/dev/null || sudo umount -l "$mnt" 2>/dev/null || true
+    done
+    print_task_done
+fi
+
 if [[ -d "/tux2lab-data" ]]; then
     if $wipe_iso_files; then
         print_task "Wiping /tux2lab-data/ contents (including ISOs)..."
@@ -313,7 +329,18 @@ fi
 
 # ====== SUMMARY ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
-print_success "Lab has been completely destroyed."
+# Check if anything was actually present to destroy
+if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null \
+   || [[ -f "${LAB_ENV_JSON}" ]] \
+   || sudo virsh net-info tux2lab &>/dev/null 2>&1 \
+   || ip link show labbr0 &>/dev/null 2>&1; then
+    print_warning "Some components could not be fully removed. Run again or check manually."
+elif [[ -d "/tux2lab-data" ]] && compgen -G "/tux2lab-data/*" >/dev/null 2>&1 \
+     && [[ "$(ls /tux2lab-data/ 2>/dev/null | grep -cv '^iso-files$')" -gt 0 ]]; then
+    print_success "Lab has been completely destroyed."
+else
+    print_info "Lab is already clean — nothing to destroy."
+fi
 if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
     print_cyan "ISO files preserved at /tux2lab-data/iso-files/"
 fi
