@@ -528,7 +528,7 @@ fn_setup_distro() {
         done
         fn_check_disk_space "$ISO_DIR" "$min_space_gb"
 
-        print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} ISO..."
+        print_info "Downloading ${DISTRO_DISPLAY_NAMES[$distro]} ${version} Boot ISO..."
         if ! curl --location --continue-at - --retry 10 --retry-delay 3 --output "$iso_path" "$iso_url"; then
             print_error "Failed to download ISO from ${iso_url}"
             print_info "Cleaning up partial download..."
