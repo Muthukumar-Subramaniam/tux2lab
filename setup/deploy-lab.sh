@@ -547,31 +547,32 @@ start_container() {
     print_task "Starting tux2lab-engine container..."
     local start_begin=$SECONDS
 
-    # Remove existing container if present (from failed previous run)
-    if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-        sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
-    fi
-
     sudo mkdir -p "${TUX2LAB_DATA_DIR}/log"
-    sudo podman run -d \
-        --name "${CONTAINER_NAME}" \
-        --hostname "${INFRA_FQDN}" \
-        --uts=private \
-        --network=host \
-        --privileged \
-        --log-driver=k8s-file \
-        --log-opt "path=${TUX2LAB_DATA_DIR}/log/tux2lab-engine.log" \
-        --log-opt "max-size=10mb" \
-        -v "${TUX2LAB_DATA_DIR}:${TUX2LAB_DATA_DIR}:ro" \
-        -v "${TUX2LAB_DATA_DIR}/kea/leases:/var/lib/kea" \
-        -v "/tux2lab:${TUX2LAB_DATA_DIR}/tux2lab:ro" \
-        -v "/lib/modules:/lib/modules:ro" \
-        -e "TUX2LAB_BRIDGE_IP=${IPV4_ADDRESS}" \
-        -e "TUX2LAB_BRIDGE_IF=${BRIDGE_INTERFACE}" \
-        "${container_image}" &>/dev/null &
+    (
+        # Remove existing container if present (from failed previous run)
+        if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
+            sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
+        fi
+        sudo podman run -d \
+            --name "${CONTAINER_NAME}" \
+            --hostname "${INFRA_FQDN}" \
+            --uts=private \
+            --network=host \
+            --privileged \
+            --log-driver=k8s-file \
+            --log-opt "path=${TUX2LAB_DATA_DIR}/log/tux2lab-engine.log" \
+            --log-opt "max-size=10mb" \
+            -v "${TUX2LAB_DATA_DIR}:${TUX2LAB_DATA_DIR}:ro" \
+            -v "${TUX2LAB_DATA_DIR}/kea/leases:/var/lib/kea" \
+            -v "/tux2lab:${TUX2LAB_DATA_DIR}/tux2lab:ro" \
+            -v "/lib/modules:/lib/modules:ro" \
+            -e "TUX2LAB_BRIDGE_IP=${IPV4_ADDRESS}" \
+            -e "TUX2LAB_BRIDGE_IF=${BRIDGE_INTERFACE}" \
+            "${container_image}" &>/dev/null
+    ) &
     local run_pid=$!
 
-    # Live timer while podman run executes
+    # Live timer while container is being created
     local start_elapsed=0
     while kill -0 "$run_pid" 2>/dev/null; do
         printf "\r${MAKE_IT_CYAN}[TASK] Starting tux2lab-engine container [%dm %ds]...${RESET_COLOR}\033[K" $((start_elapsed/60)) $((start_elapsed%60))

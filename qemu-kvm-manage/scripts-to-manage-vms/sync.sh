@@ -140,30 +140,30 @@ bridge_interface=$(jq -r '.network.bridge_interface' "${LAB_ENV_JSON}")
 infra_fqdn=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
 data_dir="/tux2lab-data"
 
-# Stop and remove existing container
-sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
-
-# Start fresh container
+# Stop and remove existing container, then start fresh
 sudo mkdir -p "${data_dir}/log"
-sudo podman run -d \
-    --name "${CONTAINER_NAME}" \
-    --hostname "${infra_fqdn}" \
-    --uts=private \
-    --network=host \
-    --privileged \
-    --log-driver=k8s-file \
-    --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
-    --log-opt "max-size=10mb" \
-    -v "${data_dir}:${data_dir}:ro" \
-    -v "${data_dir}/kea/leases:/var/lib/kea" \
-    -v "/tux2lab:${data_dir}/tux2lab:ro" \
-    -v "/lib/modules:/lib/modules:ro" \
-    -e "TUX2LAB_BRIDGE_IP=${ipv4_address}" \
-    -e "TUX2LAB_BRIDGE_IF=${bridge_interface}" \
-    "${container_image}" &>/dev/null &
+(
+    sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
+    sudo podman run -d \
+        --name "${CONTAINER_NAME}" \
+        --hostname "${infra_fqdn}" \
+        --uts=private \
+        --network=host \
+        --privileged \
+        --log-driver=k8s-file \
+        --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
+        --log-opt "max-size=10mb" \
+        -v "${data_dir}:${data_dir}:ro" \
+        -v "${data_dir}/kea/leases:/var/lib/kea" \
+        -v "/tux2lab:${data_dir}/tux2lab:ro" \
+        -v "/lib/modules:/lib/modules:ro" \
+        -e "TUX2LAB_BRIDGE_IP=${ipv4_address}" \
+        -e "TUX2LAB_BRIDGE_IF=${bridge_interface}" \
+        "${container_image}" &>/dev/null
+) &
 run_pid=$!
 
-# Live timer while waiting for container to come up
+# Live timer while container is being recreated
 recreate_elapsed=0
 while kill -0 "$run_pid" 2>/dev/null; do
     printf "\r${MAKE_IT_CYAN}[TASK] Recreating tux2lab-engine container [%dm %ds]...${RESET_COLOR}\033[K" $((recreate_elapsed/60)) $((recreate_elapsed%60))
