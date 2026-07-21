@@ -57,6 +57,8 @@ start_host_nfs() {
     print_task "Starting NFS server on host..."
     sudo mkdir -p /etc/exports.d
     sudo cp /tux2lab-data/nfs/exports "${NFS_EXPORTS_DROPIN}"
+    # Remove any stale tux2lab entries from /etc/exports (legacy cleanup)
+    sudo sed -i '/tux2lab-data/d' /etc/exports 2>/dev/null || true
     _patch_nfs_conf "${ipv4},${ipv6}"
 
     local svc
@@ -99,6 +101,8 @@ restart_host_nfs() {
     sudo exportfs -ua 2>/dev/null || true
     sudo mkdir -p /etc/exports.d
     sudo cp /tux2lab-data/nfs/exports "${NFS_EXPORTS_DROPIN}"
+    # Remove any stale tux2lab entries from /etc/exports (legacy cleanup)
+    sudo sed -i '/tux2lab-data/d' /etc/exports 2>/dev/null || true
 
     local svc
     svc=$(_nfs_service_name)
