@@ -35,6 +35,9 @@ chown -R named:named /var/named
 mkdir -p /var/run/kea /run/named
 chown named:named /run/named
 
+# Clean stale PID files from previous container run (podman start reuses filesystem)
+rm -f /var/run/kea/*.pid /run/named/named.pid /run/radvd/radvd.pid /run/chrony/chronyd.pid /run/nginx.pid
+
 # Generate rndc key if missing (needed for rndc reload/status)
 if [[ ! -f /etc/rndc.key ]]; then
     rndc-confgen -a -u named &>/dev/null
