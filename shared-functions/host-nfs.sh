@@ -96,6 +96,7 @@ restart_host_nfs() {
     if [[ ! -f /tux2lab-data/nfs/exports ]]; then return 0; fi
 
     print_task "Restarting NFS server on host..."
+    sudo exportfs -ua 2>/dev/null || true
     sudo mkdir -p /etc/exports.d
     sudo cp /tux2lab-data/nfs/exports "${NFS_EXPORTS_DROPIN}"
 
