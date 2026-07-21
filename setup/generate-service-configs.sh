@@ -332,7 +332,7 @@ generate_nfs_exports() {
     mkdir -p "${DATA_DIR}/nfs"
 
     cat > "${DATA_DIR}/nfs/exports" <<EOF
-${DATA_DIR} *.${DOMAIN}(ro,no_subtree_check,no_root_squash,crossmnt)
+${DATA_DIR} *.${DOMAIN}(ro,fsid=1,no_subtree_check,no_root_squash,crossmnt)
 EOF
     print_task_done
 }
