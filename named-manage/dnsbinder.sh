@@ -562,8 +562,6 @@ EOF
     v_gateway_cname_space=$(printf "%-*s" 63 "gateway")
     echo -e "${v_gateway_cname_space} IN CNAME ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
 
-    echo -e "\n;CNAME-Records" | tee -a "${v_zone_file_name}" > /dev/null
-
     for v_subnet_part in ${v_splited_subnets}
     do
         v_zone_file_name="${var_zone_dir}/${v_subnet_part}.${v_given_domain}-reverse.db"
