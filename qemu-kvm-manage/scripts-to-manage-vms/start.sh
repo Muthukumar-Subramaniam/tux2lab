@@ -68,7 +68,7 @@ done
 print_task_done
 
 # ====== STEP 3: Ensure bridge is UP ======
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+source /tux2lab/shared-functions/lablink0.sh
 ensure_lablink0 "${lab_infra_bridge_interface}"
 
 # ====== STEP 4: Start container ======
@@ -103,7 +103,11 @@ else
     fi
 fi
 
-# ====== STEP 4: Configure DNS on host ======
+# ====== STEP 5: Start NFS on host ======
+source /tux2lab/shared-functions/host-nfs.sh
+start_host_nfs "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
+
+# ====== STEP 6: Configure DNS on host ======
 print_task "Configuring DNS for ${lab_infra_bridge_interface}..."
 if command -v resolvectl &>/dev/null; then
     sudo resolvectl dns "${lab_infra_bridge_interface}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}" 2>/dev/null || true
@@ -111,7 +115,7 @@ if command -v resolvectl &>/dev/null; then
 fi
 print_task_done
 
-# ====== STEP 5: Health check ======
+# ====== STEP 7: Health check ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi

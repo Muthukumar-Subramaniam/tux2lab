@@ -465,7 +465,7 @@ setup_dns() {
 # ============================================================================
 # ENSURE BRIDGE IS UP
 # ============================================================================
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+source /tux2lab/shared-functions/lablink0.sh
 
 ensure_bridge_up() {
     # Validate bridge exists and has IPs
@@ -547,28 +547,13 @@ start_container() {
     print_task "Starting tux2lab-engine container..."
     local start_begin=$SECONDS
 
-    sudo mkdir -p "${TUX2LAB_DATA_DIR}/log"
     (
         # Remove existing container if present (from failed previous run)
         if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
             sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
         fi
-        sudo podman run -d \
-            --name "${CONTAINER_NAME}" \
-            --hostname "${INFRA_FQDN}" \
-            --uts=private \
-            --network=host \
-            --privileged \
-            --log-driver=k8s-file \
-            --log-opt "path=${TUX2LAB_DATA_DIR}/log/tux2lab-engine.log" \
-            --log-opt "max-size=10mb" \
-            -v "${TUX2LAB_DATA_DIR}:${TUX2LAB_DATA_DIR}:ro,rslave" \
-            -v "${TUX2LAB_DATA_DIR}/kea/leases:/var/lib/kea" \
-            -v "/tux2lab:${TUX2LAB_DATA_DIR}/tux2lab:ro" \
-            -v "/lib/modules:/lib/modules:ro" \
-            -e "TUX2LAB_BRIDGE_IP=${IPV4_ADDRESS}" \
-            -e "TUX2LAB_BRIDGE_IF=${BRIDGE_INTERFACE}" \
-            "${container_image}" &>/dev/null
+        source /tux2lab/shared-functions/run-container.sh
+        run_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${INFRA_FQDN}" "${TUX2LAB_DATA_DIR}" "${IPV4_ADDRESS}" "${BRIDGE_INTERFACE}"
     ) &
     local run_pid=$!
 
@@ -717,6 +702,8 @@ rebuild_lab() {
     # Ensure bridge is UP and start container
     ensure_bridge_up
     start_container
+    source /tux2lab/shared-functions/host-nfs.sh
+    start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
 
     # Health check
     print_info "Running health check..."
@@ -753,6 +740,8 @@ main() {
     setup_dns
     ensure_bridge_up
     start_container
+    source /tux2lab/shared-functions/host-nfs.sh
+    start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
     configure_host_dns
     configure_host_ssh
 

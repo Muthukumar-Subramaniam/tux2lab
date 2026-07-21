@@ -141,25 +141,10 @@ infra_fqdn=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
 data_dir="/tux2lab-data"
 
 # Stop and remove existing container, then start fresh
-sudo mkdir -p "${data_dir}/log"
 (
     sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
-    sudo podman run -d \
-        --name "${CONTAINER_NAME}" \
-        --hostname "${infra_fqdn}" \
-        --uts=private \
-        --network=host \
-        --privileged \
-        --log-driver=k8s-file \
-        --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
-        --log-opt "max-size=10mb" \
-        -v "${data_dir}:${data_dir}:ro,rslave" \
-        -v "${data_dir}/kea/leases:/var/lib/kea" \
-        -v "/tux2lab:${data_dir}/tux2lab:ro" \
-        -v "/lib/modules:/lib/modules:ro" \
-        -e "TUX2LAB_BRIDGE_IP=${ipv4_address}" \
-        -e "TUX2LAB_BRIDGE_IF=${bridge_interface}" \
-        "${container_image}" &>/dev/null
+    source /tux2lab/shared-functions/run-container.sh
+    run_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${infra_fqdn}" "${data_dir}" "${ipv4_address}" "${bridge_interface}"
 ) &
 run_pid=$!
 
@@ -186,6 +171,10 @@ else
     print_error "Container failed to start. Check: sudo podman logs ${CONTAINER_NAME}"
     exit 1
 fi
+
+# ====== STEP 5: Restart NFS on host ======
+source /tux2lab/shared-functions/host-nfs.sh
+restart_host_nfs
 
 # ====== DONE ======
 print_success "Sync complete. Lab services updated to v${local_version}."

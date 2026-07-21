@@ -239,7 +239,7 @@ fi
 print_task_done
 
 # ====== STEP 7: REMOVE LABLINK0 DUMMY INTERFACE ======
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/lablink0.sh
+source /tux2lab/shared-functions/lablink0.sh
 remove_lablink0
 
 # ====== STEP 8: DESTROY VIRTUAL NETWORK ======

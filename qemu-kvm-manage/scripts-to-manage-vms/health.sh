@@ -121,8 +121,8 @@ else
     fn_deep_fail "TFTP boot file missing (/tux2lab-data/tftpboot/ipxe.efi)"
 fi
 
-# --- NFS: expected export exists ---
-nfs_export_check=$(fn_exec "exportfs -v 2>/dev/null | grep -c /tux2lab-data")
+# --- NFS: expected export exists (runs on host, not in container) ---
+nfs_export_check=$(sudo exportfs -v 2>/dev/null | grep -c /tux2lab-data)
 if [[ "$nfs_export_check" -ge 1 ]] 2>/dev/null; then
     fn_deep_pass "NFS export available (/tux2lab-data)"
 else

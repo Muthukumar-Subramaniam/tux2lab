@@ -1,6 +1,6 @@
 # tux2lab-engine container image
 # This container runs all lab infrastructure services:
-# DNS (bind), DHCP (kea), HTTP (nginx), TFTP, NFS, NTP (chrony), SSH
+# DNS (bind), DHCP (kea), HTTP (nginx), TFTP, NTP (chrony)
 #
 # Usage:
 #   podman build -t tux2lab-engine:latest -f Containerfile .
@@ -24,9 +24,6 @@ RUN dnf install -y \
         nginx-mod-stream \
         # TFTP server (iPXE chainload for PXE boot)
         tftp-server \
-        # NFS server (stage2 for RHEL, casper-root for Ubuntu)
-        nfs-utils \
-        rpcbind \
         # NTP server
         chrony \
         # IPv6 Router Advertisements (dual-stack support)
@@ -53,7 +50,7 @@ RUN chmod +x /entrypoint.sh
 
 # Expose service ports (documentation only — with --network=host these are on the host)
 # DNS: 53/tcp+udp | DHCPv4: 67/udp | DHCPv6: 547/udp | HTTP: 80/tcp | HTTPS: 443/tcp
-# TFTP: 69/udp | NFS: 2049/tcp, 111/tcp+udp, 20048/tcp+udp | NTP: 123/udp | SSH: 22/tcp
-EXPOSE 22/tcp 53/tcp 53/udp 67/udp 69/udp 80/tcp 111/tcp 111/udp 123/udp 443/tcp 547/udp 2049/tcp 20048/tcp
+# TFTP: 69/udp | NTP: 123/udp
+EXPOSE 53/tcp 53/udp 67/udp 69/udp 80/tcp 123/udp 443/tcp 547/udp
 
 ENTRYPOINT ["/entrypoint.sh"]

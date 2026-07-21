@@ -166,27 +166,7 @@ else
     echo "    → tftpd started on ${BRIDGE_IP}:69 (IPv6 not available)"
 fi
 
-# --- 7. Start NFS ---
-# Exports /tux2lab-data for stage2 (RHEL) and casper-root (Ubuntu)
-echo "[*] Starting NFS..."
-if [[ -f "${DATA_DIR}/nfs/exports" ]]; then
-    cp "${DATA_DIR}/nfs/exports" /etc/exports
-    # Mount rpc_pipefs (required for mountd/nfsd communication)
-    mount -t rpc_pipefs rpc_pipefs /var/lib/nfs/rpc_pipefs 2>/dev/null || true
-    # Restrict rpcbind and mountd to bridge IPs
-    /usr/sbin/rpcbind -w -h "${BRIDGE_IP}" -h "${BRIDGE_IPV6:-::1}" || true
-    # Load NFS kernel module if needed, then start NFS daemon with timeout
-    modprobe nfsd 2>/dev/null || true
-    timeout 10 /usr/sbin/rpc.nfsd -H "${BRIDGE_IP}" -H "${BRIDGE_IPV6:-::1}" 4 || echo "    → WARNING: rpc.nfsd failed (NFS kernel module may not be available)"
-    /usr/sbin/rpc.idmapd || true
-    /usr/sbin/rpc.mountd --no-nfs-version 2 --no-nfs-version 3 -H "${BRIDGE_IP}" -H "${BRIDGE_IPV6:-::1}" || true
-    /usr/sbin/exportfs -ra || true
-    echo "    → NFS started (exports from ${DATA_DIR}/nfs/exports)"
-else
-    echo "    → SKIPPED: no exports file found"
-fi
-
-# --- 8. Start chrony (NTP) ---
+# --- 7. Start chrony (NTP) ---
 # Serves time to lab VMs — binds to bridge IP
 # -x = don't adjust system clock (host's chronyd handles that)
 # -u root = stay as root (avoids UID mismatch between container and host)
