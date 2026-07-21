@@ -153,7 +153,7 @@ sudo mkdir -p "${data_dir}/log"
         --log-driver=k8s-file \
         --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
         --log-opt "max-size=10mb" \
-        -v "${data_dir}:${data_dir}:ro" \
+        -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
         -v "/tux2lab:${data_dir}/tux2lab:ro" \
         -v "/lib/modules:/lib/modules:ro" \
