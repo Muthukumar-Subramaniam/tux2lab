@@ -63,20 +63,47 @@ if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/de
 fi
 print_task_done
 
-# ====== STEP 3: Restart container to pick up config changes ======
-print_task "Restarting tux2lab-engine container..."
-if sudo podman restart "${CONTAINER_NAME}" &>/dev/null; then
-    sleep 2
-    if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
-        print_task_done
-    else
-        print_task_fail
-        print_error "Container failed to restart. Check: sudo podman logs ${CONTAINER_NAME}"
-        exit 1
-    fi
+# ====== STEP 3: Recreate container to pick up config changes ======
+print_task "Recreating tux2lab-engine container..."
+
+# Get container image (inspect the currently running container)
+local_version=$(jq -r '.version' /tux2lab/project_version.json)
+container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}")
+
+# Read required variables from lab environment
+ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
+bridge_interface=$(jq -r '.network.bridge_interface' "${LAB_ENV_JSON}")
+infra_fqdn=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
+data_dir="/tux2lab-data"
+
+# Stop and remove existing container
+sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
+
+# Start fresh container
+sudo mkdir -p "${data_dir}/log"
+sudo podman run -d \
+    --name "${CONTAINER_NAME}" \
+    --hostname "${infra_fqdn}" \
+    --uts=private \
+    --network=host \
+    --privileged \
+    --log-driver=k8s-file \
+    --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
+    --log-opt "max-size=10mb" \
+    -v "${data_dir}:${data_dir}:ro" \
+    -v "${data_dir}/kea/leases:/var/lib/kea" \
+    -v "/tux2lab:${data_dir}/tux2lab:ro" \
+    -v "/lib/modules:/lib/modules:ro" \
+    -e "TUX2LAB_BRIDGE_IP=${ipv4_address}" \
+    -e "TUX2LAB_BRIDGE_IF=${bridge_interface}" \
+    "${container_image}" &>/dev/null
+
+sleep 2
+if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+    print_task_done
 else
     print_task_fail
-    print_error "Failed to restart container."
+    print_error "Container failed to start. Check: sudo podman logs ${CONTAINER_NAME}"
     exit 1
 fi
 
