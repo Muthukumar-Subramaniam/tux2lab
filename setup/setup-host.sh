@@ -263,6 +263,10 @@ fi
 source /tux2lab/shared-functions/lablink0.sh
 ensure_lablink0 labbr0
 
+# Open firewall for lab bridge (if host has restrictive iptables)
+source /tux2lab/shared-functions/bridge-firewall.sh
+open_bridge_firewall labbr0
+
 # ============================================================================
 # INSTALL tux2lab CLI
 # ============================================================================

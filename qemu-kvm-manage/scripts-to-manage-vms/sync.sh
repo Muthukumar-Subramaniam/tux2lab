@@ -176,6 +176,10 @@ fi
 source /tux2lab/shared-functions/host-nfs.sh
 restart_host_nfs
 
+# ====== STEP 6: Ensure bridge firewall is open ======
+source /tux2lab/shared-functions/bridge-firewall.sh
+open_bridge_firewall "${lab_infra_bridge_interface}"
+
 # ====== DONE ======
 print_success "Sync complete. Lab services updated to v${local_version}."
 print_info "Run 'tux2lab health' to verify all services."

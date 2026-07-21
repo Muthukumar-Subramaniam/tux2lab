@@ -129,6 +129,14 @@ else
     fn_deep_fail "NFS export not found (/tux2lab-data)"
 fi
 
+# --- Firewall: bridge rules in place ---
+source /tux2lab/shared-functions/bridge-firewall.sh
+if check_bridge_firewall "${lab_infra_bridge_interface}"; then
+    fn_deep_pass "Firewall allows traffic on ${lab_infra_bridge_interface}"
+else
+    fn_deep_fail "Firewall blocking traffic on ${lab_infra_bridge_interface} (run: tux2lab start)"
+fi
+
 # --- Web/Nginx: HTTP and HTTPS responses (from host) ---
 http_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 "http://${lab_infra_server_ipv4_address}/" 2>/dev/null)
 if [[ "$http_code" == "200" ]]; then

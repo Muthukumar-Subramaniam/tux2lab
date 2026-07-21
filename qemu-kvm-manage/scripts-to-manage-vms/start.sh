@@ -71,6 +71,10 @@ print_task_done
 source /tux2lab/shared-functions/lablink0.sh
 ensure_lablink0 "${lab_infra_bridge_interface}"
 
+# ====== STEP 3.1: Open bridge firewall (if host has restrictive iptables) ======
+source /tux2lab/shared-functions/bridge-firewall.sh
+open_bridge_firewall "${lab_infra_bridge_interface}"
+
 # ====== STEP 4: Start container ======
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     print_info "Container '${CONTAINER_NAME}' is already running."

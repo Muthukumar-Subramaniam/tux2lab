@@ -482,6 +482,10 @@ ensure_bridge_up() {
     fi
 
     ensure_lablink0 "${BRIDGE_INTERFACE}"
+
+    # Open bridge firewall if host has restrictive iptables
+    source /tux2lab/shared-functions/bridge-firewall.sh
+    open_bridge_firewall "${BRIDGE_INTERFACE}"
 }
 
 # ============================================================================
