@@ -451,7 +451,7 @@ fn_configure_named_dns_server() {
     # Download the latest named.root from IANA
     if curl -s -o /tux2lab-data/named/named.root https://www.internic.net/domain/named.root; then
         chown root:named /tux2lab-data/named/named.root
-        chmod 640 /tux2lab-data/named/named.root
+        chmod 644 /tux2lab-data/named/named.root
         print_task_done
     else
         print_warning "Failed to download named.root, using system default"
@@ -607,6 +607,8 @@ print(ptr)
     print_task_done
 
     chown -R named:named "${var_zone_dir}"
+    chmod -R o+r "${var_zone_dir}"
+    find "${var_zone_dir}" -type d -exec chmod o+x {} \;
 
     print_task "Enabling and starting named DNS Service..."
 
