@@ -57,7 +57,7 @@ print_info "Syncing tux2lab v${local_version} into running lab..."
 
 # ====== CONFIRM ======
 if [[ "${skip_confirm}" != "true" ]]; then
-    print_warn "This will destroy and recreate the tux2lab-engine container."
+    print_warning "This will destroy and recreate the tux2lab-engine container."
     read -rp "Proceed? [y/N]: " confirm
     if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
         print_info "Aborted."
