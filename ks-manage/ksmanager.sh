@@ -281,7 +281,7 @@ trap 'fn_release_all_locks; trap - QUIT; kill -s QUIT $$' QUIT
 fn_chown_if_exists() {
     local target_path="$1"
     if [[ -e "${target_path}" ]]; then
-        chown -R "${mgmt_super_user}:${mgmt_super_user}" "${target_path}"
+        chown -R "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "${target_path}"
     fi
 }
 

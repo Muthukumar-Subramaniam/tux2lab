@@ -633,7 +633,7 @@ if [[ -n "$current_keys" ]]; then
 		echo "$current_keys" > /home/${ADMIN_USER}/.ssh/authorized_keys
 		echo "$current_keys" > /root/.ssh/authorized_keys
 		chmod 600 /home/${ADMIN_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys
-		chown ${ADMIN_USER}:${ADMIN_USER} /home/${ADMIN_USER}/.ssh/authorized_keys
+		chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/authorized_keys
 		log "SSH authorized_keys UPDATED (changed since golden image was built)"
 	else
 		log "SSH authorized_keys unchanged (matches golden image)"
@@ -650,7 +650,7 @@ if [[ -n "$current_privkey" ]]; then
 		echo "$current_privkey" > /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
 		echo "$current_privkey" > /root/.ssh/tux2lab_id_rsa
 		chmod 600 /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
-		chown ${ADMIN_USER}:${ADMIN_USER} /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
+		chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
 		log "SSH private key UPDATED (changed since golden image was built)"
 	else
 		log "SSH private key unchanged (matches golden image)"

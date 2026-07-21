@@ -451,7 +451,7 @@ fn_setup_distro() {
     # Ensure ISO directory exists
     print_task "Ensuring ISO directory exists..."
     sudo mkdir -p "$ISO_DIR"
-    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$ISO_DIR"
+    sudo chown "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "$ISO_DIR"
     print_task_done
 
     # Download and parse checksum if available
@@ -546,7 +546,7 @@ fn_setup_distro() {
             exit 1
         fi
 
-        sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$iso_path"
+        sudo chown "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "$iso_path"
         print_success "Download complete."
 
         # Verify freshly downloaded ISO
@@ -567,7 +567,7 @@ fn_setup_distro() {
     sudo mkdir -p "$mount_dir"
     # chown the distro parent dir and the version leaf dir
     # (mkdir -p creates intermediate dirs as root)
-    sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$(dirname "$mount_dir")" "$mount_dir"
+    sudo chown "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "$(dirname "$mount_dir")" "$mount_dir"
     print_task_done
 
     # Add entry to iso-mounts config
@@ -740,7 +740,7 @@ PATCHEOF
             print_task "Rebuilding patched squashfs (this may take a few minutes)..."
             sudo mkdir -p "$patched_squashfs_dir"
             if sudo mksquashfs "$squash_tmp" "$patched_squashfs" -noappend -comp zstd -quiet -no-progress; then
-                sudo chown "${mgmt_super_user}:${mgmt_super_user}" "$patched_squashfs_dir" "$patched_squashfs"
+                sudo chown "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "$patched_squashfs_dir" "$patched_squashfs"
                 print_task_done
             else
                 print_task_fail
