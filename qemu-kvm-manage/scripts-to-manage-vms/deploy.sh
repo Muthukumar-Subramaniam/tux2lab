@@ -26,7 +26,7 @@ DESCRIPTION:
     Deploys the tux2lab-engine container with all lab services.
 
     Prerequisites:
-    - Run setup/setup-host.sh first to prepare the host"
+    - Run /tux2lab/setup/setup-host.sh first to prepare the host"
     exit 0
 fi
 
