@@ -111,7 +111,7 @@ fi
 # ====== DISPLAY ======
 echo ""
 print_cyan "Lab Deployment Info:"
-echo -e "  ${MAKE_IT_CYAN}Hostname:${RESET_COLOR}          $lab_hostname"
+echo -e "  ${MAKE_IT_CYAN}Lab Infra Server:${RESET_COLOR}  $lab_hostname"
 echo -e "  ${MAKE_IT_CYAN}Domain:${RESET_COLOR}            $lab_domain"
 echo -e "  ${MAKE_IT_CYAN}Admin User:${RESET_COLOR}        $lab_admin"
 echo -e "  ${MAKE_IT_CYAN}IPv4 Address:${RESET_COLOR}      $lab_ipv4"
