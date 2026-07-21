@@ -132,6 +132,7 @@ print_task_done
 
 # ====== STEP 4: Recreate container ======
 print_task "Recreating tux2lab-engine container..."
+recreate_start=$SECONDS
 
 # Read required variables from lab environment
 ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
@@ -161,14 +162,28 @@ sudo podman run -d \
     -e "TUX2LAB_BRIDGE_IF=${bridge_interface}" \
     "${container_image}" &>/dev/null
 
-sleep 2
-if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
-    print_task_done
-else
-    print_task_fail
-    print_error "Container failed to start. Check: sudo podman logs ${CONTAINER_NAME}"
-    exit 1
-fi
+# Live timer while waiting for container to come up
+recreate_elapsed=0
+while true; do
+    printf "\r${MAKE_IT_CYAN}[TASK] Recreating tux2lab-engine container [%dm %ds]...${RESET_COLOR}\033[K" $((recreate_elapsed/60)) $((recreate_elapsed%60))
+    sleep 1
+    recreate_elapsed=$((SECONDS - recreate_start))
+    if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+        break
+    fi
+    if ((recreate_elapsed >= 30)); then
+        printf "\r\033[K"
+        print_task "Recreating tux2lab-engine container..."
+        print_task_fail
+        print_error "Container failed to start within 30s. Check: sudo podman logs ${CONTAINER_NAME}"
+        exit 1
+    fi
+done
+
+recreate_elapsed=$((SECONDS - recreate_start))
+printf "\r\033[K"
+printf "${MAKE_IT_CYAN}[TASK] Recreating tux2lab-engine container (%dm %ds)...${RESET_COLOR}" $((recreate_elapsed/60)) $((recreate_elapsed%60))
+print_task_done
 
 # ====== DONE ======
 print_success "Sync complete. Lab services updated to v${local_version}."
