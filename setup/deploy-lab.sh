@@ -215,8 +215,9 @@ collect_credentials() {
     print_warning "The following will be configured:
   - Generate SSH keypair for lab access
   - Generate self-signed SSL certificate
-  - Generate all service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
-  - Pull and start tux2lab-engine container
+  - Generate service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
+  - Pull and start tux2lab-engine container (DNS, DHCP, NTP, HTTP, TFTP)
+  - Start NFS server on host (bound to lab bridge)
   - Configure host DNS resolution and SSH"
     read -p "Are you sure you want to continue? (yes/no): " confirm
     if [[ "$confirm" != "yes" ]]; then
