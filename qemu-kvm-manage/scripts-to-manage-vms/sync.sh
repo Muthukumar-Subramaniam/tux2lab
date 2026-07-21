@@ -66,7 +66,6 @@ if [[ "${skip_confirm}" != "true" ]]; then
 fi
 
 # ====== STEP 1: Regenerate service configs ======
-echo ""
 print_task "Regenerating service configurations..."
 echo ""
 if [[ -x /tux2lab/setup/generate-service-configs.sh ]]; then
@@ -128,11 +127,6 @@ else
     exit 1
 fi
 
-# ====== STEP 4: Health check ======
-print_cyan "--------------------------------------------------------------"
-if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
-    /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
-fi
-
-print_cyan "--------------------------------------------------------------"
+# ====== DONE ======
 print_success "Sync complete. Lab services updated to v${local_version}."
+print_info "Run 'tux2lab health' to verify all services."
