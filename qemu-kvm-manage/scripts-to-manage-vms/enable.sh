@@ -43,6 +43,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+User=${lab_infra_admin_username}
 ExecStart=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/start.sh
 ExecStop=/usr/bin/bash /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/stop.sh -y
 TimeoutStartSec=120
