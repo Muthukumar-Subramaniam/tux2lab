@@ -37,8 +37,6 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
 # ====== HEADER ======
 print_cyan "--------------------------------------------------------------"
 print_cyan "tux2lab Infrastructure Shutdown"
-print_cyan "  Container : ${CONTAINER_NAME}"
-print_cyan "  Hostname  : ${lab_infra_server_hostname}"
 print_cyan "--------------------------------------------------------------"
 
 print_warning "This will shut down all running VMs and stop all tux2lab services."
