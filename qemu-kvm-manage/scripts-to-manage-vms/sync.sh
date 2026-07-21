@@ -83,12 +83,55 @@ if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/de
 fi
 print_task_done
 
-# ====== STEP 3: Recreate container to pick up config changes ======
-print_task "Recreating tux2lab-engine container..."
+# ====== STEP 3: Pull latest container image ======
+container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
+container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
+container_image=""
 
-# Get container image (inspect the currently running container)
-local_version=$(jq -r '.version' /tux2lab/project_version.json)
-container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}")
+print_task "Pulling tux2lab-engine container image..."
+pull_start=$SECONDS
+
+sudo podman pull "${container_image_primary}" &>/dev/null &
+pull_pid=$!
+pull_elapsed=0
+while kill -0 "$pull_pid" 2>/dev/null; do
+    printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+    sleep 1
+    pull_elapsed=$((SECONDS - pull_start))
+done
+
+if wait "$pull_pid"; then
+    container_image="${container_image_primary}"
+else
+    # Fallback to Docker Hub
+    pull_start=$SECONDS
+    sudo podman pull "${container_image_fallback}" &>/dev/null &
+    pull_pid=$!
+    pull_elapsed=0
+    while kill -0 "$pull_pid" 2>/dev/null; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+        sleep 1
+        pull_elapsed=$((SECONDS - pull_start))
+    done
+
+    if wait "$pull_pid"; then
+        container_image="${container_image_fallback}"
+    else
+        printf "\r\033[K"
+        print_task "Pulling tux2lab-engine container image..."
+        print_task_fail
+        print_error "Failed to pull from both registries."
+        exit 1
+    fi
+fi
+
+pull_elapsed=$((SECONDS - pull_start))
+printf "\r\033[K"
+printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
+print_task_done
+
+# ====== STEP 4: Recreate container ======
+print_task "Recreating tux2lab-engine container..."
 
 # Read required variables from lab environment
 ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
