@@ -302,8 +302,17 @@ fn_auto_configure() {
         fn_enable_all
     else
         echo ""
-        print_info "No IPv6 internet → Disabling default routes"
-        fn_disable_all
+        # Check if already in the correct state
+        local forwarding_enabled=false
+        if [[ "$(cat /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null)" == "1" ]]; then
+            forwarding_enabled=true
+        fi
+        if $forwarding_enabled; then
+            print_info "No IPv6 internet → Disabling default routes"
+            fn_disable_all
+        else
+            print_info "No IPv6 internet. Routes already disabled — nothing to do."
+        fi
     fi
 }
 
