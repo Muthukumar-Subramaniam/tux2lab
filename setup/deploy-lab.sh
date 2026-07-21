@@ -570,21 +570,30 @@ start_container() {
         -e "TUX2LAB_BRIDGE_IF=${BRIDGE_INTERFACE}" \
         "${container_image}" &>/dev/null
 
-    # Wait briefly for services to start
-    sleep 2
+    # Live timer while waiting for services to initialize
+    local start_elapsed=0
+    while true; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Starting tux2lab-engine container [%dm %ds]...${RESET_COLOR}\033[K" $((start_elapsed/60)) $((start_elapsed%60))
+        sleep 1
+        start_elapsed=$((SECONDS - start_begin))
+        if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
+            break
+        fi
+        if ((start_elapsed >= 30)); then
+            printf "\r\033[K"
+            print_task "Starting tux2lab-engine container..."
+            print_task_fail
+            print_error "Container failed to start within 30s. Check logs:"
+            print_info "  sudo podman logs ${CONTAINER_NAME}"
+            exit 1
+        fi
+    done
 
-    local start_elapsed=$((SECONDS - start_begin))
-    if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" | grep -q "Up"; then
-        printf "\r\033[K"
-        printf "${MAKE_IT_CYAN}[TASK] Starting tux2lab-engine container (%dm %ds)...${RESET_COLOR}" $((start_elapsed/60)) $((start_elapsed%60))
-        print_task_done
-        print_info "Container '${CONTAINER_NAME}' is running."
-    else
-        print_task_fail
-        print_error "Container failed to start. Check logs:"
-        print_info "  sudo podman logs ${CONTAINER_NAME}"
-        exit 1
-    fi
+    start_elapsed=$((SECONDS - start_begin))
+    printf "\r\033[K"
+    printf "${MAKE_IT_CYAN}[TASK] Starting tux2lab-engine container (%dm %ds)...${RESET_COLOR}" $((start_elapsed/60)) $((start_elapsed%60))
+    print_task_done
+    print_info "Container '${CONTAINER_NAME}' is running."
 }
 
 # ============================================================================
