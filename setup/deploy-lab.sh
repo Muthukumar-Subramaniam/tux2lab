@@ -229,7 +229,6 @@ collect_credentials() {
     local password_plain=""
     local confirm_password=""
     while true; do
-        echo
         read -s -p "Enter your Lab Infra Global password: " password_plain
         echo
         if [[ -z "$password_plain" ]]; then
@@ -243,8 +242,7 @@ collect_credentials() {
             fi
         fi
 
-        echo
-        read -s -p "Re-enter password: " confirm_password
+        read -s -p "Re-enter Lab Infra Global password: " confirm_password
         echo
         if [[ "$password_plain" != "$confirm_password" ]]; then
             print_error "Passwords do not match."
