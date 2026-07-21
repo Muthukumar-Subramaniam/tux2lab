@@ -171,6 +171,8 @@ fi
 echo "[*] Starting NFS..."
 if [[ -f "${DATA_DIR}/nfs/exports" ]]; then
     cp "${DATA_DIR}/nfs/exports" /etc/exports
+    # Mount rpc_pipefs (required for mountd/nfsd communication)
+    mount -t rpc_pipefs rpc_pipefs /var/lib/nfs/rpc_pipefs 2>/dev/null || true
     # Restrict rpcbind and mountd to bridge IPs
     /usr/sbin/rpcbind -w -h "${BRIDGE_IP}" -h "${BRIDGE_IPV6:-::1}" || true
     # Load NFS kernel module if needed, then start NFS daemon with timeout
