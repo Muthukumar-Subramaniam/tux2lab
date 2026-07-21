@@ -60,9 +60,10 @@ print_info "Rebuilding tux2lab-engine v${local_version} from local image..."
 
 # ====== CONFIRM ======
 if [[ "${skip_confirm}" != "true" ]]; then
-    print_warning "This will destroy and recreate the tux2lab-engine container."
-    read -rp "Proceed? [y/N]: " confirm
-    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+    print_warning "This will recreate the tux2lab-engine container and restart NFS."
+    print_warning "Running VMs will NOT be affected."
+    read -rp "Continue? (yes/no): " confirm
+    if [[ "${confirm}" != "yes" ]]; then
         print_info "Aborted."
         exit 0
     fi

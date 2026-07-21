@@ -57,9 +57,10 @@ print_info "Syncing tux2lab v${local_version} into running lab..."
 
 # ====== CONFIRM ======
 if [[ "${skip_confirm}" != "true" ]]; then
-    print_warning "This will destroy and recreate the tux2lab-engine container."
-    read -rp "Proceed? [y/N]: " confirm
-    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+    print_warning "This will pull the latest image, recreate the container, and restart NFS."
+    print_warning "Running VMs will NOT be affected."
+    read -rp "Continue? (yes/no): " confirm
+    if [[ "${confirm}" != "yes" ]]; then
         print_info "Aborted."
         exit 0
     fi
