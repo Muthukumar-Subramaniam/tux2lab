@@ -45,9 +45,8 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # ====== VALIDATE ======
-if ! sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-    print_error "Container '${CONTAINER_NAME}' does not exist."
-    print_info "Run 'tux2lab deploy' first."
+if [[ ! -f "${LAB_ENV_JSON}" ]]; then
+    print_error "Lab environment not found. Run 'tux2lab deploy' first."
     exit 1
 fi
 
