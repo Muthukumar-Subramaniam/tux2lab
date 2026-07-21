@@ -364,6 +364,21 @@ setup_named_dirs() {
 }
 
 # ============================================================================
+# SYNC COMMON UTILS (served via HTTP for golden-boot etc.)
+# ============================================================================
+sync_common_utils() {
+    mkdir -p "${DATA_DIR}/common-utils"
+    cp /tux2lab/common-utils/lab-rootfs-extender "${DATA_DIR}/common-utils/"
+    # Write shadow-hash file for golden-boot to fetch via HTTP
+    local password_hash
+    password_hash=$(jq -r '.admin.password_hash' "${LAB_ENV_JSON}")
+    echo -n "${password_hash}" > "${DATA_DIR}/lab-config/shadow-hash"
+    chmod 644 "${DATA_DIR}/lab-config/shadow-hash"
+    # Ensure SSH keys are readable by nginx (served to VMs via HTTP)
+    chmod 644 "${DATA_DIR}/lab-config/ssh-keys/"* 2>/dev/null || true
+}
+
+# ============================================================================
 # MAIN
 # ============================================================================
 print_info "Generating service configs from ${LAB_ENV_JSON}..."
@@ -377,5 +392,6 @@ generate_chrony
 generate_nfs_exports
 setup_tftpboot
 setup_named_dirs
+sync_common_utils
 
 print_success "All service configurations generated."

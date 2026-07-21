@@ -277,8 +277,8 @@ generate_ssh_keys() {
 
     ssh-keygen -t rsa -b 4096 -N "" -f "$key_file" -C "${ADMIN_DOMAIN}" &>/dev/null
     cp "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
-    chmod 600 "$key_file"
-    chmod 644 "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
+    # Lab keys are served via HTTP to VMs — readable by nginx
+    chmod 644 "$key_file" "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
 
     # Also install on host for SSH access to guest VMs
     local host_ssh_dir="$HOME/.ssh"

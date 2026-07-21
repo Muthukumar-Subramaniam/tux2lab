@@ -1250,13 +1250,6 @@ if ! $invoked_with_golden_image; then
     fi
 
     if rsync -a -q --delete "${ksmanager_main_dir}"/addons-for-kickstarts/ "${ksmanager_hub_dir}"/addons-for-kickstarts/ && \
-        rsync -a -q /home/${mgmt_super_user}/.ssh/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} "${ksmanager_hub_dir}"/addons-for-kickstarts/ && \
-        chmod +r "${ksmanager_hub_dir}"/addons-for-kickstarts/{authorized_keys,tux2lab_id_rsa.pub,tux2lab_id_rsa} && \
-        echo -n "${shadow_password_super_mgmt_user}" > "${ksmanager_hub_dir}"/addons-for-kickstarts/shadow-hash && \
-        mkdir -p "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs && \
-        if [[ -f /tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt ]]; then
-            cp -f /tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt "${ksmanager_hub_dir}"/addons-for-kickstarts/ca-certs/
-        fi && \
         mkdir -p "${ksmanager_hub_dir}"/golden-boot-mac-configs; then
         print_task_done
     else
@@ -1334,13 +1327,13 @@ fn_generate_post_install_script() {
         ' "${target_file}" > "${tmp_file}" && mv "${tmp_file}" "${target_file}"
     }
 
-    fn_embed_file_content "${post_install_target}" "authorized_keys" "${addons_dir}/authorized_keys"
-    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa.pub" "${addons_dir}/tux2lab_id_rsa.pub"
-    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa" "${addons_dir}/tux2lab_id_rsa"
+    fn_embed_file_content "${post_install_target}" "authorized_keys" "/tux2lab-data/lab-config/ssh-keys/authorized_keys"
+    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa.pub" "/tux2lab-data/lab-config/ssh-keys/tux2lab_id_rsa.pub"
+    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa" "/tux2lab-data/lab-config/ssh-keys/tux2lab_id_rsa"
     fn_embed_file_content "${post_install_target}" "PS1-env-variable-normal-user" "${addons_dir}/PS1-env-variable-normal-user"
     fn_embed_file_content "${post_install_target}" "PS1-env-variable-root-user" "${addons_dir}/PS1-env-variable-root-user"
     fn_embed_file_content "${post_install_target}" "motd.txt" "${addons_dir}/motd.txt"
-    fn_embed_file_content "${post_install_target}" "ca-cert" "${addons_dir}/ca-certs/tux2lab-nginx-selfsigned.crt"
+    fn_embed_file_content "${post_install_target}" "ca-cert" "/tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt"
     fn_embed_file_content "${post_install_target}" "golden-image-setup.service" "${addons_dir}/golden-image-setup.service"
     fn_embed_file_content "${post_install_target}" "golden-image-setup.sh" "${addons_dir}/golden-image-setup.sh"
     fn_embed_file_content "${post_install_target}" "golden-boot.service" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service"

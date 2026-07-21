@@ -26,7 +26,6 @@ run_tux2lab_container() {
         --log-opt "max-size=10mb" \
         -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
-        -v "/tux2lab:${data_dir}/tux2lab:ro" \
         -e "TUX2LAB_BRIDGE_IP=${bridge_ip}" \
         -e "TUX2LAB_BRIDGE_IF=${bridge_if}" \
         "${image}" &>/dev/null

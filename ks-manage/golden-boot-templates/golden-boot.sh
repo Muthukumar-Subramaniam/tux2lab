@@ -571,7 +571,7 @@ log "Installation timestamp: $(cat /etc/bigbang)"
 log "Downloading self-signed SSL certificate from lab infrastructure server"
 case "${DISTRO_FAMILY}" in
 	redhat)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-trust
 			log "SSL certificate installed and CA trust updated (RedHat)"
 		else
@@ -579,7 +579,7 @@ case "${DISTRO_FAMILY}" in
 		fi
 		;;
 	debian)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt; then
 			update-ca-certificates
 			log "SSL certificate installed and CA certificates updated (Debian/Ubuntu)"
 		else
@@ -587,7 +587,7 @@ case "${DISTRO_FAMILY}" in
 		fi
 		;;
 	opensuse)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-certificates
 			log "SSL certificate installed and CA certificates updated (OpenSUSE)"
 		else
@@ -595,7 +595,7 @@ case "${DISTRO_FAMILY}" in
 		fi
 		;;
 	azurelinux)
-		if curl -fsSL "http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts/ca-certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
+		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-trust
 			log "SSL certificate installed and CA trust updated (Azure Linux)"
 		else
@@ -606,11 +606,11 @@ esac
 
 # Sync credentials from lab server (update if changed since golden image build)
 log "Checking credentials against lab server..."
-ADDONS_URL="http://get_lab_infra_server_hostname/ksmanager-hub/addons-for-kickstarts"
+LAB_CONFIG_URL="http://get_lab_infra_server_hostname/lab-config"
 ADMIN_USER="get_mgmt_super_user"
 
 # Password sync
-current_hash=$(curl -fsSL "${ADDONS_URL}/shadow-hash" 2>/dev/null) || true
+current_hash=$(curl -fsSL "${LAB_CONFIG_URL}/shadow-hash" 2>/dev/null) || true
 if [[ -n "$current_hash" ]]; then
 	existing_hash=$(awk -F: -v user="root" '$1==user{print $2}' /etc/shadow)
 	if [[ "$current_hash" != "$existing_hash" ]]; then
@@ -625,7 +625,7 @@ else
 fi
 
 # SSH authorized_keys sync
-current_keys=$(curl -fsSL "${ADDONS_URL}/authorized_keys" 2>/dev/null) || true
+current_keys=$(curl -fsSL "${LAB_CONFIG_URL}/ssh-keys/authorized_keys" 2>/dev/null) || true
 if [[ -n "$current_keys" ]]; then
 	existing_keys=$(cat /home/${ADMIN_USER}/.ssh/authorized_keys 2>/dev/null) || true
 	if [[ "$current_keys" != "$existing_keys" ]]; then
@@ -643,7 +643,7 @@ else
 fi
 
 # SSH private key sync
-current_privkey=$(curl -fsSL "${ADDONS_URL}/tux2lab_id_rsa" 2>/dev/null) || true
+current_privkey=$(curl -fsSL "${LAB_CONFIG_URL}/ssh-keys/tux2lab_id_rsa" 2>/dev/null) || true
 if [[ -n "$current_privkey" ]]; then
 	existing_privkey=$(cat /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa 2>/dev/null) || true
 	if [[ "$current_privkey" != "$existing_privkey" ]]; then
@@ -660,7 +660,7 @@ else
 fi
 
 log "Running lab rootfs extender"
-if ! curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/lab-rootfs-extender" | bash -s -- localhost --lab-infra-host=get_lab_infra_server_hostname; then
+if ! curl -fsSL "http://get_lab_infra_server_hostname/common-utils/lab-rootfs-extender" | bash -s -- localhost --lab-infra-host=get_lab_infra_server_hostname; then
 	log "WARNING: Lab rootfs extender failed, continuing anyway"
 fi
 
