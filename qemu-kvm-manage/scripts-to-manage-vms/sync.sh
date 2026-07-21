@@ -13,20 +13,29 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 # ====== HELP ======
 if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
     print_cyan "USAGE:
-    tux2lab sync
+    tux2lab sync [-y]
 
 DESCRIPTION:
     Regenerates service configurations from lab_environment.json and
-    restarts the tux2lab-engine container to pick up changes.
+    recreates the tux2lab-engine container to pick up changes.
 
     Use this after pulling updates on the host (git pull) to apply
     the latest templates and configuration logic.
 
     The /tux2lab directory is already bind-mounted into the container
     as read-only, so code changes are visible immediately. This command
-    regenerates derived configs (nginx, kea, DNS, etc.) and restarts
-    services to apply them."
+    regenerates derived configs (nginx, kea, DNS, etc.) and recreates
+    services to apply them.
+
+OPTIONS:
+    -y, --yes    Skip confirmation prompt"
     exit 0
+fi
+
+skip_confirm=false
+if [[ "${1:-}" == "-y" ]] || [[ "${1:-}" == "--yes" ]]; then
+    skip_confirm=true
+    shift
 fi
 
 if [[ $# -gt 0 ]]; then
@@ -46,8 +55,20 @@ fi
 local_version=$(jq -r '.version' /tux2lab/project_version.json)
 print_info "Syncing tux2lab v${local_version} into running lab..."
 
+# ====== CONFIRM ======
+if [[ "${skip_confirm}" != "true" ]]; then
+    print_warn "This will destroy and recreate the tux2lab-engine container."
+    read -rp "Proceed? [y/N]: " confirm
+    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+        print_info "Aborted."
+        exit 0
+    fi
+fi
+
 # ====== STEP 1: Regenerate service configs ======
+echo ""
 print_task "Regenerating service configurations..."
+echo ""
 if [[ -x /tux2lab/setup/generate-service-configs.sh ]]; then
     bash /tux2lab/setup/generate-service-configs.sh
 else
