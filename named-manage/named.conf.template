@@ -6,12 +6,12 @@
 options {
 	listen-on port 53 { LISTEN_IPV4_ADDRESSES; };
 	listen-on-v6 port 53 { LISTEN_IPV6_ADDRESSES; };
-	directory 	"/tux2lab-data/named";
-	dump-file 	"/tux2lab-data/named/data/cache_dump.db";
-	statistics-file "/tux2lab-data/named/data/named_stats.txt";
-	memstatistics-file "/tux2lab-data/named/data/named_mem_stats.txt";
-	secroots-file	"/tux2lab-data/named/data/named.secroots";
-	recursing-file	"/tux2lab-data/named/data/named.recursing";
+	directory 	"/var/named";
+	dump-file 	"/var/named/data/cache_dump.db";
+	statistics-file "/var/named/data/named_stats.txt";
+	memstatistics-file "/var/named/data/named_mem_stats.txt";
+	secroots-file	"/var/named/data/named.secroots";
+	recursing-file	"/var/named/data/named.recursing";
 	
 	allow-query     { ALLOW_QUERY_NETWORKS; };
 	allow-recursion { ALLOW_RECURSION_NETWORKS; };
@@ -44,7 +44,7 @@ options {
 	dnssec-validation no;
 # END public-dns-servers-as-forwarders
 
-	managed-keys-directory "/tux2lab-data/named/dynamic";
+	managed-keys-directory "/var/named/dynamic";
 	geoip-directory "/usr/share/GeoIP";
 
 	pid-file "/run/named/named.pid";

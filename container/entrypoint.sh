@@ -27,18 +27,13 @@ echo " Bridge IF: ${BRIDGE_IF}"
 echo " Data dir:  ${DATA_DIR}"
 echo "============================================"
 
-# --- Ensure persistent directories exist ---
-mkdir -p "${DATA_DIR}/kea/leases"
-mkdir -p "${DATA_DIR}/nfs/state"
-mkdir -p "${DATA_DIR}/chrony"
-mkdir -p "${DATA_DIR}/log/nginx"
-mkdir -p "${DATA_DIR}/tftpboot"
-# Symlink service state to persistent volume (survive container restarts)
-# Must rm first — packages create these as real directories in the image
-rm -rf /var/lib/kea && ln -sf "${DATA_DIR}/kea/leases" /var/lib/kea
-rm -rf /var/lib/nfs && ln -sf "${DATA_DIR}/nfs/state" /var/lib/nfs
-rm -rf /var/lib/chrony && ln -sf "${DATA_DIR}/chrony" /var/lib/chrony
-rm -rf /var/log/nginx && ln -sf "${DATA_DIR}/log/nginx" /var/log/nginx
+# --- Ensure container-internal writable directories exist ---
+# Service state goes to container's own filesystem (ephemeral)
+# Config/content comes from /tux2lab-data (read-only mount)
+mkdir -p /var/named/data /var/named/dynamic
+chown -R named:named /var/named
+mkdir -p /var/run/kea /run/named
+chown named:named /run/named
 
 # Enable IPv6 forwarding on bridge (required for radvd)
 sysctl -w "net.ipv6.conf.${BRIDGE_IF}.forwarding=1" &>/dev/null || true
@@ -94,7 +89,6 @@ wait_for_pid() {
 # Binds to bridge IP only — configured via named.conf
 echo "[*] Starting named (DNS)..."
 if [[ -f "${DATA_DIR}/named/named.conf" ]]; then
-    chown -R named:named "${DATA_DIR}/named"
     /usr/sbin/named -u named -c "${DATA_DIR}/named/named.conf" -f &
     echo "    → named started (config from ${DATA_DIR}/named/named.conf)"
 else
@@ -144,7 +138,6 @@ fi
 # --- 6. Start TFTP ---
 # Serves iPXE binaries for PXE boot — binds to bridge IP (dual-stack)
 echo "[*] Starting in.tftpd (TFTP)..."
-mkdir -p "${DATA_DIR}/tftpboot"
 /usr/sbin/in.tftpd \
     --foreground \
     --listen \

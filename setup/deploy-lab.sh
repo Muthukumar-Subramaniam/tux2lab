@@ -533,7 +533,8 @@ start_container() {
         --log-driver=k8s-file \
         --log-opt "path=${TUX2LAB_DATA_DIR}/log/tux2lab-engine.log" \
         --log-opt "max-size=10mb" \
-        -v "${TUX2LAB_DATA_DIR}:${TUX2LAB_DATA_DIR}" \
+        -v "${TUX2LAB_DATA_DIR}:${TUX2LAB_DATA_DIR}:ro" \
+        -v "${TUX2LAB_DATA_DIR}/kea/leases:/var/lib/kea" \
         -v "/tux2lab:${TUX2LAB_DATA_DIR}/tux2lab:ro" \
         -v "/lib/modules:/lib/modules:ro" \
         -e "TUX2LAB_BRIDGE_IP=${IPV4_ADDRESS}" \

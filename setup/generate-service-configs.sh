@@ -118,6 +118,7 @@ EOF
 generate_kea_dhcp4() {
     print_task "Generating kea-dhcp4 config..."
     mkdir -p "${DATA_DIR}/kea"
+    mkdir -p "${DATA_DIR}/kea/leases"
 
     cat > "${DATA_DIR}/kea/kea-dhcp4.conf" <<EOF
 {
