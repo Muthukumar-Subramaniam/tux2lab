@@ -35,6 +35,11 @@ chown -R named:named /var/named
 mkdir -p /var/run/kea /run/named
 chown named:named /run/named
 
+# Generate rndc key if missing (needed for rndc reload/status)
+if [[ ! -f /etc/rndc.key ]]; then
+    rndc-confgen -a -u named &>/dev/null
+fi
+
 # Enable IPv6 forwarding on bridge (required for radvd)
 sysctl -w "net.ipv6.conf.${BRIDGE_IF}.forwarding=1" &>/dev/null || true
 
