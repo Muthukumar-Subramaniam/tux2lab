@@ -164,10 +164,11 @@ fi
 
 print_info "Starting installation of VM \"${qemu_kvm_hostname}\" to create golden image disk..."
 
-# Azure Linux needs more RAM for golden image build (live squashfs loaded into RAM)
-golden_build_memory=2048
+# Golden image builds use higher specs (SELinux policy compilation, dracut, depmod are heavy)
+golden_build_memory=4096
+golden_build_vcpus=4
 if [[ "${OS_DISTRO}" == "azurelinux" ]]; then
-    golden_build_memory=4096
+    golden_build_memory=6144
 fi
 
 # Set custom paths for golden image creation
@@ -180,7 +181,7 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --name "${qemu_kvm_hostname}" \
     --features acpi=on,apic=on \
     --memory ${golden_build_memory} \
-    --vcpus 2 \
+    --vcpus ${golden_build_vcpus} \
     --disk "path=${DISK_PATH},size=20,bus=virtio,boot.order=1" \
     --os-variant almalinux9 \
     --network "network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2" \
