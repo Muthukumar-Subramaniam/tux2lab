@@ -494,26 +494,55 @@ start_container() {
     # Try primary registry (ghcr.io), fallback to Docker Hub
     local container_image=""
     local pull_start=$SECONDS
-    if sudo podman pull "${CONTAINER_IMAGE_PRIMARY}" &>/dev/null; then
+    local pull_log
+    pull_log=$(mktemp)
+
+    sudo podman pull "${CONTAINER_IMAGE_PRIMARY}" &>"$pull_log" &
+    local pull_pid=$!
+    local pull_elapsed=0
+    while kill -0 "$pull_pid" 2>/dev/null; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+        sleep 1
+        pull_elapsed=$((SECONDS - pull_start))
+    done
+
+    if wait "$pull_pid"; then
         container_image="${CONTAINER_IMAGE_PRIMARY}"
-        local pull_elapsed=$((SECONDS - pull_start))
+        pull_elapsed=$((SECONDS - pull_start))
         printf "\r\033[K"
         printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
         print_task_done
-    elif sudo podman pull "${CONTAINER_IMAGE_FALLBACK}" &>/dev/null; then
-        container_image="${CONTAINER_IMAGE_FALLBACK}"
-        local pull_elapsed=$((SECONDS - pull_start))
-        printf "\r\033[K"
-        printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
-        print_task_done
-        print_info "Using fallback registry (Docker Hub)."
     else
-        print_task_fail
-        print_error "Failed to pull container image from both registries."
-        print_info "  Primary:  ${CONTAINER_IMAGE_PRIMARY}"
-        print_info "  Fallback: ${CONTAINER_IMAGE_FALLBACK}"
-        exit 1
+        # Fallback to Docker Hub
+        pull_start=$SECONDS
+        sudo podman pull "${CONTAINER_IMAGE_FALLBACK}" &>"$pull_log" &
+        pull_pid=$!
+        pull_elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null; do
+            printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+            sleep 1
+            pull_elapsed=$((SECONDS - pull_start))
+        done
+
+        if wait "$pull_pid"; then
+            container_image="${CONTAINER_IMAGE_FALLBACK}"
+            pull_elapsed=$((SECONDS - pull_start))
+            printf "\r\033[K"
+            printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
+            print_task_done
+            print_info "Using fallback registry (Docker Hub)."
+        else
+            printf "\r\033[K"
+            print_task "Pulling tux2lab-engine container image..."
+            print_task_fail
+            print_error "Failed to pull container image from both registries."
+            print_info "  Primary:  ${CONTAINER_IMAGE_PRIMARY}"
+            print_info "  Fallback: ${CONTAINER_IMAGE_FALLBACK}"
+            rm -f "$pull_log"
+            exit 1
+        fi
     fi
+    rm -f "$pull_log"
 
     print_task "Starting tux2lab-engine container..."
     local start_begin=$SECONDS
