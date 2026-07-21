@@ -31,8 +31,6 @@ fi
 # ====== MAIN LOGIC ======
 print_cyan "--------------------------------------------------------------"
 print_cyan "tux2lab Infrastructure Startup"
-print_cyan "  Container : ${CONTAINER_NAME}"
-print_cyan "  Hostname  : ${lab_infra_server_hostname}"
 print_cyan "--------------------------------------------------------------"
 
 # ====== STEP 1: Start libvirtd ======
@@ -114,11 +112,8 @@ fi
 print_task_done
 
 # ====== STEP 5: Health check ======
-print_cyan "--------------------------------------------------------------"
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi
 
-print_cyan "--------------------------------------------------------------"
 print_success "tux2lab infrastructure started."
-print_info "Run 'tux2lab health' for full deep validation."
