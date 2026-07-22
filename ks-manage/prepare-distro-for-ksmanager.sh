@@ -174,9 +174,18 @@ fn_extract_expected_hash() {
 fn_verify_iso() {
     local iso_path="$1"
     local expected_hash="$2"
-    print_info "Calculating SHA256 checksum (this may take a few minutes)..."
+
+    # Detect hash algorithm from expected hash length
+    local hash_cmd="sha256sum"
+    local hash_name="SHA256"
+    if [[ ${#expected_hash} -ge 128 ]]; then
+        hash_cmd="sha512sum"
+        hash_name="SHA512"
+    fi
+
+    print_info "Calculating ${hash_name} checksum (this may take a few minutes)..."
     local actual_hash
-    actual_hash=$(sha256sum "$iso_path" | awk '{print $1}')
+    actual_hash=$($hash_cmd "$iso_path" | awk '{print $1}')
 
     print_task "Comparing checksums"
     if [[ "$expected_hash" == "$actual_hash" ]]; then
