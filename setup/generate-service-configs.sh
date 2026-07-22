@@ -369,6 +369,7 @@ setup_named_dirs() {
 sync_common_utils() {
     mkdir -p "${DATA_DIR}/common-utils"
     cp /tux2lab/common-utils/lab-rootfs-extender "${DATA_DIR}/common-utils/"
+    cp /tux2lab/common-utils/growpart "${DATA_DIR}/common-utils/"
     # Write shadow-hash file for golden-boot to fetch via HTTP
     local password_hash
     password_hash=$(jq -r '.admin.password_hash' "${LAB_ENV_JSON}")
