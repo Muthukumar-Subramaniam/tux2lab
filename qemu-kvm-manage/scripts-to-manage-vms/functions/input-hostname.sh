@@ -37,4 +37,11 @@ else
     qemu_kvm_hostname="${qemu_kvm_hostname}.${lab_infra_domain_name}"
 fi
 
+# Block operations on the lab infra server hostname
+if [[ "${allow_self_reference_mode}" != "ALLOW_SELF_REFERENCE" ]] && \
+   [[ "${qemu_kvm_hostname}" == "${lab_infra_server_hostname}" ]]; then
+    print_error "'${qemu_kvm_hostname}' is the lab infrastructure container. Cannot use it as a VM hostname."
+    exit 1
+fi
+
 
