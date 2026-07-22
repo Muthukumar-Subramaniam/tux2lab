@@ -1138,35 +1138,21 @@ else
 fi
 
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
-    os_name_and_version=$(awk -F'LTS' '{print $1 "LTS"}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.disk/info")
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
     # Codename mapping centralized in distro-versions.conf
     ubuntu_codename="${UBUNTU_CODENAMES[${version}]:-}"
 elif [[ "${os_distribution}" == "debian" ]]; then
-    os_name_and_version="Debian ${version}"
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
     # Codename mapping centralized in distro-versions.conf
     debian_codename="${DEBIAN_CODENAMES[${version}]:-}"
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
-    if [[ -f "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo" ]]; then
-        os_name_and_version=$(awk -F ' = ' '/^\[release\]/{f=1; next} /^\[/{f=0} f && /^(name|version)/ {gsub(/^[ \t]+/, "", $2); printf "%s ", $2} END{print ""}' "/tux2lab-data/os-repos/${os_distribution}/${version}/.treeinfo")
-    else
-        # Leap 16+ offline installer may not have .treeinfo
-        os_name_and_version="openSUSE Leap ${version}"
-    fi
-    # Extract just the version number (e.g., "15.6" from "openSUSE Leap 15.6")
-    opensuse_version_number=$(printf '%s\n' "$os_name_and_version" | grep -oP '[0-9]+\.[0-9]+' | head -n 1 || true)
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
+    opensuse_version_number="${version}"
 elif [[ "${os_distribution}" == "azurelinux" ]]; then
-    os_name_and_version="Azure Linux ${version}"
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
 else
     redhat_based_distro_name="${os_distribution}"
-    if [[ "${os_distribution}" == "centos-stream" ]]; then
-        os_name_and_version=$(grep -i "centos" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
-    elif [[ "${os_distribution}" == "oraclelinux" ]]; then
-        os_name_and_version=$(grep -i "oracle" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
-    elif [[ "${os_distribution}" == "rhel" ]]; then
-        os_name_and_version=$(grep -i "Red Hat" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
-    else
-        os_name_and_version=$(grep -i "${os_distribution}" "/tux2lab-data/os-repos/${os_distribution}/${version}/.discinfo" || true)
-    fi
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
 fi
 
 if ! $golden_image_creation_not_requested; then
