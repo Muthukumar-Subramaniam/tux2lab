@@ -10,6 +10,11 @@ exec > >(tee -a "$LOG") 2>&1
 echo "tux2lab post-install started: $(date)"
 
 ######################################################################
+# 0. Set root password (cloud-init is disabled, so chpasswd won't run)
+######################################################################
+echo "root:get_shadow_password_super_mgmt_user" | chpasswd -e
+
+######################################################################
 # 1. APT sources (DEB822 format for 24.04+, traditional for 22.04)
 ######################################################################
 if [[ "get_version" == "22.04" ]]; then
@@ -40,6 +45,7 @@ apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
     rsync netcat-openbsd lsof
+apt-get dist-upgrade -y
 apt-get remove -y lvm2 && apt-get autoremove -y
 
 ######################################################################
