@@ -90,7 +90,7 @@ fn_get_growpart() {
         print_task "Downloading growpart from lab infra server..."
         local tmp_growpart
         tmp_growpart=$(mktemp)
-        if curl -fsSL -o "$tmp_growpart" "http://${LAB_INFRA_SERVER}/tux2lab/common-utils/growpart" 2>/dev/null; then
+        if curl -fsSL -o "$tmp_growpart" "http://${LAB_INFRA_SERVER}/common-utils/growpart" 2>/dev/null; then
             sudo mv "$tmp_growpart" /usr/bin/growpart
             sudo chmod +x /usr/bin/growpart
             print_task_done
