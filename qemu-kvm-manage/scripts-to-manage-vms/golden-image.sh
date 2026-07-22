@@ -401,7 +401,7 @@ golden_image_rebuild() {
         done
         if [[ ${#matched_files[@]} -eq 0 ]]; then
             print_error "No existing golden image found for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}."
-            print_info "Use 'tux2lab golden-image build' to create a new one."
+            print_info "Use 'tux2lab golden-image build ${rebuild_distro} -v ${rebuild_version}' to create a new one."
             exit 1
         fi
 
@@ -421,7 +421,7 @@ golden_image_rebuild() {
     # Interactive mode: pick from existing images
     if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
         print_info "No golden images found. Nothing to rebuild."
-        print_info "Use 'tux2lab golden-image build' to create a new one."
+        print_info "Use 'tux2lab golden-image build <distro> -v <version>' to create one."
         return 0
     fi
 
