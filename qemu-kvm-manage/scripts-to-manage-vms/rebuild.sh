@@ -86,6 +86,21 @@ if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/de
 fi
 print_task_done
 
+# Ensure DHCP pool DNS records exist (idempotent)
+pool_ipv4=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
+pool_domain=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
+pool_last24=$(jq -r '.network.ipv4.last24_subnet' "${LAB_ENV_JSON}")
+if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp-lease156.${pool_domain}" 2>/dev/null | grep -q '^[0-9]'; then
+    print_task "Creating DNS records for DHCP pool (156-254)..."
+    dhcp_lease_file="$(mktemp /tmp/dhcp-lease-records.XXXXXXXXXX)"
+    for octet in $(seq 156 254); do
+        echo "dhcp-lease${octet} ${pool_last24}.${octet}" >> "$dhcp_lease_file"
+    done
+    sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --inline "$dhcp_lease_file" &>/dev/null || true
+    rm -f "$dhcp_lease_file"
+    print_task_done
+fi
+
 # ====== STEP 3: Recreate container from local image ======
 print_task "Recreating tux2lab-engine container..."
 recreate_start=$SECONDS
