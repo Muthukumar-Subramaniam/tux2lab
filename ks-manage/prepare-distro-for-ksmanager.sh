@@ -364,7 +364,7 @@ fn_get_iso_url() {
             print_info "The Ubuntu releases page may be temporarily unavailable." >&2
             exit 1
         fi
-        print_info "Detected Ubuntu ISO: ${resolved_filename}" >&2
+        print_info "Resolved ISO filename: ${resolved_filename}" >&2
         echo "${url}${resolved_filename}"
         return
     fi
