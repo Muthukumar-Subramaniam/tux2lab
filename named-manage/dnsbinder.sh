@@ -374,22 +374,23 @@ fn_configure_named_dns_server() {
 
     print_task_done
 
-    print_task "Checking whether required bind dns packages are installed..."
+    print_task "Installing dns utility packages if required..."
 
-    if rpm -q bind bind-utils &>/dev/null 
-    then
-        print_task_done
+    if command -v dig &>/dev/null; then
+        print_task_skip
     else
-        print_warning "Not yet installed"
-
-        print_task "Installing the required bind dns packages..."
-
-        if dnf install bind bind-utils -y &>/dev/null
-        then
+        if command -v dnf &>/dev/null; then
+            sudo dnf install -y bind-utils &>/dev/null
+        elif command -v apt-get &>/dev/null; then
+            sudo apt-get install -y dnsutils &>/dev/null
+        elif command -v zypper &>/dev/null; then
+            sudo zypper install -y bind-utils &>/dev/null
+        fi
+        if command -v dig &>/dev/null; then
             print_task_done
         else
             print_task_fail
-            print_error "Try installing the packages bind and bind-utils manually then try the script again!"
+            print_error "Failed to install 'dig'. Install bind-utils/dnsutils manually."
             exit 1
         fi
     fi
