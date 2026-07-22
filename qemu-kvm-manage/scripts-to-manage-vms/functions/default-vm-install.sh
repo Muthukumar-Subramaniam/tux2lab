@@ -9,7 +9,7 @@ if ! virt_install_error=$(sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3
   --features acpi=on,apic=on \
   --memory 2048 \
   --vcpus 2 \
-  --disk "path=${DISK_PATH},size=20,bus=virtio,boot.order=1" \
+  --disk "path=${DISK_PATH},size=30,bus=virtio,boot.order=1" \
   --os-variant "${OS_VARIANT:-almalinux9}" \
   --network "network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2" \
   --graphics none \

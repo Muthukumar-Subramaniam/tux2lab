@@ -26,7 +26,7 @@ fn_show_help() {
 Options:
   -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
   -c, --console        Attach console during reimage (single VM only)
-  -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
+  -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux)
   -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
@@ -184,7 +184,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # If --clean-install is specified, destroy and reinstall VM with default specs
     if [[ "$CLEAN_INSTALL" == "yes" ]]; then
-        print_info "Using --clean-install: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)."
+        print_info "Using --clean-install: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)."
         
         # Destroy VM and delete directory
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-clean-install.sh
@@ -204,7 +204,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Create new disk with default size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-disk.sh
-        if ! create_vm_disk "${qemu_kvm_hostname}" 20; then
+        if ! create_vm_disk "${qemu_kvm_hostname}" 30; then
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
@@ -226,13 +226,13 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-current-disk-size.sh
         get_current_disk_size "$qemu_kvm_hostname"
-        current_disk_gib="${CURRENT_DISK_SIZE:-20}"
+        current_disk_gib="${CURRENT_DISK_SIZE:-30}"
         
         # Delete existing qcow2 disk and recreate with appropriate size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/delete-vm-disk.sh
         delete_vm_disk "$qemu_kvm_hostname"
         
-        if ! sudo qemu-img create -f qcow2 "${vm_qcow2_disk_path}" "20G" >/dev/null 2>&1; then
+        if ! sudo qemu-img create -f qcow2 "${vm_qcow2_disk_path}" "30G" >/dev/null 2>&1; then
             print_error "Failed to create qcow2 disk for \"$qemu_kvm_hostname\"."
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
@@ -240,7 +240,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         fi
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/resize-disk-if-larger.sh
-        resize_disk_if_larger "$qemu_kvm_hostname" "$current_disk_gib" "20"
+        resize_disk_if_larger "$qemu_kvm_hostname" "$current_disk_gib" "30"
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
         report_retained_resources "$qemu_kvm_hostname"

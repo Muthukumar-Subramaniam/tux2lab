@@ -182,7 +182,7 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --features acpi=on,apic=on \
     --memory ${golden_build_memory} \
     --vcpus ${golden_build_vcpus} \
-    --disk "path=${DISK_PATH},size=20,bus=virtio,boot.order=1" \
+    --disk "path=${DISK_PATH},size=30,bus=virtio,boot.order=1" \
     --os-variant almalinux9 \
     --network "network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2" \
     --graphics none \

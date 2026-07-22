@@ -26,7 +26,7 @@ fn_show_help() {
 Options:
   -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
   -c, --console        Attach console during reimage (single VM only)
-  -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
+  -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux)
   -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
@@ -243,7 +243,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # If --clean-install is specified, destroy and reinstall VM with default specs
     if [[ "$CLEAN_INSTALL" == "yes" ]]; then
-        print_info "Using --clean-install: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)."
+        print_info "Using --clean-install: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)."
         
         # Destroy VM and delete directory
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-clean-install.sh
@@ -285,10 +285,10 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-current-disk-size.sh
         get_current_disk_size "$qemu_kvm_hostname"
-        current_disk_gib="${CURRENT_DISK_SIZE:-20}"
+        current_disk_gib="${CURRENT_DISK_SIZE:-30}"
         
         golden_disk_gib=$(sudo qemu-img info "${golden_qcow2_disk_path}" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
-        golden_disk_gib="${golden_disk_gib:-20}"
+        golden_disk_gib="${golden_disk_gib:-30}"
         
         # Delete existing qcow2 disk and recreate with appropriate size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/delete-vm-disk.sh
