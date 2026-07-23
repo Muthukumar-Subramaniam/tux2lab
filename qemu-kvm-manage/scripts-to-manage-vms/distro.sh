@@ -14,22 +14,45 @@ readonly PREPARE_SCRIPT="/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh"
 
 show_distro_help() {
     print_cyan "USAGE:
-    tux2lab distro <subcommand> [options]
+    tux2lab distro <command> [<distro> -v <version>]
+    tux2lab distro -h
 
-SUBCOMMANDS:
-    list                            List all distros with readiness status
-    setup [distro --version|-v ver]    Setup a distro for PXE provisioning
-    cleanup [distro --version|-v ver]  Remove a distro's PXE provisioning setup
+DESCRIPTION:
+    Manage OS distributions for PXE-based provisioning. Before a distro can
+    be used to install or reimage VMs, its boot media must be downloaded and
+    prepared. This command handles that lifecycle.
 
-OPTIONS:
-    -h, --help                      Show this help message
+    Note: If a distro is not yet set up when building a golden image, it
+    will be prepared automatically. This command is useful for pre-staging
+    ISOs ahead of time or cleaning up disk space.
+
+COMMANDS:
+    list                        List all distros with PXE and golden image readiness
+    setup                       Download ISO and prepare a distro for PXE provisioning
+    cleanup                     Unmount ISO and remove files to free disk space
+    -h, --help                  Show this help message
+
+ARGUMENTS:
+    <distro>                    OS distribution identifier (see below)
+    -v, --version <version>     OS version number (see below)
+                                If omitted, an interactive menu is displayed.
+
+SUPPORTED DISTROS AND VERSIONS:
+    almalinux                   10, 9, 8
+    rocky                       10, 9, 8
+    oraclelinux                 10, 9, 8
+    centos-stream               10, 9, 8
+    rhel                        10, 9, 8
+    ubuntu-lts                  26.04, 24.04, 22.04
+    debian                      13, 12, 11
+    opensuse-leap               16.0, 15.6
 
 EXAMPLES:
     tux2lab distro list
     tux2lab distro setup                                    # Interactive mode
-    tux2lab distro setup almalinux --version 10             # Non-interactive mode
-    tux2lab distro setup almalinux -v 10                    # Short form
-    tux2lab distro cleanup almalinux --version 10"
+    tux2lab distro setup almalinux -v 10                    # Non-interactive mode
+    tux2lab distro setup almalinux --version 10             # Long form
+    tux2lab distro cleanup almalinux -v 10                  # Free disk space"
 }
 
 # Show help without requiring lab environment

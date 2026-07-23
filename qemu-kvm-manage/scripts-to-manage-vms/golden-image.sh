@@ -17,32 +17,50 @@ readonly SCRIPT_DIR="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
 
 show_golden_image_help() {
     print_cyan "USAGE:
-    tux2lab golden-image <subcommand> [options]
+    tux2lab golden-image <command> [<distro> -v <version>] [options]
+    tux2lab golden-image -h
 
-SUBCOMMANDS:
-    build [distro] [OPTIONS]    Build a golden image by installing a VM via PXE boot
-    rebuild [distro] [OPTIONS]  Remove and rebuild an existing golden image
+DESCRIPTION:
+    Manage golden image disks for fast OS provisioning. A golden image is a
+    pre-installed OS disk that can be cloned in seconds to deploy new VMs,
+    instead of running a full PXE installation each time.
+
+    Build creates a temporary VM via PXE boot, installs the OS with all
+    post-install configuration, then extracts the disk as a reusable template.
+    If the distro is not yet set up, it will be prepared automatically.
+
+COMMANDS:
     list                        List all available golden images
-    cleanup [distro] [OPTIONS]  Remove golden image(s)
+    build                       Build a golden image by installing a VM via PXE boot
+    rebuild                     Remove and rebuild (or build if none exists)
+    cleanup                     Remove golden image(s) to free disk space
+    -h, --help                  Show this help message
 
-BUILD/REBUILD/CLEANUP OPTIONS:
-    -v, --version <ver>     Specify OS version number
+ARGUMENTS:
+    <distro>                    OS distribution identifier (see below)
+    -v, --version <version>     OS version number (see below)
+                                If omitted, an interactive menu is displayed.
+    -f, --force                 Skip confirmation prompt (cleanup only)
 
-CLEANUP OPTIONS:
-    -f, --force             Skip confirmation prompt
-
-OPTIONS:
-    -h, --help              Show this help message
+SUPPORTED DISTROS AND VERSIONS:
+    almalinux                   10, 9, 8
+    rocky                       10, 9, 8
+    oraclelinux                 10, 9, 8
+    centos-stream               10, 9, 8
+    rhel                        10, 9, 8
+    ubuntu-lts                  26.04, 24.04, 22.04
+    debian                      13, 12, 11
+    opensuse-leap               16.0, 15.6
 
 EXAMPLES:
     tux2lab golden-image list
-    tux2lab golden-image build                             # Interactive mode
-    tux2lab golden-image build almalinux --version 10      # Non-interactive mode
-    tux2lab golden-image build almalinux -v 10             # Short form
-    tux2lab golden-image rebuild almalinux -v 9            # Rebuild existing golden image
+    tux2lab golden-image build                              # Interactive mode
+    tux2lab golden-image build almalinux -v 10              # Non-interactive mode
+    tux2lab golden-image build almalinux --version 10       # Long form
+    tux2lab golden-image rebuild almalinux -v 10            # Rebuild or build if none exists
     tux2lab golden-image cleanup                            # Interactive cleanup
-    tux2lab golden-image cleanup almalinux --version 10    # Remove specific golden image
-    tux2lab golden-image cleanup rocky -v 9 --force        # Remove without confirmation"
+    tux2lab golden-image cleanup almalinux -v 10            # Remove specific golden image
+    tux2lab golden-image cleanup almalinux -v 10 --force    # Remove without confirmation"
 }
 
 # ====== LIST ======
