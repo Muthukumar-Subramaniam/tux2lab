@@ -76,6 +76,10 @@ fi
 # Validate distro name and version locally before generating MAC or invoking ksmanager
 validate_distro_version "$OS_DISTRO" "$VERSION_TYPE"
 
+# Auto-setup distro if not prepared for PXE boot
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
+auto_setup_distro "$OS_DISTRO" "$VERSION_TYPE"
+
 # Generate unique MAC address for the VM
 print_task "Generating MAC address for golden image VM..."
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh

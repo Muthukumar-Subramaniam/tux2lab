@@ -57,6 +57,10 @@ CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
 validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
 
+# Auto-setup distro if not prepared for PXE boot
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
+auto_setup_distro "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+
 # Main reimage loop
 CURRENT_VM=0
 FAILED_VMS=()
