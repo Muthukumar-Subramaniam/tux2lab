@@ -219,7 +219,7 @@ declare -A DISTRO_AVAILABLE_VERSIONS=(
 	[centos-stream]="10 9 8"
 	[rhel]="10 9 8"
 	[ubuntu-lts]="26.04 24.04 22.04"
-	[opensuse-leap]="15.6 15.5"
+	[opensuse-leap]="16.0 15.6"
 	[azurelinux]="4"
 )
 declare -A DISTRO_DISPLAY_NAMES=(

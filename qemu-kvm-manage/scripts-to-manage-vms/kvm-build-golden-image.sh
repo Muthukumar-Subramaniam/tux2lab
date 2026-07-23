@@ -192,6 +192,8 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --cpu host-model \
     --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},nvram=${NVRAM_PATH},menu=on" \
     --xml ./os/nvram/@format=raw; then
+    # Reset terminal state — serial console from guest can corrupt UTF-8 encoding
+    stty sane 2>/dev/null; printf '\033c' 2>/dev/null
     print_error "VM installation failed. Cleaning up..."
     sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
@@ -199,6 +201,9 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
     exit 1
 fi
+
+# Reset terminal state — serial console from guest can corrupt UTF-8 encoding
+stty sane 2>/dev/null; printf '\033c' 2>/dev/null
 
 print_info "VM installation of \"${qemu_kvm_hostname}\" completed."
 

@@ -15,10 +15,10 @@ echo "tux2lab post-install started: $(date)"
 /usr/bin/date '+%Y-%m-%d %H:%M:%S %Z' > /etc/bigbang
 
 ######################################################################
-# 2. Zypper repository management
+# 2. Zypper repository management (deferred to first boot)
 ######################################################################
-# Disable auto-refresh on all repos — user refreshes on demand via zypper refresh
-/usr/bin/zypper mr --no-refresh --all
+# NOTE: zypper cannot run during AutoYaST post-scripts (YaST holds the lock).
+# All zypper operations are handled by tux2lab-zypper-firstboot.service instead.
 
 ######################################################################
 # 3. Python3 symlink fix (15.6 only)
@@ -116,7 +116,65 @@ systemctl enable chronyd
 /usr/bin/rm -f /etc/chrony.d/pool.conf
 
 ######################################################################
-# 13. Golden image setup (conditional)
+# 13. Zypper first-boot service (runs update after YaST releases lock)
+######################################################################
+cat > /etc/systemd/system/tux2lab-zypper-firstboot.service << 'SVCEOF'
+[Unit]
+Description=tux2lab first-boot zypper update
+After=network-online.target
+Before=golden-image-setup.service
+Wants=network-online.target
+ConditionPathExists=!/root/tux2lab-zypper-firstboot-done
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /root/tux2lab-zypper-firstboot.sh
+RemainAfterExit=true
+TimeoutStartSec=1800
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+cat > /root/tux2lab-zypper-firstboot.sh << 'SCRIPTEOF'
+#!/bin/bash
+set -x
+LOG=/root/tux2lab-zypper-firstboot.log
+exec > >(tee -a "$LOG") 2>&1
+echo "zypper firstboot started: $(date)"
+# Detect openSUSE version for repo URL construction
+LEAP_VERSION=$(awk -F= '/^VERSION_ID/ {gsub(/"/, "", $2); print $2}' /etc/os-release)
+# Remove installation media repo (auto-added by YaST, useless after install)
+zypper repos --alias | awk -F'|' '/openSUSE-Leap-.*-[0-9]+/ {gsub(/^ +| +$/, "", $2); print $2}' | while read -r repo; do
+    zypper --non-interactive removerepo "$repo" && echo "Removed install media repo: $repo"
+done
+# Add missing standard repos if not present
+if ! zypper repos --alias | grep -q 'non-oss-repo'; then
+    zypper --non-interactive addrepo -f "https://download.opensuse.org/distribution/leap/${LEAP_VERSION}/repo/non-oss/" non-oss-repo
+fi
+if ! zypper repos --alias | grep -q 'repo-update'; then
+    zypper --non-interactive addrepo -f "https://download.opensuse.org/update/leap/${LEAP_VERSION}/oss/" repo-update
+fi
+if ! zypper repos --alias | grep -q 'repo-update-non-oss'; then
+    zypper --non-interactive addrepo -f "https://download.opensuse.org/update/leap/${LEAP_VERSION}/non-oss/" repo-update-non-oss
+fi
+# Disable expired EOL repos to suppress metadata warnings
+zypper repos | awk -F'|' '/Backports/ {gsub(/^ +| +$/, "", $2); print $2}' | while read -r repo; do
+    zypper --non-interactive modifyrepo --disable "$repo" && echo "Disabled expired repo: $repo"
+done
+zypper mr --no-refresh --all
+zypper --non-interactive refresh
+zypper --non-interactive update --auto-agree-with-licenses
+touch /root/tux2lab-zypper-firstboot-done
+echo "zypper firstboot completed: $(date)"
+SCRIPTEOF
+/bin/chmod +x /root/tux2lab-zypper-firstboot.sh
+/usr/bin/ln -s /etc/systemd/system/tux2lab-zypper-firstboot.service /etc/systemd/system/multi-user.target.wants/tux2lab-zypper-firstboot.service
+
+######################################################################
+# 14. Golden image setup (conditional)
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 

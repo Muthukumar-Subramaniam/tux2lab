@@ -400,9 +400,8 @@ golden_image_rebuild() {
             [[ -e "$f" ]] && matched_files+=("$f")
         done
         if [[ ${#matched_files[@]} -eq 0 ]]; then
-            print_error "No existing golden image found for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}."
-            print_info "Use 'tux2lab golden-image build ${rebuild_distro} -v ${rebuild_version}' to create a new one."
-            exit 1
+            print_info "No existing golden image for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}. Building new one..."
+            exec "${SCRIPT_DIR}/kvm-build-golden-image.sh" "$rebuild_distro" --version "$rebuild_version"
         fi
 
         print_info "Rebuilding golden image: ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}"
