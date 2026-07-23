@@ -319,7 +319,7 @@ _tux2lab_completions() {
                 fi
                 return 0
             fi
-            COMPREPLY=( $(compgen -W "-v --version -h --help" -- "${cur}") )
+            COMPREPLY=( $(compgen -W "-v --version -f --force -h --help" -- "${cur}") )
             return 0
         fi
 

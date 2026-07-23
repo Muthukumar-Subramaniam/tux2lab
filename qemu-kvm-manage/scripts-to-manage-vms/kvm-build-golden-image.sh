@@ -13,31 +13,11 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-
 OS_DISTRO=""
 VERSION_TYPE=""
 
-# Function to show help
-fn_show_help() {
-    print_cyan "Usage: tux2lab golden-image build [distro] [OPTIONS]
-Description:
-    Creates a golden image disk by installing a VM via PXE boot.
-    The VM will be automatically removed after the disk is created.
-
-Options:
-    -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
-    -h, --help           Show this help message
-
-Examples:
-    tux2lab golden-image build                             # Build golden image (will prompt for distro/version)
-    tux2lab golden-image build almalinux                   # Build AlmaLinux golden image (will prompt for version)
-    tux2lab golden-image build rocky --version 9           # Build Rocky Linux 9 golden image
-    tux2lab golden-image build ubuntu-lts -v 26.04         # Build Ubuntu LTS 26.04 golden image
-"
-}
-
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
-            fn_show_help
-            exit 0
+            exec tux2lab golden-image --help
             ;;
         -v|--version)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then

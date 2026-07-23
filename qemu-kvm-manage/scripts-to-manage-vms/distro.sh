@@ -36,6 +36,7 @@ ARGUMENTS:
     <distro>                    OS distribution identifier (see below)
     -v, --version <version>     OS version number (see below)
                                 If omitted, an interactive menu is displayed.
+    -f, --force                 Skip confirmation prompt (cleanup only)
 
 SUPPORTED DISTROS AND VERSIONS:
     almalinux                   10, 9, 8
@@ -52,7 +53,8 @@ EXAMPLES:
     tux2lab distro setup                                    # Interactive mode
     tux2lab distro setup almalinux -v 10                    # Non-interactive mode
     tux2lab distro setup almalinux --version 10             # Long form
-    tux2lab distro cleanup almalinux -v 10                  # Free disk space"
+    tux2lab distro cleanup almalinux -v 10                  # Free disk space
+    tux2lab distro cleanup almalinux -v 10 --force          # Skip confirmation"
 }
 
 # Show help without requiring lab environment

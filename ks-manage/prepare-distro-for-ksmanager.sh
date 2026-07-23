@@ -638,11 +638,13 @@ fn_cleanup_distro() {
             print_info "Nothing to clean up for ${DISTRO_DISPLAY_NAMES[$distro]} ${version} (not set up)."
             exit 0
         fi
-        print_warning "This will remove netboot files for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
-        read -rp "Are you sure you want to continue? (yes/no): " confirm
-        if [[ "$confirm" != "yes" ]]; then
-            print_info "Cleanup aborted."
-            exit 0
+        if [[ "${FORCE_CLEANUP}" != "true" ]]; then
+            print_warning "This will remove netboot files for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
+            read -rp "Are you sure you want to continue? (yes/no): " confirm
+            if [[ "$confirm" != "yes" ]]; then
+                print_info "Cleanup aborted."
+                exit 0
+            fi
         fi
         print_task "Removing netboot files..."
         sudo rm -rf "$netboot_dir"
@@ -666,10 +668,12 @@ fn_cleanup_distro() {
     fi
 
     print_warning "This will delete ISO and mount point for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
-    read -rp "Are you sure you want to continue? (yes/no): " confirm
-    if [[ "$confirm" != "yes" ]]; then
-        print_info "Cleanup aborted."
-        exit 0
+    if [[ "${FORCE_CLEANUP}" != "true" ]]; then
+        read -rp "Are you sure you want to continue? (yes/no): " confirm
+        if [[ "$confirm" != "yes" ]]; then
+            print_info "Cleanup aborted."
+            exit 0
+        fi
     fi
 
     # Identify loop device before unmounting (needed for cleanup after lazy unmount)
@@ -775,9 +779,28 @@ case "$MODE" in
         ;;
 esac
 
-# Parse distro and version from remaining args
-DISTRO="${1:-}"
+# Parse distro, version, and flags from remaining args
+DISTRO=""
 VERSION=""
+FORCE_CLEANUP="false"
+
+# Extract flags first
+remaining_args=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f|--force)
+            FORCE_CLEANUP="true"
+            shift
+            ;;
+        *)
+            remaining_args+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${remaining_args[@]+"${remaining_args[@]}"}"
+
+DISTRO="${1:-}"
 
 if [[ -z "$DISTRO" ]]; then
     # Interactive mode — prompt for distro and version
