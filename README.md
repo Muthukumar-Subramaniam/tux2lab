@@ -76,11 +76,6 @@ lab bridge interface, providing seamless network access for all guest VMs.
 | Debian-based | Debian | 13, 12, 11 | Preseed (netboot) |
 | SUSE-based | openSUSE Leap | 16.0, 15.6 | Agama (16.0), AutoYaST (15.x) |
 
-> RHEL requires a free [Red Hat Developer subscription](https://developers.redhat.com/register)
-> for ISO download and PXE installation. Organization ID and Activation Key are
-> collected during `tux2lab distro setup rhel` and used automatically for all
-> RHEL VM provisioning. Cloned VMs auto-register on first boot.
->
 > Distros are set up automatically when needed — manual `tux2lab distro setup`
 > is optional (useful for pre-staging ISOs or managing disk space).
 
