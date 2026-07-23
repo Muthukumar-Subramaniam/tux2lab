@@ -275,44 +275,46 @@ fn_select_version() {
 # ====== LIST ======
 
 fn_list_distros() {
-    local col_distro=28 col_ver=12 col_pxe=15
-    printf "\n  %-${col_distro}s %-${col_ver}s %-${col_pxe}s %s\n" "DISTRO" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
-    printf "  %-${col_distro}s %-${col_ver}s %-${col_pxe}s %s\n" "------" "-------" "---------" "------------"
+    local col_distro=20 col_id=16 col_ver=12 col_pxe=15
+    printf "${MAKE_IT_CYAN}%-${col_distro}s %-${col_id}s %-${col_ver}s %-${col_pxe}s %s${RESET_COLOR}\n" "DISTRO" "DISTRO-ID" "VERSION" "PXE-READY" "GOLDEN-IMAGE"
+    printf "${MAKE_IT_CYAN}%-${col_distro}s %-${col_id}s %-${col_ver}s %-${col_pxe}s %s${RESET_COLOR}\n" "------" "---------" "-------" "---------" "------------"
 
     local first_group=true
+    local separator
+    separator=$(printf "${MAKE_IT_CYAN}%-$((col_distro + col_id + col_ver + col_pxe + 15))s${RESET_COLOR}" "" | tr ' ' '-')
     for distro in "${DISTRO_KEYS[@]}"; do
-        # Add blank line separator between distro groups
         if [[ "$first_group" == true ]]; then
             first_group=false
         else
-            echo
+            echo "$separator"
         fi
         local first_ver=true
         for ver in ${DISTRO_AVAILABLE_VERSIONS[$distro]}; do
-            local pxe_padded pxe_status golden_status distro_label
+            local pxe_padded pxe_status golden_status distro_label distro_id_label
             if fn_is_distro_ready "$distro" "$ver"; then
                 pxe_padded=$(printf "%-${col_pxe}s" "Ready")
                 pxe_status=$(print_green "$pxe_padded" nskip)
             else
-                pxe_padded=$(printf "%-${col_pxe}s" "not-yet-setup")
+                pxe_padded=$(printf "%-${col_pxe}s" "Not-Ready")
                 pxe_status=$(print_yellow "$pxe_padded" nskip)
             fi
             if fn_has_golden_image "$distro" "$ver"; then
-                golden_status=$(print_green "Available" nskip)
+                golden_status=$(print_green "Ready" nskip)
             else
-                golden_status=$(print_yellow "not-yet-built" nskip)
+                golden_status=$(print_yellow "Not-Ready" nskip)
             fi
-            # Show distro name only on the first version row
+            # Show distro name and ID only on the first version row
             if [[ "$first_ver" == true ]]; then
                 distro_label="${DISTRO_DISPLAY_NAMES[$distro]}"
+                distro_id_label="$distro"
                 first_ver=false
             else
                 distro_label=""
+                distro_id_label=""
             fi
-            printf "  %-${col_distro}s %-${col_ver}s %s %s\n" "$distro_label" "$ver" "$pxe_status" "$golden_status"
+            printf "${MAKE_IT_GREEN}%-${col_distro}s %-${col_id}s${RESET_COLOR} %-${col_ver}s %s %s\n" "$distro_label" "$distro_id_label" "$ver" "$pxe_status" "$golden_status"
         done
     done
-    echo
 }
 
 # ====== SETUP ======
