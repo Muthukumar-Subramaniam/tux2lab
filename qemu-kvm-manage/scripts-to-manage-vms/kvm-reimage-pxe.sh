@@ -123,13 +123,20 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             REIMAGE_VERSION_TYPE="$PREVIOUS_VERSION"
             print_info "Auto-detected previous OS: ${REIMAGE_OS_DISTRO} ${REIMAGE_VERSION_TYPE}"
         else
-            REIMAGE_OS_DISTRO=""
-            REIMAGE_VERSION_TYPE=""
+            # Auto-detect failed — prompt user
+            print_warning "Could not detect previous OS for '${qemu_kvm_hostname}'."
+            source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+            select_distro_version "" ""
+            REIMAGE_OS_DISTRO="$SELECTED_DISTRO"
+            REIMAGE_VERSION_TYPE="$SELECTED_VERSION"
         fi
     else
         REIMAGE_OS_DISTRO="$CMDLINE_OS_DISTRO"
         REIMAGE_VERSION_TYPE="$CMDLINE_VERSION_TYPE"
     fi
+
+    # Ensure the resolved distro is prepared for PXE boot
+    auto_setup_distro "$REIMAGE_OS_DISTRO" "$REIMAGE_VERSION_TYPE"
 
     # Handle MAC address based on operation type
     if [[ "$CLEAN_INSTALL" == "yes" ]]; then
@@ -161,9 +168,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC}"
-    [[ -n "$REIMAGE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $REIMAGE_OS_DISTRO"
-    [[ -n "$REIMAGE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $REIMAGE_VERSION_TYPE"
+    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC} --distro $REIMAGE_OS_DISTRO --version $REIMAGE_VERSION_TYPE"
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts"; then
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")

@@ -6,7 +6,10 @@ allow_self_reference_mode="${2:-}"
 if [[ -n "$1" ]]; then
     qemu_kvm_hostname="$1"
 else
-    read -rp "Please enter the hostname of the VM: " qemu_kvm_hostname
+    while true; do
+        read -rp "Please enter the hostname of the VM: " qemu_kvm_hostname
+        [[ -n "${qemu_kvm_hostname}" ]] && break
+    done
 fi
 
 # Validate and normalize hostname to FQDN

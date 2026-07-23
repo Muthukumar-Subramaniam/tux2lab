@@ -22,7 +22,6 @@ while [[ $# -gt 0 ]]; do
         -v|--version)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                 print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 15.6)."
-                fn_show_help
                 exit 1
             fi
             VERSION_TYPE="$2"
@@ -30,15 +29,17 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             print_error "No such option: $1"
-            fn_show_help
+            print_info "Run 'tux2lab golden-image --help' for usage."
             exit 1
             ;;
         *)
             if [[ -z "$OS_DISTRO" ]]; then
                 OS_DISTRO="$1"
+            elif [[ -z "$VERSION_TYPE" ]]; then
+                VERSION_TYPE="$1"
             else
                 print_error "Unexpected argument: $1"
-                fn_show_help
+                print_info "Run 'tux2lab golden-image --help' for usage."
                 exit 1
             fi
             shift
@@ -48,17 +49,48 @@ done
 
 # Validate: --version requires --distro for golden image creation
 if [[ -n "$VERSION_TYPE" && -z "$OS_DISTRO" ]]; then
-    print_error "The --version option requires --distro to be specified for golden image creation."
-    fn_show_help
+    print_error "The --version option requires a distro to be specified."
+    print_info "Run 'tux2lab golden-image --help' for usage."
     exit 1
 fi
 
 # Validate distro name and version locally before generating MAC or invoking ksmanager
 validate_distro_version "$OS_DISTRO" "$VERSION_TYPE"
 
+# Interactive distro/version selection (if not provided on command line)
+# Selection happens HERE so ksmanager is always called non-interactively.
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+select_distro_version "$OS_DISTRO" "$VERSION_TYPE"
+OS_DISTRO="$SELECTED_DISTRO"
+VERSION_TYPE="$SELECTED_VERSION"
+
 # Auto-setup distro if not prepared for PXE boot
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
 auto_setup_distro "$OS_DISTRO" "$VERSION_TYPE"
+
+# Check if golden image already exists (early check before ksmanager work)
+if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
+    _version_dashed="${VERSION_TYPE//./-}"
+    _predicted_hostname="${OS_DISTRO}-${_version_dashed}-golden-image.${lab_infra_domain_name}"
+    _predicted_path="/tux2lab-data/golden-images-disk-store/${_predicted_hostname}.qcow2"
+    if [[ -f "$_predicted_path" ]]; then
+        print_warning "Golden image \"${_predicted_hostname}\" already exists!"
+        read -rp "Do you want to delete and recreate it? (YES/NO): " answer
+        echo -ne "\033[1A\033[2K"
+        case "$answer" in
+            YES)
+                print_task "Deleting existing golden image..." nskip
+                sudo rm -f "$_predicted_path"
+                sudo rm -f "/tux2lab-data/golden-images-disk-store/${_predicted_hostname}_VARS.fd"
+                print_task_done
+                ;;
+            *)
+                print_info "Keeping existing golden image. Aborted."
+                exit 0
+                ;;
+        esac
+    fi
+fi
 
 # Generate unique MAC address for the VM
 print_task "Generating MAC address for golden image VM..."
@@ -69,13 +101,11 @@ if ! GENERATED_MAC=$(generate_unique_mac "golden-image"); then
 fi
 print_task_done
 
-print_info "Invoking ksmanager to create PXE environment for golden image..."
+print_info "Creating PXE environment for golden image..."
 
-# Run ksmanager for golden image creation
+# Run ksmanager for golden image creation (always non-interactive — distro/version resolved above)
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-ksmanager_opts="--qemu-kvm --create-golden-image --mac ${GENERATED_MAC}"
-[[ -n "$OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $OS_DISTRO"
-[[ -n "$VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $VERSION_TYPE"
+ksmanager_opts="--qemu-kvm --create-golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
 if ! run_ksmanager "" "$ksmanager_opts"; then
     print_error "Something went wrong while executing ksmanager!"
     print_info "Please check your Lab Infra Server for the root cause."
@@ -121,30 +151,6 @@ mkdir -p /tux2lab-data/golden-images-disk-store
 # Example: almalinux-golden-image-10.tux2lab.internal.qcow2
 # The hostname from ksmanager already includes the version
 golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
-
-# Check if golden image already exists
-if [[ -f "${golden_image_path}" ]]; then
-    print_warning "Golden image \"${qemu_kvm_hostname}\" already exists!"
-    read -rp "Do you want to delete and recreate it? (YES/NO): " answer
-    echo -ne "\033[1A\033[2K"  # Move up one line and clear it
-    case "$answer" in
-        YES)
-            print_task "Deleting existing golden image..." nskip
-            if sudo rm -f "${golden_image_path}"; then
-                print_task_done
-            else
-                print_task_fail
-                print_error "Could not delete existing golden image."
-                exit 1
-            fi
-            ;;
-        * )
-            print_info "Keeping existing golden image \"${qemu_kvm_hostname}\". Cleaning up ksmanager databases..."
-            /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host || true
-            exit 0
-            ;;
-    esac
-fi
 
 print_info "Starting installation of VM \"${qemu_kvm_hostname}\" to create golden image disk..."
 

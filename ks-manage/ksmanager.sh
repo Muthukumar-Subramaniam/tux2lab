@@ -899,28 +899,20 @@ fn_select_os_distro() {
             version="${available_versions[0]}"
             print_info "Auto-selected version ${version} (only PXE-ready version for ${DISTRO_DISPLAY_NAMES[$os_distribution]})"
         else
-            local menu="Please select the version for ${DISTRO_DISPLAY_NAMES[$os_distribution]}:\n"
-            for i in "${!available_versions[@]}"; do
-                local ver="${available_versions[$i]}"
-                printf -v line "  %d)  %s\n" $((i+1)) "${ver}"
-                menu+="${line}"
-            done
-            menu+="  q)  Quit"
-            
-            print_notify "$menu"
-            echo -n "Enter option number: "
-            read version_choice
+            while true; do
+                echo "Available versions for ${DISTRO_DISPLAY_NAMES[$os_distribution]}: ${available_versions[*]}"
+                echo -n "Enter the version: "
+                read version_choice
 
-            if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
-                print_info "Operation cancelled by user."; exit 130
-            elif [[ "${version_choice}" =~ ^[0-9]+$ ]] && (( version_choice >= 1 && version_choice <= ${#available_versions[@]} )); then
-                version="${available_versions[$((version_choice-1))]}"
-            else
-                print_error "Invalid option. Please try again."
-                version=""
-                os_distribution=""
-                continue
-            fi
+                if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
+                    print_info "Operation cancelled by user."; exit 130
+                elif fn_is_valid_version "$os_distribution" "$version_choice"; then
+                    version="$version_choice"
+                    break
+                else
+                    print_error "Invalid version '${version_choice}'. Please try again."
+                fi
+            done
         fi
     else
         # Validate the version from --version flag
@@ -1695,6 +1687,7 @@ config_summary="Configuration Summary:
   ✓ IPv6 Address     : ${ipv6_address}
   ✓ IPv6 Prefix      : ${ipv6_prefix}
   ✓ IPv6 Gateway     : ${ipv6_gateway}
+  ✓ IPv6 Network     : ${ipv6_ula_subnet}
   ✓ Domain           : ${ipv4_domain}
   ✓ Lab Infra Server : ${lab_infra_server_hostname}
   ✓ Requested OS     : ${os_name_and_version}"

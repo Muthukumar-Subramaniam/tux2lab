@@ -49,6 +49,12 @@ CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
 validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
 
+# Interactive distro/version selection (resolved once, used for all VMs)
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+select_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+CMDLINE_OS_DISTRO="$SELECTED_DISTRO"
+CMDLINE_VERSION_TYPE="$SELECTED_VERSION"
+
 # Auto-setup distro if not prepared for PXE boot
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
 auto_setup_distro "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
@@ -93,9 +99,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC}"
-    [[ -n "$CMDLINE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $CMDLINE_OS_DISTRO"
-    [[ -n "$CMDLINE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $CMDLINE_VERSION_TYPE"
+    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC} --distro $CMDLINE_OS_DISTRO --version $CMDLINE_VERSION_TYPE"
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
         fn_release_vm_hostname_lock

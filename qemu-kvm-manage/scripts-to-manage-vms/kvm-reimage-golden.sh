@@ -117,6 +117,13 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             OS_DISTRO="$PREVIOUS_OS_DISTRO"
             VERSION_TYPE="$PREVIOUS_VERSION"
             print_info "Auto-detected previous OS: ${OS_DISTRO} ${VERSION_TYPE}"
+        else
+            # Auto-detect failed — prompt user
+            print_warning "Could not detect previous OS for '${qemu_kvm_hostname}'."
+            source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+            select_distro_version "" ""
+            OS_DISTRO="$SELECTED_DISTRO"
+            VERSION_TYPE="$SELECTED_VERSION"
         fi
     fi
 
@@ -190,9 +197,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     print_info "Creating first boot environment for '${qemu_kvm_hostname}' using ksmanager..."
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-    ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC}"
-    [[ -n "$OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $OS_DISTRO"
-    [[ -n "$VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $VERSION_TYPE"
+    ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts"; then
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
