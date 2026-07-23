@@ -85,7 +85,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 > These are the minimum recommended values. Adjust based on your workload.
 
-**Guest VMs (each):** 2 GB RAM · 2 vCPUs · 20 GB disk
+**Guest VMs (each):** 2 GB RAM · 2 vCPUs · 30 GB disk
 
 **KVM Host:** RHEL-based, Ubuntu, or openSUSE (hardware virtualization required).
 Podman must be available (installed automatically by setup).
