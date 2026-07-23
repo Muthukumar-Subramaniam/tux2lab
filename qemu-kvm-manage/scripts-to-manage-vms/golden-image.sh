@@ -66,9 +66,10 @@ golden_image_list() {
         return 0
     fi
 
-    printf "\n  %-28s %-12s %-22s %-30s\n" "DISTRO" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
-    printf "  %-28s %-12s %-22s %-30s\n" "------" "-------" "---------------------" "-------"
+    printf "\r${MAKE_IT_CYAN}[INFO] Reading golden image disk info...${RESET_COLOR}"
 
+    # Collect entries, then sort by display name and version numerically
+    local -a entries=()
     for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
         local filename
         filename=$(basename "$qcow2_file" .qcow2)
@@ -89,19 +90,29 @@ golden_image_list() {
         done
 
         local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
-        local disk_size virtual_size size
-        disk_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^disk size:/ {print $3, $4; exit}' || true)
+        local img_info disk_size virtual_size size
+        img_info=$(sudo qemu-img info "$qcow2_file" 2>/dev/null || true)
+        disk_size=$(awk '/^disk size:/ {print $3, $4; exit}' <<< "$img_info")
         disk_size="${disk_size:-?}"
-        virtual_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^virtual size:/ {print $3, $4; exit}' || true)
+        virtual_size=$(awk '/^virtual size:/ {print $3, $4; exit}' <<< "$img_info")
         virtual_size="${virtual_size:-?}"
         size="${disk_size} / ${virtual_size}"
         local created
         created=$(stat -c '%y' "$qcow2_file" 2>/dev/null | cut -d'.' -f1)
         created="${created:-unknown}"
 
-        printf "  %-28s %-12s %-22s %-30s\n" "$display_name" "$version" "$size" "$created"
+        # Store as tab-delimited for sorting
+        entries+=("${display_name}	${distro}	${version}	${size}	${created}")
     done
-    echo
+
+    # Clear the info message and print header + sorted entries
+    printf "\r\033[K"
+    printf "  ${MAKE_IT_CYAN}%-20s %-16s %-12s %-22s %-30s${RESET_COLOR}\n" "DISTRO" "DISTRO-ID" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
+    printf "  ${MAKE_IT_CYAN}%-20s %-16s %-12s %-22s %-30s${RESET_COLOR}\n" "------" "---------" "-------" "---------------------" "-------"
+    # Sort by display name (col 1), then version numerically (col 3)
+    printf '%s\n' "${entries[@]}" | sort -t$'\t' -k1,1f -k3,3V | while IFS=$'\t' read -r d_name d_id d_ver d_size d_created; do
+        printf "  ${MAKE_IT_GREEN}%-20s %-16s %-12s %-22s %-30s${RESET_COLOR}\n" "$d_name" "$d_id" "$d_ver" "$d_size" "$d_created"
+    done
 }
 
 # ====== CLEANUP ======
