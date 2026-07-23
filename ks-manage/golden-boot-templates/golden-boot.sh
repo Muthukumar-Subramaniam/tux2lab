@@ -527,6 +527,26 @@ case "${DISTRO_FAMILY}" in
 		;;
 esac
 
+# RHEL: register with subscription-manager for repo access
+if [[ "${DISTRO_ID}" == "rhel" ]] && command -v subscription-manager &>/dev/null; then
+	if ! subscription-manager identity &>/dev/null; then
+		log "Registering with Red Hat Subscription Manager..."
+		rhel_sub_conf=$(curl -fsSL "http://get_lab_infra_server_hostname/lab-config/rhel-subscription.conf" 2>/dev/null) || true
+		if [[ -n "$rhel_sub_conf" ]]; then
+			eval "$rhel_sub_conf"
+			if subscription-manager register --org="${RHEL_ORG_ID}" --activationkey="${RHEL_ACTIVATION_KEY}" 2>>"$LOGFILE"; then
+				log "RHEL subscription registered successfully"
+			else
+				log "WARNING: subscription-manager register failed (repos may be unavailable)"
+			fi
+		else
+			log "WARNING: Could not fetch RHEL subscription config from lab server"
+		fi
+	else
+		log "RHEL subscription already registered"
+	fi
+fi
+
 # Sync credentials from lab server (update if changed since golden image build)
 log "Checking credentials against lab server..."
 LAB_CONFIG_URL="http://get_lab_infra_server_hostname/lab-config"

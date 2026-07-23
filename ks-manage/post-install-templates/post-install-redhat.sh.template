@@ -150,10 +150,16 @@ Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access
 EOF
 
 ######################################################################
-# 11. Remove RHEL-specific subscription packages
+# 11. RHEL: unregister only for golden image builds (free slot
+#     before disk capture). Direct PXE installs stay registered.
+#     Remove rhc and insights-client (not needed in lab VMs).
 ######################################################################
 if [[ "get_redhat_based_distro_name" == "rhel" ]]; then
-    /usr/bin/dnf remove -y rhc subscription-manager || true
+    if ! get_golden_image_creation_not_requested; then
+        /usr/sbin/subscription-manager unregister || true
+        /usr/sbin/subscription-manager clean || true
+    fi
+    /usr/bin/dnf remove -y --noautoremove rhc insights-client || true
 fi
 
 ######################################################################

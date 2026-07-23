@@ -1204,6 +1204,22 @@ if ! $invoked_with_golden_image; then
             fn_release_host_lock
             exit 1
         fi
+        # RHEL: replace url/repo with rhsm subscription-manager directive
+        if [[ "${os_distribution}" == "rhel" ]]; then
+            rhel_sub_file="/tux2lab-data/lab-config/rhel-subscription.conf"
+            if [[ -f "$rhel_sub_file" ]]; then
+                source "$rhel_sub_file"
+                ks_file="${host_kickstart_dir}/redhat-based-${version}-ks.cfg"
+                sed -i '/^url --url=/d' "$ks_file"
+                sed -i '/^repo --name="appstream"/d' "$ks_file"
+                sed -i "s|^# Installation source (online repos)|# Installation source (Red Hat Subscription Manager)\nrhsm --organization=${RHEL_ORG_ID} --activation-key=${RHEL_ACTIVATION_KEY}|" "$ks_file"
+            else
+                print_error "RHEL subscription credentials not found."
+                print_info "Run 'tux2lab distro setup rhel -v ${version}' to configure them."
+                fn_release_host_lock
+                exit 1
+            fi
+        fi
     fi
     if ! $golden_image_creation_not_requested; then
         if ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service" "${host_kickstart_dir}"/ || \

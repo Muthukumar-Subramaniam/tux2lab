@@ -46,7 +46,7 @@ apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
     rsync netcat-openbsd lsof
 apt-get dist-upgrade -y
-apt-get remove -y lvm2 && apt-get autoremove --purge -y
+apt-get autoremove --purge -y
 apt-get clean
 
 ######################################################################

@@ -24,7 +24,6 @@ apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
     rsync netcat-openbsd lsof curl
-apt-get remove -y lvm2 && apt-get autoremove -y || true
 
 ######################################################################
 # 2. SSH keys
