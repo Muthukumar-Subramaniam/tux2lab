@@ -70,12 +70,19 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 | Family | Distribution | Versions | Method |
 |---|---|---|---|
-| Red Hat-based | AlmaLinux, Rocky, Oracle Linux, RHEL, CentOS Stream | 10, 9, 8 | Kickstart |
+| Red Hat-based | AlmaLinux, Rocky, Oracle Linux, CentOS Stream | 10, 9, 8 | Kickstart |
+| Red Hat-based | RHEL | 10, 9, 8 | Kickstart (via subscription-manager) |
 | Debian-based | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
 | Debian-based | Debian | 13, 12, 11 | Preseed (netboot) |
 | SUSE-based | openSUSE Leap | 16.0, 15.6 | Agama (16.0), AutoYaST (15.x) |
 
-> Additional distros can be set up anytime via `tux2lab distro setup`.
+> RHEL requires a free [Red Hat Developer subscription](https://developers.redhat.com/register)
+> for ISO download and PXE installation. Organization ID and Activation Key are
+> collected during `tux2lab distro setup rhel` and used automatically for all
+> RHEL VM provisioning. Cloned VMs auto-register on first boot.
+>
+> Distros are set up automatically when needed — manual `tux2lab distro setup`
+> is optional (useful for pre-staging ISOs or managing disk space).
 
 ---
 
@@ -149,12 +156,16 @@ tux2lab health
 
 ## Using tux2lab
 
-### Prepare a Distribution for Provisioning
+### Prepare a Distribution for Provisioning (Optional)
+
+Distros are prepared automatically when you build a golden image or install a VM.
+Use these commands to pre-stage ISOs or check status:
 
 ```bash
-tux2lab distro setup                             # Interactive
-tux2lab distro setup almalinux --version 10      # Non-interactive
 tux2lab distro list                              # Show setup status
+tux2lab distro setup almalinux -v 10             # Pre-stage a distro
+tux2lab distro cleanup almalinux -v 10           # Remove to free disk space
+tux2lab distro cleanup almalinux -v 10 --force   # Skip confirmation
 ```
 
 ### Create a Golden Image (Optional, Recommended)
@@ -164,25 +175,26 @@ Golden images let you deploy VMs in seconds instead of running a full PXE instal
 ```bash
 tux2lab golden-image build                       # Interactive
 tux2lab golden-image build almalinux -v 10       # Non-interactive
+tux2lab golden-image rebuild almalinux -v 10     # Rebuild (or build if none exists)
 tux2lab golden-image list                        # Show available images
 ```
 
 ### Deploy VMs
 
 ```bash
-# From golden image (fast — disk clone)
-tux2lab vm install-golden -H vm1
-tux2lab vm install-golden -H vm1 -d almalinux -v 10
+# From golden image (default — fast disk clone)
+tux2lab vm install -H vm1
+tux2lab vm install -H vm1 -d almalinux -v 10
 
 # Via PXE boot (full network install)
-tux2lab vm install-pxe -H vm1
-tux2lab vm install-pxe -H vm1 -d ubuntu-lts -v 24.04
+tux2lab vm install -H vm1 --via-pxe
+tux2lab vm install -H vm1 --via-pxe -d ubuntu-lts -v 24.04
 
 # Multiple VMs at once
-tux2lab vm install-golden -H vm1,vm2,vm3
+tux2lab vm install -H vm1,vm2,vm3
 
 # Attach to console during install
-tux2lab vm install-pxe -H vm1 --console
+tux2lab vm install -H vm1 --via-pxe --console
 ```
 
 ---
@@ -211,10 +223,8 @@ tux2lab vm remove -H <hostname>   Delete VM and all its data
 ### VM Provisioning
 
 ```
-tux2lab vm install-golden         Deploy from golden image
-tux2lab vm install-pxe            Deploy via PXE network boot
-tux2lab vm reimage-golden         Wipe and reinstall from golden image
-tux2lab vm reimage-pxe            Wipe and reinstall via PXE
+tux2lab vm install                Deploy VM(s) [--via-golden (default) | --via-pxe]
+tux2lab vm reimage                Reinstall VM(s) [--via-golden (default) | --via-pxe]
 ```
 
 ### VM Configuration
@@ -244,6 +254,7 @@ tux2lab vm snapshot-delete -H <hostname>  Delete a snapshot
 
 ```
 tux2lab golden-image build        Build a reusable base image via PXE
+tux2lab golden-image rebuild      Rebuild (or build if none exists)
 tux2lab golden-image list         List available golden images
 tux2lab golden-image cleanup      Remove golden image(s)
 ```
