@@ -198,6 +198,30 @@ tux2lab vm install -H vm1 --via-pxe --console
 
 > Most commands accept `-H vm1,vm2,vm3` for multi-VM operations.
 
+### Distro Management
+
+```
+tux2lab distro list               List distributions and setup status
+tux2lab distro setup              Prepare a distro for PXE provisioning
+tux2lab distro cleanup            Remove a distro's PXE setup
+```
+
+### Golden Image Management
+
+```
+tux2lab golden-image build        Build a reusable base image via PXE
+tux2lab golden-image rebuild      Rebuild (or build if none exists)
+tux2lab golden-image list         List available golden images
+tux2lab golden-image cleanup      Remove golden image(s)
+```
+
+### VM Provisioning
+
+```
+tux2lab vm install                Deploy VM(s) [--via-golden (default) | --via-pxe]
+tux2lab vm reimage                Reinstall VM(s) [--via-golden (default) | --via-pxe]
+```
+
 ### VM Operations
 
 ```
@@ -213,13 +237,6 @@ tux2lab vm shutdown -H <hostname> Graceful shutdown via ACPI
 tux2lab vm reboot -H <hostname>   Graceful reboot
 tux2lab vm restart -H <hostname>  Hard reset (power cycle)
 tux2lab vm remove -H <hostname>   Delete VM and all its data
-```
-
-### VM Provisioning
-
-```
-tux2lab vm install                Deploy VM(s) [--via-golden (default) | --via-pxe]
-tux2lab vm reimage                Reinstall VM(s) [--via-golden (default) | --via-pxe]
 ```
 
 ### VM Configuration
@@ -245,15 +262,6 @@ tux2lab vm snapshot-revert -H <hostname>  Revert to a snapshot
 tux2lab vm snapshot-delete -H <hostname>  Delete a snapshot
 ```
 
-### Golden Image Management
-
-```
-tux2lab golden-image build        Build a reusable base image via PXE
-tux2lab golden-image rebuild      Rebuild (or build if none exists)
-tux2lab golden-image list         List available golden images
-tux2lab golden-image cleanup      Remove golden image(s)
-```
-
 ### Infrastructure & Network
 
 ```
@@ -268,9 +276,6 @@ tux2lab rebuild                   Tear down and redeploy lab using existing conf
 tux2lab sync                      Sync project updates into the running lab
 tux2lab info                      Show lab deployment details
 tux2lab dns [options]             Manage DNS records via dnsbinder
-tux2lab distro list               List distributions and setup status
-tux2lab distro setup              Prepare a distro for PXE provisioning
-tux2lab distro cleanup            Remove a distro's PXE setup
 tux2lab ipv6-route enable         Add IPv6 route to lab network
 tux2lab ipv6-route disable        Remove IPv6 route
 tux2lab ipv6-route check          Check IPv6 connectivity and route status
