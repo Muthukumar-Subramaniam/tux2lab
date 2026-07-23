@@ -220,7 +220,6 @@ declare -A DISTRO_AVAILABLE_VERSIONS=(
 	[rhel]="10 9 8"
 	[ubuntu-lts]="26.04 24.04 22.04"
 	[opensuse-leap]="16.0 15.6"
-	[azurelinux]="4"
 )
 declare -A DISTRO_DISPLAY_NAMES=(
 	[almalinux]="AlmaLinux"
@@ -230,7 +229,6 @@ declare -A DISTRO_DISPLAY_NAMES=(
 	[rhel]="Red Hat Enterprise Linux"
 	[ubuntu-lts]="Ubuntu Server LTS"
 	[opensuse-leap]="openSUSE Leap"
-	[azurelinux]="Azure Linux"
 )
 fn_is_valid_version() {
 	local distro_base="$1"

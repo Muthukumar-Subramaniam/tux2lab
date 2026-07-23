@@ -15,8 +15,6 @@ if [[ "${DISTRO_ID}" == "ubuntu" ]] || [[ "${DISTRO_ID_LIKE}" == *"ubuntu"* ]] |
 	DISTRO_FAMILY="debian"
 elif [[ "${DISTRO_ID}" == "opensuse-leap" ]] || [[ "${DISTRO_ID}" == "opensuse" ]] || [[ "${DISTRO_ID_LIKE}" == *"suse"* ]]; then
 	DISTRO_FAMILY="opensuse"
-elif [[ "${DISTRO_ID}" == "azurelinux" ]] || [[ "${DISTRO_ID}" == "mariner" ]]; then
-	DISTRO_FAMILY="azurelinux"
 elif [[ "${DISTRO_ID}" == "rhel" ]] || [[ "${DISTRO_ID}" == "centos" ]] || [[ "${DISTRO_ID}" == "centos-stream" ]] || [[ "${DISTRO_ID}" == "almalinux" ]] || [[ "${DISTRO_ID}" == "rocky" ]] || [[ "${DISTRO_ID}" == "ol" ]] || [[ "${DISTRO_ID}" == "oraclelinux" ]] || [[ "${DISTRO_ID}" == "fedora" ]] || [[ "${DISTRO_ID_LIKE}" == *"rhel"* ]] || [[ "${DISTRO_ID_LIKE}" == *"fedora"* ]]; then
 	DISTRO_FAMILY="redhat"
 else
@@ -209,25 +207,6 @@ case "${DISTRO_FAMILY}" in
 		else
 			log "  Wicked detected (Leap 15.x) - minimal cleanup"
 		fi
-		;;
-
-	azurelinux)
-		log "Performing Azure Linux network cleanup (systemd-networkd)"
-		
-		log "Creating backup directory for existing network configs"
-		mkdir -p /root/systemd-network-golden-image
-		
-		log "Backing up existing systemd-networkd configs"
-		if [ -n "$(ls -A /etc/systemd/network/*.network 2>/dev/null)" ]; then
-			cp -a /etc/systemd/network/*.network /root/systemd-network-golden-image/ 2>/dev/null || true
-			log "Backup completed"
-		else
-			log "No existing .network files to backup"
-		fi
-		
-		log "Removing existing .network files (preserving .link files for interface naming)"
-		rm -f /etc/systemd/network/*.network
-		log "Deleted .network files from /etc/systemd/network/"
 		;;
 esac
 
@@ -483,54 +462,6 @@ EOF
 			fi
 		fi
 		;;
-
-	azurelinux)
-		log "Configuring network using systemd-networkd for Azure Linux"
-		log "Creating systemd-networkd config for eth0"
-		log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
-		log "  IPv4 Gateway: ${IPv4_GATEWAY}"
-		if [ "$IPV6_ENABLED" = true ]; then
-			log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
-		fi
-		log "  DNS: ${IPv4_DNS_SERVER}"
-		log "  Search domain: ${IPv4_DNS_DOMAIN}"
-		
-		if [ "$IPV6_ENABLED" = true ]; then
-			cat << EOF > /etc/systemd/network/10-eth0.network
-[Match]
-Name=eth0
-
-[Network]
-DHCP=no
-IPv6AcceptRA=no
-Address=${IPv4_ADDRESS}/${IPv4_CIDR}
-Gateway=${IPv4_GATEWAY}
-DNS=${IPv4_DNS_SERVER}
-DNS=${IPv6_DNS_SERVER}
-Domains=${IPv4_DNS_DOMAIN}
-Address=${IPv6_ADDRESS}/${IPv6_PREFIX}
-EOF
-		else
-			cat << EOF > /etc/systemd/network/10-eth0.network
-[Match]
-Name=eth0
-
-[Network]
-DHCP=no
-Address=${IPv4_ADDRESS}/${IPv4_CIDR}
-Gateway=${IPv4_GATEWAY}
-DNS=${IPv4_DNS_SERVER}
-Domains=${IPv4_DNS_DOMAIN}
-LinkLocalAddressing=no
-EOF
-		fi
-		
-		log "Reloading and restarting systemd-networkd to apply configuration"
-		networkctl reload 2>/dev/null || true
-		if ! systemctl restart systemd-networkd; then
-			error_exit "Failed to restart systemd-networkd"
-		fi
-		;;
 esac
 
 log "Waiting for network to become ready..."
@@ -590,14 +521,6 @@ case "${DISTRO_FAMILY}" in
 		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-certificates
 			log "SSL certificate installed and CA certificates updated (OpenSUSE)"
-		else
-			log "WARNING: Failed to download SSL certificate, continuing anyway"
-		fi
-		;;
-	azurelinux)
-		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
-			update-ca-trust
-			log "SSL certificate installed and CA trust updated (Azure Linux)"
 		else
 			log "WARNING: Failed to download SSL certificate, continuing anyway"
 		fi

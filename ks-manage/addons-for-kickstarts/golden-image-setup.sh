@@ -36,15 +36,6 @@ echo "Disabling cloud-init (if present)..." | tee -a "$LOG"
 echo "Removing NetworkManager system connections..." | tee -a "$LOG"
 if grep -qi "rhel" /etc/os-release; then
 	rm -f /etc/NetworkManager/system-connections/* 2>>"$LOG"
-elif grep -qi "azurelinux\|mariner" /etc/os-release; then
-	rm -f /etc/systemd/network/*.network 2>>"$LOG"
-	cat << EOF > /etc/systemd/network/50-golden-boot-dhcp.network
-[Match]
-Name=e*
-
-[Network]
-DHCP=yes
-EOF
 elif grep -qi "debian" /etc/os-release; then
 	if command -v netplan &>/dev/null; then
 	# Ubuntu: uses netplan

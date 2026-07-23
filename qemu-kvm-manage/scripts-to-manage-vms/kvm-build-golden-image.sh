@@ -171,9 +171,6 @@ print_info "Starting installation of VM \"${qemu_kvm_hostname}\" to create golde
 # Golden image builds use higher specs (SELinux policy compilation, dracut, depmod are heavy)
 golden_build_memory=4096
 golden_build_vcpus=4
-if [[ "${OS_DISTRO}" == "azurelinux" ]]; then
-    golden_build_memory=6144
-fi
 
 # Set custom paths for golden image creation
 DISK_PATH="${golden_image_path}"

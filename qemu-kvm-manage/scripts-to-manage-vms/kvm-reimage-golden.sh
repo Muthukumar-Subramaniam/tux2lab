@@ -28,7 +28,7 @@ Options:
   -c, --console        Attach console during reimage (single VM only)
   -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
   -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux)
+                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
   -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
   -f, --force          Skip confirmation prompt
   -h, --help           Show this help message

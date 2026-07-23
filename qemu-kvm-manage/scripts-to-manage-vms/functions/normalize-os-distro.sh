@@ -43,12 +43,9 @@ normalize_os_distro() {
         opensuse-leap|opensuse|suse)
             NORMALIZED_OS_DISTRO="opensuse-leap"
             ;;
-        azurelinux|azure)
-            NORMALIZED_OS_DISTRO="azurelinux"
-            ;;
         *)
             print_error "Unrecognized OS distro: $base_distro"
-            print_info "Supported distros: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
+            print_info "Supported distros: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
             return 1
             ;;
     esac

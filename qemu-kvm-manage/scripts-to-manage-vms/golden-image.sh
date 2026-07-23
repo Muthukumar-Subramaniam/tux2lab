@@ -170,7 +170,7 @@ golden_image_cleanup() {
     if [[ -n "$cleanup_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$cleanup_distro]:-}" ]]; then
             print_error "Unknown distribution: $cleanup_distro"
-            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
             exit 1
         fi
         if [[ -z "$cleanup_version" ]]; then
@@ -371,7 +371,7 @@ golden_image_rebuild() {
     if [[ -n "$rebuild_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$rebuild_distro]:-}" ]]; then
             print_error "Unknown distribution: $rebuild_distro"
-            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
             exit 1
         fi
         if [[ -z "$rebuild_version" ]]; then

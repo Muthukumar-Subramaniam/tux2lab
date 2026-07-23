@@ -807,13 +807,9 @@ fn_select_os_distro() {
                 os_distribution="opensuse-leap"
                 print_info "OS distribution selected via --distro flag: ${os_distribution}"
                 ;;
-            azurelinux|azure) 
-                os_distribution="azurelinux"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
             *)
                 print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
-                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
+                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
                 exit 1
                 ;;
         esac
@@ -1148,8 +1144,6 @@ elif [[ "${os_distribution}" == "debian" ]]; then
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
     opensuse_version_number="${version}"
-elif [[ "${os_distribution}" == "azurelinux" ]]; then
-    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
 else
     redhat_based_distro_name="${os_distribution}"
     os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
@@ -1201,12 +1195,6 @@ if ! $invoked_with_golden_image; then
     elif [[ "${os_distribution}" == "debian" ]]; then
         if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/debian-${version}-preseed.cfg" "${host_kickstart_dir}"/; then
             print_error "Failed to copy preseed template for debian-${version}"
-            fn_release_host_lock
-            exit 1
-        fi
-    elif [[ "${os_distribution}" == "azurelinux" ]]; then
-        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/azurelinux-${version}-ks.cfg" "${host_kickstart_dir}"/; then
-            print_error "Failed to copy kickstart template for azurelinux-${version}"
             fn_release_host_lock
             exit 1
         fi
@@ -1278,8 +1266,6 @@ fn_generate_post_install_script() {
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-debian.sh.template"
     elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-opensuse.sh.template"
-    elif [[ "${os_distribution}" == "azurelinux" ]]; then
-        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-azurelinux.sh.template"
     else
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-redhat.sh.template"
     fi
@@ -1442,8 +1428,6 @@ if ! $invoked_with_golden_image; then
             if [[ "${local_major_version}" -ge 16 ]]; then
                 local_ipxe_template="ipxe-template-opensuse-leap-16.ipxe"
             fi
-        elif [[ "${os_distribution}" == "azurelinux" ]]; then
-            local_ipxe_template="ipxe-template-azurelinux-4.ipxe"
         fi
         if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/${local_ipxe_template}"  "${mac_based_ipxe_cfg_file}"; then
             print_error "Failed to copy iPXE template for ${os_distribution}"

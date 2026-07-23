@@ -65,10 +65,10 @@ Subcommands:
     cleanup [distro --version|-v ver]       Unmount and remove ISO for a distro
 
 Supported distros:
-    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux
+    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap
 
 Version:
-    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 11, 12, 13, 15.6, 16.0, 4"
+    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 11, 12, 13, 15.6, 16.0"
 }
 
 # ====== HELPER FUNCTIONS ======
@@ -621,145 +621,6 @@ fn_setup_distro() {
         print_task_done
     fi
 
-    # Azure Linux: patch squashfs to support HTTP kickstart URLs
-    if [[ "$distro" == "azurelinux" ]]; then
-        local patched_squashfs_dir="/tux2lab-data/os-repos/${distro}/${version}-live"
-        local patched_squashfs="${patched_squashfs_dir}/squashfs.img"
-        local original_squashfs="${mount_dir}/LiveOS/squashfs.img"
-
-        if [[ -f "$patched_squashfs" ]]; then
-            print_info "Patched squashfs already exists. Skipping."
-        elif [[ ! -f "$original_squashfs" ]]; then
-            print_warning "No LiveOS/squashfs.img found in ISO. Skipping squashfs patching."
-        else
-            local squash_tmp="/tmp/azl-squash-patch-$$"
-            local rootfs_mnt="/tmp/azl-rootfs-$$"
-
-            print_task "Extracting squashfs image..."
-            if sudo unsquashfs -d "$squash_tmp" "$original_squashfs" >/dev/null 2>&1; then
-                print_task_done
-            else
-                print_task_fail
-                print_warning "Failed to unsquash. Ensure 'squashfs-tools' is installed."
-                sudo rm -rf "$squash_tmp"
-                return
-            fi
-
-            # The squashfs contains LiveOS/rootfs.img — mount it to patch files inside
-            local rootfs_img="${squash_tmp}/LiveOS/rootfs.img"
-            if sudo test -f "$rootfs_img"; then
-                print_task "Mounting rootfs image for patching..."
-                sudo mkdir -p "$rootfs_mnt"
-                if sudo mount -o loop,rw "$rootfs_img" "$rootfs_mnt"; then
-                    print_task_done
-
-                    print_task "Patching installer for HTTP kickstart support..."
-                    local install_script="${rootfs_mnt}/usr/local/bin/anaconda-launcher.sh"
-                    if ! sudo test -f "$install_script"; then
-                        install_script="${rootfs_mnt}/usr/local/sbin/install-azl"
-                    fi
-                    if sudo test -f "$install_script"; then
-                        local patch_script="/tmp/azl-patch-$$.sh"
-                        cat > "$patch_script" << 'PATCHEOF'
-#!/bin/bash
-TARGET="$1"
-TMPFILE="${TARGET}.patched"
-sudo awk '
-/CUSTOM_KS=\$\(grep -o/ {
-    print
-    print "    # Support HTTP/HTTPS kickstart URLs for PXE-based deployments"
-    print "    if [[ \"$CUSTOM_KS\" == http* ]]; then"
-    print "        echo \"  Downloading kickstart from: $CUSTOM_KS\""
-    print "        if curl --retry 10 --retry-delay 2 --retry-connrefused -sf -o /tmp/ks.cfg \"$CUSTOM_KS\"; then"
-    print "            CUSTOM_KS=\"/tmp/ks.cfg\""
-    print "        else"
-    print "            echo \"  ERROR: Failed to download kickstart from $CUSTOM_KS\""
-    print "            exec /bin/bash"
-    print "        fi"
-    print "    fi"
-    next
-}
-{print}
-' "$TARGET" | sudo tee "$TMPFILE" > /dev/null
-sudo mv "$TMPFILE" "$TARGET"
-sudo chmod +x "$TARGET"
-PATCHEOF
-                        chmod +x "$patch_script"
-                        bash "$patch_script" "$install_script"
-                        rm -f "$patch_script"
-                        print_task_done
-                    else
-                        print_task_fail
-                        print_warning "install-azl/anaconda-launcher.sh not found in rootfs."
-                    fi
-
-                    # Install xfsprogs into the live rootfs so Anaconda can create XFS filesystems
-                    # Also add it to the offline repo so Anaconda can resolve the package dependency
-                    print_task "Installing xfsprogs into live image for XFS support..."
-                    local rpm_tmp="/tmp/azl-xfs-rpms-$$"
-                    mkdir -p "$rpm_tmp"
-                    # Determine repo channel (prod if available, else beta)
-                    local azl_repo_base="https://packages.microsoft.com/azurelinux/4.0"
-                    local azl_repo_url="${azl_repo_base}/prod/base/x86_64"
-                    if ! curl -sf "${azl_repo_url}/repodata/repomd.xml" -o /dev/null 2>/dev/null; then
-                        azl_repo_url="${azl_repo_base}/beta/base/x86_64"
-                    fi
-                    if sudo dnf download --destdir="$rpm_tmp" --repofrompath="azl-tmp,$azl_repo_url" --repo=azl-tmp xfsprogs inih userspace-rcu >/dev/null 2>&1; then
-                        local xfs_ok=true
-                        # Extract xfsprogs binaries into live rootfs (provides mkfs.xfs for formatting)
-                        if ! (cd "$rootfs_mnt" && sudo rpm2cpio "$rpm_tmp"/xfsprogs-*.rpm | sudo cpio -idmu 2>/dev/null); then
-                            xfs_ok=false
-                        fi
-                        # Add all RPMs (xfsprogs + deps) to offline repo so Anaconda can resolve them
-                        local offline_repo="$rootfs_mnt/opt/azl-offline-repo"
-                        if sudo test -d "$offline_repo"; then
-                            sudo cp "$rpm_tmp"/*.rpm "$offline_repo/"
-                            # Regenerate repo metadata
-                            if sudo chroot "$rootfs_mnt" createrepo_c /opt/azl-offline-repo >/dev/null 2>&1 \
-                               || sudo createrepo_c "$offline_repo" >/dev/null 2>&1; then
-                                :
-                            else
-                                # Fallback: update repodata with modifyrepo or simple re-index
-                                print_warning "Could not regenerate repo metadata. Trying rpm-based approach..."
-                                sudo chroot "$rootfs_mnt" rpm -ivh --justdb /opt/azl-offline-repo/xfsprogs*.rpm 2>/dev/null || true
-                            fi
-                        else
-                            xfs_ok=false
-                            print_warning "Offline repo not found at /opt/azl-offline-repo/"
-                        fi
-                        if $xfs_ok; then
-                            print_task_done
-                        else
-                            print_task_fail
-                            print_warning "Failed to install xfsprogs RPMs. XFS will not be available during install."
-                        fi
-                    else
-                        print_task_fail
-                        print_warning "Failed to download xfsprogs. XFS will not be available during install."
-                    fi
-                    rm -rf "$rpm_tmp"
-
-                    sudo umount "$rootfs_mnt"
-                else
-                    print_task_fail
-                    print_warning "Failed to mount rootfs.img."
-                fi
-            fi
-
-            print_task "Rebuilding patched squashfs (this may take a few minutes)..."
-            sudo mkdir -p "$patched_squashfs_dir"
-            if sudo mksquashfs "$squash_tmp" "$patched_squashfs" -noappend -comp zstd -quiet -no-progress; then
-                sudo chown "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "$patched_squashfs_dir" "$patched_squashfs"
-                print_task_done
-            else
-                print_task_fail
-                print_warning "Failed to create patched squashfs. PXE kickstart automation will not work."
-            fi
-
-            sudo rm -rf "$squash_tmp" "$rootfs_mnt"
-        fi
-    fi
-
     print_success "Setup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
 }
 
@@ -859,14 +720,6 @@ fn_cleanup_distro() {
     # Remove mount directory
     if [[ -d "$mount_dir" ]]; then
         sudo rm -rf "$mount_dir"
-    fi
-
-    # Remove patched squashfs (Azure Linux)
-    local patched_squashfs_dir="/tux2lab-data/os-repos/${distro}/${version}-live"
-    if [[ -d "$patched_squashfs_dir" ]]; then
-        print_task "Removing patched squashfs..."
-        sudo rm -rf "$patched_squashfs_dir"
-        print_task_done
     fi
 
     # Remove ISO file
