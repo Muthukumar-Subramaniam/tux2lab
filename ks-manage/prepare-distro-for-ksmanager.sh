@@ -312,7 +312,7 @@ fn_list_distros() {
                 distro_label=""
                 distro_id_label=""
             fi
-            printf "${MAKE_IT_GREEN}%-${col_distro}s %-${col_id}s${RESET_COLOR} %-${col_ver}s %s %s\n" "$distro_label" "$distro_id_label" "$ver" "$pxe_status" "$golden_status"
+            printf "%-${col_distro}s %-${col_id}s %-${col_ver}s %s %s\n" "$distro_label" "$distro_id_label" "$ver" "$pxe_status" "$golden_status"
         done
     done
 }

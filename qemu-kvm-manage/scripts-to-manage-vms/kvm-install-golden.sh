@@ -107,31 +107,57 @@ if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
         CMDLINE_VERSION_TYPE="${GOLDEN_IMAGES_AVAILABLE[0]#*:}"
         print_info "Using golden image: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
     else
-        # Present interactive menu
-        echo "Select golden image to deploy:"
-        idx=1
-        for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
-            gi_distro="${entry%%:*}"
-            gi_version="${entry#*:}"
-            printf "  %d)  %-30s (version %s)\n" "$idx" "${DISTRO_DISPLAY_NAMES[$gi_distro]}" "$gi_version"
-            idx=$((idx + 1))
-        done
-        printf "  q)  Quit\n"
+        # If distro is known, show simple version prompt
+        if [[ -n "$CMDLINE_OS_DISTRO" ]]; then
+            local_versions=""
+            for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                local_versions+="${entry#*:} "
+            done
+            local_versions=$(echo "$local_versions" | tr ' ' '\n' | sort -V | tr '\n' ' ')
+            _display="${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]:-$CMDLINE_OS_DISTRO}"
+            while true; do
+                echo "Available golden image versions for ${_display}: ${local_versions}"
+                echo -n "Enter the version: "
+                read -r _ver_input
+                if [[ "$_ver_input" == "q" || "$_ver_input" == "Q" ]]; then
+                    exit 130
+                fi
+                for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                    if [[ "${entry#*:}" == "$_ver_input" ]]; then
+                        CMDLINE_OS_DISTRO="${entry%%:*}"
+                        CMDLINE_VERSION_TYPE="$_ver_input"
+                        break 2
+                    fi
+                done
+                print_error "Invalid version '${_ver_input}'. Please try again."
+            done
+        else
+            # No distro specified — show full golden image menu
+            echo "Select golden image to deploy:"
+            idx=1
+            for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                gi_distro="${entry%%:*}"
+                gi_version="${entry#*:}"
+                printf "  %d)  %-24s %s\n" "$idx" "${DISTRO_DISPLAY_NAMES[$gi_distro]}" "$gi_version"
+                idx=$((idx + 1))
+            done
+            printf "  q)  Quit\n"
 
-        while true; do
-            read -rp "Enter option number: " gi_choice
-            if [[ "$gi_choice" == "q" || "$gi_choice" == "Q" ]]; then
-                print_info "Installation cancelled."
-                exit 0
-            fi
-            if [[ "$gi_choice" =~ ^[0-9]+$ ]] && (( gi_choice >= 1 && gi_choice <= ${#GOLDEN_IMAGES_AVAILABLE[@]} )); then
-                selected="${GOLDEN_IMAGES_AVAILABLE[$((gi_choice - 1))]}"
-                CMDLINE_OS_DISTRO="${selected%%:*}"
-                CMDLINE_VERSION_TYPE="${selected#*:}"
-                break
-            fi
-            print_warning "Invalid choice. Please enter a number between 1 and ${#GOLDEN_IMAGES_AVAILABLE[@]}, or 'q' to quit."
-        done
+            while true; do
+                read -rp "Enter option number: " gi_choice
+                if [[ "$gi_choice" == "q" || "$gi_choice" == "Q" ]]; then
+                    print_info "Installation cancelled."
+                    exit 0
+                fi
+                if [[ "$gi_choice" =~ ^[0-9]+$ ]] && (( gi_choice >= 1 && gi_choice <= ${#GOLDEN_IMAGES_AVAILABLE[@]} )); then
+                    selected="${GOLDEN_IMAGES_AVAILABLE[$((gi_choice - 1))]}"
+                    CMDLINE_OS_DISTRO="${selected%%:*}"
+                    CMDLINE_VERSION_TYPE="${selected#*:}"
+                    break
+                fi
+                print_error "Invalid option. Please try again."
+            done
+        fi
         print_info "Selected: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
     fi
 fi
