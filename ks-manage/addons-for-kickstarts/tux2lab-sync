@@ -1,0 +1,114 @@
+#!/bin/bash
+# tux2lab-sync — Syncs lab configuration from the tux2lab-engine server.
+# Runs periodically via systemd timer, or manually by the user.
+# Only logs and outputs when changes are detected.
+#
+# Syncs: password hash, SSH keys, CA certificate, RHEL subscription
+
+# Requires root — re-exec with sudo if needed
+if [[ $EUID -ne 0 ]]; then
+    exec sudo "$0" "$@"
+fi
+
+LAB_SERVER="get_lab_infra_server_hostname"
+LAB_CONFIG_URL="http://${LAB_SERVER}/lab-config"
+ADMIN_USER="get_mgmt_super_user"
+DISTRO_ID="get_os_distribution"
+
+changed=false
+
+log_change() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    changed=true
+}
+
+# 1. Password hash sync
+current_hash=$(curl -fsSL "${LAB_CONFIG_URL}/shadow-hash" 2>/dev/null) || true
+if [[ -n "$current_hash" ]]; then
+    existing_hash=$(awk -F: -v user="root" '$1==user{print $2}' /etc/shadow)
+    if [[ "$current_hash" != "$existing_hash" ]]; then
+        echo "root:${current_hash}" | chpasswd -e
+        echo "${ADMIN_USER}:${current_hash}" | chpasswd -e
+        log_change "Password hash updated for root and ${ADMIN_USER}"
+    fi
+fi
+
+# 2. SSH authorized_keys sync
+current_authkeys=$(curl -fsSL "${LAB_CONFIG_URL}/ssh-keys/authorized_keys" 2>/dev/null) || true
+if [[ -n "$current_authkeys" ]]; then
+    existing_authkeys=$(cat /home/${ADMIN_USER}/.ssh/authorized_keys 2>/dev/null) || true
+    if [[ "$current_authkeys" != "$existing_authkeys" ]]; then
+        echo "$current_authkeys" > /home/${ADMIN_USER}/.ssh/authorized_keys
+        echo "$current_authkeys" > /root/.ssh/authorized_keys
+        chmod 600 /home/${ADMIN_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys
+        chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/authorized_keys
+        log_change "SSH authorized_keys updated"
+    fi
+fi
+
+# 3. SSH private key sync
+current_privkey=$(curl -fsSL "${LAB_CONFIG_URL}/ssh-keys/tux2lab_id_rsa" 2>/dev/null) || true
+if [[ -n "$current_privkey" ]]; then
+    existing_privkey=$(cat /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa 2>/dev/null) || true
+    if [[ "$current_privkey" != "$existing_privkey" ]]; then
+        echo "$current_privkey" > /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
+        echo "$current_privkey" > /root/.ssh/tux2lab_id_rsa
+        chmod 600 /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
+        chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
+        log_change "SSH private key updated"
+    fi
+fi
+
+# 4. SSH public key sync
+current_pubkey=$(curl -fsSL "${LAB_CONFIG_URL}/ssh-keys/tux2lab_id_rsa.pub" 2>/dev/null) || true
+if [[ -n "$current_pubkey" ]]; then
+    existing_pubkey=$(cat /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub 2>/dev/null) || true
+    if [[ "$current_pubkey" != "$existing_pubkey" ]]; then
+        echo "$current_pubkey" > /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub
+        echo "$current_pubkey" > /root/.ssh/tux2lab_id_rsa.pub
+        chmod 644 /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
+        chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub
+        log_change "SSH public key updated"
+    fi
+fi
+
+# 5. CA certificate sync
+current_cert=$(curl -fsSL "${LAB_CONFIG_URL}/certs/tux2lab-nginx-selfsigned.crt" 2>/dev/null) || true
+if [[ -n "$current_cert" ]]; then
+    if [[ "$DISTRO_ID" == "opensuse-leap" ]]; then
+        cert_path="/etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt"
+        update_cmd="update-ca-certificates"
+    elif [[ "$DISTRO_ID" == "ubuntu-lts" ]] || [[ "$DISTRO_ID" == "debian" ]]; then
+        cert_path="/usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt"
+        update_cmd="update-ca-certificates"
+    else
+        cert_path="/etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt"
+        update_cmd="update-ca-trust"
+    fi
+    existing_cert=$(cat "$cert_path" 2>/dev/null) || true
+    if [[ "$current_cert" != "$existing_cert" ]]; then
+        echo "$current_cert" > "$cert_path"
+        $update_cmd >/dev/null 2>&1 || true
+        log_change "CA certificate updated"
+    fi
+fi
+
+# 6. RHEL subscription check (RHEL only)
+if [[ "$DISTRO_ID" == "rhel" ]] && command -v subscription-manager &>/dev/null; then
+    if ! subscription-manager identity &>/dev/null; then
+        rhel_sub_conf=$(curl -fsSL "${LAB_CONFIG_URL}/rhel-subscription.conf" 2>/dev/null) || true
+        if [[ -n "$rhel_sub_conf" ]]; then
+            eval "$rhel_sub_conf"
+            if subscription-manager register --org="${RHEL_ORG_ID}" --activationkey="${RHEL_ACTIVATION_KEY}" >/dev/null 2>&1; then
+                log_change "RHEL subscription re-registered"
+            fi
+        fi
+    fi
+fi
+
+# Output for manual runs
+if [[ -t 1 ]] && [[ "$changed" == "false" ]]; then
+    echo "Everything is up to date."
+    last_run=$(systemctl show tux2lab-sync.service --property=ExecMainExitTimestamp --value 2>/dev/null | grep -v '^$')
+    [[ -n "$last_run" ]] && echo "Last sync: ${last_run}"
+fi

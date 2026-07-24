@@ -1,0 +1,11 @@
+[Unit]
+Description=tux2lab configuration sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tux2lab-sync
+
+[Install]
+WantedBy=multi-user.target

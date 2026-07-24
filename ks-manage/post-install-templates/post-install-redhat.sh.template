@@ -138,7 +138,24 @@ EMBED_EOF
 fi
 
 ######################################################################
-# 9. SSH client config
+# 9. tux2lab-sync agent (periodic config sync from lab server)
+######################################################################
+cat > /usr/local/bin/tux2lab-sync << 'EMBED_EOF'
+EMBED_CONTENT:tux2lab-sync
+EMBED_EOF
+/bin/chmod +x /usr/local/bin/tux2lab-sync
+
+cat > /etc/systemd/system/tux2lab-sync.service << 'EMBED_EOF'
+EMBED_CONTENT:tux2lab-sync.service
+EMBED_EOF
+
+cat > /etc/systemd/system/tux2lab-sync.timer << 'EMBED_EOF'
+EMBED_CONTENT:tux2lab-sync.timer
+EMBED_EOF
+/usr/bin/systemctl enable tux2lab-sync.timer
+
+######################################################################
+# 10. SSH client config
 ######################################################################
 /bin/mkdir -p /etc/ssh/ssh_config.d
 /usr/bin/cat << EOF > /etc/ssh/ssh_config.d/999-tux2lab.conf

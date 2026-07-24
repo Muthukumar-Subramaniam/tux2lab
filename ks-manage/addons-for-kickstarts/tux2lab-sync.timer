@@ -1,0 +1,9 @@
+[Unit]
+Description=tux2lab configuration sync timer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
