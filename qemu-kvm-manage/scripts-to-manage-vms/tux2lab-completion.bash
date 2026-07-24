@@ -22,7 +22,7 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Top-level commands
-    local commands="vm golden-image distro ipv6-route deploy destroy rebuild sync start stop enable disable health info dns version"
+    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild sync start stop enable disable health info dns version"
 
     # Top-level options
     local options="-h --help -v --version"
@@ -38,6 +38,9 @@ _tux2lab_completions() {
 
     # IPv6 route subcommands
     local ipv6_route_subcommands="enable disable check auto status"
+
+    # Credentials subcommands
+    local credentials_subcommands="show password ssh-keys cert rhel-subscription"
 
     # Distro names and versions (sourced from single source of truth)
     # Unset guard so re-sourcing works (declare -A is function-local, doesn't persist)
@@ -333,6 +336,19 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
             else
                 COMPREPLY=( $(compgen -W "${ipv6_route_subcommands}" -- "${cur}") )
+            fi
+            return 0
+        fi
+        return 0
+    fi
+
+    # ===== CREDENTIALS COMMAND =====
+    if [[ "${cmd}" == "credentials" ]]; then
+        if [[ ${COMP_CWORD} -eq 2 ]]; then
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "${credentials_subcommands}" -- "${cur}") )
             fi
             return 0
         fi

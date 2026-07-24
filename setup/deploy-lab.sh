@@ -275,7 +275,7 @@ generate_ssh_keys() {
         return
     fi
 
-    ssh-keygen -t rsa -b 4096 -N "" -f "$key_file" -C "${ADMIN_DOMAIN}" &>/dev/null
+    ssh-keygen -t ed25519 -N "" -f "$key_file" -C "${ADMIN_DOMAIN}" &>/dev/null
     cp "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
     # Lab keys are served via HTTP to VMs — readable by nginx
     chmod 644 "$key_file" "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
@@ -287,12 +287,11 @@ generate_ssh_keys() {
     cp "${key_file}.pub" "${host_ssh_dir}/tux2lab_id_rsa.pub"
     chmod 600 "${host_ssh_dir}/tux2lab_id_rsa"
 
-    # Add to authorized_keys on host
+    # Add to authorized_keys on host (replace old lab key if present, else append)
     local auth_keys="${host_ssh_dir}/authorized_keys"
     touch "$auth_keys" && chmod 600 "$auth_keys"
-    if ! grep -qF "$(cat "${key_file}.pub")" "$auth_keys" 2>/dev/null; then
-        cat "${key_file}.pub" >> "$auth_keys"
-    fi
+    sed -i "/ ${ADMIN_DOMAIN}$/d" "$auth_keys"
+    cat "${key_file}.pub" >> "$auth_keys"
 
     print_task_done
     print_info "SSH keys generated at ${SSH_KEYS_DIR}/"
@@ -384,10 +383,6 @@ generate_lab_environment_json() {
     "username": "${ADMIN_USERNAME}",
     "password_hash": "${ADMIN_PASSWORD_HASH}",
     "shell": "/bin/bash"
-  },
-  "rhel": {
-    "org_id": "",
-    "activation_key": ""
   }
 }
 EOF

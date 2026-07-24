@@ -47,6 +47,7 @@ LAB OPERATIONS:
     disable          Disable lab infrastructure auto-start on boot
     health           Check lab infrastructure health
     info             Display lab deployment information
+    credentials      Manage lab credentials (password, SSH keys, cert)
 
 LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
@@ -124,6 +125,9 @@ main() {
             ;;
         info)
             exec "$SCRIPT_DIR/info.sh" "$@"
+            ;;
+        credentials)
+            exec "$SCRIPT_DIR/credentials.sh" "$@"
             ;;
         *)
             print_error "Unknown command: $command"

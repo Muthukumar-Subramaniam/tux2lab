@@ -76,7 +76,16 @@ else
     exit 1
 fi
 
-# ====== STEP 2: Regenerate DNS (if zone files need update) ======
+# ====== STEP 2: Sync lab credentials to KVM host ======
+print_task "Syncing lab credentials to host..."
+source /tux2lab/shared-functions/sync-credentials-to-host.sh
+if sync_credentials_to_host; then
+    print_task_done
+else
+    print_task_skip
+fi
+
+# ====== STEP 3: Refreshing DNS configuration ======
 print_task "Refreshing DNS configuration..."
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     sudo podman exec "${CONTAINER_NAME}" rndc reload &>/dev/null || true
@@ -98,7 +107,7 @@ if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp-lease156.${pool_domain}
     print_task_done
 fi
 
-# ====== STEP 3: Pull latest container image ======
+# ====== STEP 4: Pull latest container image ======
 container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
 container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
 container_image=""
@@ -145,7 +154,7 @@ printf "\r\033[K"
 printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
 print_task_done
 
-# ====== STEP 4: Recreate container ======
+# ====== STEP 5: Recreate container ======
 print_task "Recreating tux2lab-engine container..."
 recreate_start=$SECONDS
 
@@ -187,11 +196,11 @@ else
     exit 1
 fi
 
-# ====== STEP 5: Restart NFS on host ======
+# ====== STEP 6: Restart NFS on host ======
 source /tux2lab/shared-functions/host-nfs.sh
 restart_host_nfs
 
-# ====== STEP 6: Ensure bridge firewall is open ======
+# ====== STEP 7: Ensure bridge firewall is open ======
 source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
 
