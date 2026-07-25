@@ -45,6 +45,9 @@ apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
     rsync netcat-openbsd lsof
+# Remove kdump packages to prevent crashkernel from wasting RAM on lab VMs
+apt-get remove -y kdump-tools linux-crashdump 2>/dev/null || true
+rm -f /etc/default/grub.d/kdump-tools.cfg
 apt-get dist-upgrade -y
 apt-get autoremove --purge -y
 apt-get clean

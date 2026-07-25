@@ -22,7 +22,7 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Top-level commands
-    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild sync start stop enable disable health info dns version"
+    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild start stop enable disable health info dns version"
 
     # Top-level options
     local options="-h --help -v --version"
@@ -462,7 +462,7 @@ _tux2lab_completions() {
 
     # ===== REBUILD COMMAND =====
     if [[ "${cmd}" == "rebuild" ]]; then
-        local all_opts="--clean-state -h --help"
+        local all_opts="--pull-image -y --yes -h --help"
         local opts=""
         for opt in $all_opts; do
             local already_used=false

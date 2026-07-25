@@ -271,9 +271,9 @@ tux2lab enable                    Enable lab infrastructure auto-start on boot
 tux2lab disable                   Disable lab infrastructure auto-start on boot
 tux2lab health                    Check all lab service health
 tux2lab deploy                    Deploy a new lab infrastructure server
+tux2lab rebuild                   Regenerate configs and recreate container
+tux2lab rebuild --pull-image       Also pull latest container image from registry
 tux2lab destroy                   Permanently destroy the entire lab environment
-tux2lab rebuild                   Tear down and redeploy lab using existing config
-tux2lab sync                      Sync project updates into the running lab
 tux2lab info                      Show lab deployment details
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab ipv6-route enable         Add IPv6 route to lab network

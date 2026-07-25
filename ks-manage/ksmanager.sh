@@ -1773,6 +1773,7 @@ fi
 
 # Update central hosts.json registry
 if [[ -n "$provision_json" ]]; then
+    print_task "Updating provisioning registry..."
     if fn_acquire_mac_cache_lock; then
         hosts_json_tmp="${hosts_json_file}.tmp.$$"
         if [[ -f "$hosts_json_file" ]]; then
@@ -1788,6 +1789,7 @@ if [[ -n "$provision_json" ]]; then
         fn_chown_if_exists "$hosts_json_file"
         fn_release_mac_cache_lock
     fi
+    print_task_done
 fi
 
 if ! $invoked_with_golden_image; then

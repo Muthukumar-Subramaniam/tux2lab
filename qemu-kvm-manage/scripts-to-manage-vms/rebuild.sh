@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Script Name: rebuild.sh                                                               #
-# Description: Recreate the tux2lab-engine container using local image and existing config#
+# Description: Regenerate configs, pull image, and recreate tux2lab-engine container     #
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#
@@ -13,39 +13,37 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 # ====== HELP ======
 if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
     print_cyan "USAGE:
-    tux2lab rebuild [-y]
+    tux2lab rebuild [OPTIONS]
 
 DESCRIPTION:
-    Regenerates service configurations and recreates the tux2lab-engine
-    container using the locally available image. Does NOT pull a new image.
+    Regenerates service configurations from lab_environment.json, syncs
+    credentials to the host, pulls the latest container image, and recreates
+    the tux2lab-engine container.
 
-    Use this when you want to quickly restart the container with updated
-    configs without fetching anything from the registry. For pulling the
-    latest image, use 'tux2lab sync' instead.
+    Use after pulling project updates (git pull) or changing lab configs.
 
     This command does NOT touch:
       - Guest virtual machines
-      - DNS zone files / host records
+      - DNS host records
       - Lab configuration (lab_environment.json)
-      - SSH keys, certificates, ISOs, golden images
+      - ISOs, golden images
 
 OPTIONS:
-    -y, --yes    Skip confirmation prompt
-    -h, --help   Show this help message"
+    --pull-image     Pull latest container image from registry
+    -y, --yes        Skip confirmation prompt
+    -h, --help       Show this help message"
     exit 0
 fi
 
 skip_confirm=false
-if [[ "${1:-}" == "-y" ]] || [[ "${1:-}" == "--yes" ]]; then
-    skip_confirm=true
-    shift
-fi
-
-if [[ $# -gt 0 ]]; then
-    print_error "Unknown argument: $1"
-    echo "Run 'tux2lab rebuild --help' for usage information."
-    exit 1
-fi
+pull_image=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y|--yes) skip_confirm=true; shift ;;
+        --pull-image) pull_image=true; shift ;;
+        *) print_error "Unknown argument: $1"; echo "Run 'tux2lab rebuild --help' for usage."; exit 1 ;;
+    esac
+done
 
 # ====== VALIDATE ======
 if [[ ! -f "${LAB_ENV_JSON}" ]]; then
@@ -55,12 +53,25 @@ fi
 
 # ====== VERSION + INFO ======
 local_version=$(jq -r '.version' /tux2lab/project_version.json)
-print_info "Rebuilding tux2lab-engine v${local_version} from local image..."
+print_info "Rebuilding tux2lab v${local_version}..."
+
+# Auto-detect version mismatch: if running container's image tag doesn't match project version, pull
+if [[ "$pull_image" != "true" ]]; then
+    current_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "")
+    if [[ -n "$current_image" ]] && [[ "$current_image" != *":${local_version}" ]]; then
+        print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
+        pull_image=true
+    fi
+fi
 
 # ====== CONFIRM ======
 if [[ "${skip_confirm}" != "true" ]]; then
-    print_warning "This will recreate the tux2lab-engine container and restart NFS."
-    print_warning "Running VMs will NOT be affected."
+    if [[ "$pull_image" == "true" ]]; then
+        print_warning "This will regenerate service configs, pull the latest image, recreate the container, and restart NFS."
+    else
+        print_warning "This will regenerate service configs, recreate the container from the local image, and restart NFS."
+    fi
+    print_warning "Running VMs will NOT be affected, but lab services (DNS, DHCP, NTP, NFS, HTTP, TFTP) will have a brief disruption."
     read -rp "Continue? (yes/no): " confirm
     if [[ "${confirm}" != "yes" ]]; then
         print_info "Aborted."
@@ -110,12 +121,61 @@ if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp-lease156.${pool_domain}
     print_task_done
 fi
 
-# ====== STEP 4: Recreate container from local image ======
+# ====== STEP 4: Pull container image (if needed) ======
+container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
+container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
+container_image=""
+
+if [[ "$pull_image" != "true" ]]; then
+    # Use existing local image
+    container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "${container_image_primary}")
+else
+    print_task "Pulling tux2lab-engine container image..."
+    pull_start=$SECONDS
+
+    sudo podman pull "${container_image_primary}" &>/dev/null &
+    pull_pid=$!
+    pull_elapsed=0
+    while kill -0 "$pull_pid" 2>/dev/null; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+        sleep 1
+        pull_elapsed=$((SECONDS - pull_start))
+    done
+
+    if wait "$pull_pid"; then
+        container_image="${container_image_primary}"
+    else
+        # Fallback to Docker Hub
+        pull_start=$SECONDS
+        sudo podman pull "${container_image_fallback}" &>/dev/null &
+        pull_pid=$!
+        pull_elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null; do
+            printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+            sleep 1
+            pull_elapsed=$((SECONDS - pull_start))
+        done
+
+        if wait "$pull_pid"; then
+            container_image="${container_image_fallback}"
+        else
+            printf "\r\033[K"
+            print_task "Pulling tux2lab-engine container image..."
+            print_task_fail
+            print_error "Failed to pull from both registries."
+            exit 1
+        fi
+    fi
+
+    pull_elapsed=$((SECONDS - pull_start))
+    printf "\r\033[K"
+    printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
+    print_task_done
+fi
+
+# ====== STEP 5: Recreate container ======
 print_task "Recreating tux2lab-engine container..."
 recreate_start=$SECONDS
-
-# Resolve container image from current container
-container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}")
 
 # Read required variables from lab environment
 ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
@@ -155,14 +215,14 @@ else
     exit 1
 fi
 
-# ====== STEP 5: Restart NFS on host ======
+# ====== STEP 6: Restart NFS on host ======
 source /tux2lab/shared-functions/host-nfs.sh
 restart_host_nfs
 
-# ====== STEP 6: Ensure bridge firewall is open ======
+# ====== STEP 7: Ensure bridge firewall is open ======
 source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
 
 # ====== DONE ======
-print_success "Rebuild complete. Container recreated from local image."
+print_success "Rebuild complete. Lab services updated to v${local_version}."
 print_info "Run 'tux2lab health' to verify all services."

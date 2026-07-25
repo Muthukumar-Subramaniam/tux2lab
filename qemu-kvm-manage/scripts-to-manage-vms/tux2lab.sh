@@ -51,9 +51,8 @@ LAB OPERATIONS:
 
 LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
+    rebuild          Regenerate configs and recreate container
     destroy          Permanently destroy the entire lab environment
-    rebuild          Tear down and redeploy lab using existing config
-    sync             Sync project updates into the running lab
 
 OPTIONS:
     -h, --help       Show this help message
@@ -118,7 +117,8 @@ main() {
             exec "$SCRIPT_DIR/rebuild.sh" "$@"
             ;;
         sync)
-            exec "$SCRIPT_DIR/sync.sh" "$@"
+            # Deprecated alias — redirect to rebuild
+            exec "$SCRIPT_DIR/rebuild.sh" "$@"
             ;;
         ipv6-route)
             exec "$SCRIPT_DIR/ipv6-route.sh" "$@"

@@ -625,10 +625,12 @@ fi
 log "Starting SSH service with new host keys"
 if systemctl list-unit-files sshd.service 2>/dev/null | grep -q 'sshd.service'; then
 	log "Found sshd.service, enabling and starting..."
+	systemctl reset-failed sshd.service 2>/dev/null || true
 	systemctl enable sshd 2>/dev/null || true
 	systemctl start sshd && log "SSH service started successfully" || log "WARNING: SSH service start failed"
 elif systemctl list-unit-files ssh.service 2>/dev/null | grep -q 'ssh.service'; then
 	log "Found ssh.service, enabling and starting..."
+	systemctl reset-failed ssh.service 2>/dev/null || true
 	systemctl enable ssh 2>/dev/null || true
 	systemctl start ssh && log "SSH service started successfully" || log "WARNING: SSH service start failed"
 else
