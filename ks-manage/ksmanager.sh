@@ -287,7 +287,7 @@ fn_chown_if_exists() {
 
 fn_wait_for_dns_a_record() {
     local hostname="$1"
-    local max_retries=10
+    local max_retries="${2:-10}"
     local sleep_seconds=0.5
     local retry_count=0
 
@@ -351,7 +351,8 @@ fn_check_and_create_host_record() {
     # Extract short hostname for use with tools that need it
     kickstart_short_hostname="${kickstart_hostname%%.*}"
 
-    if ! fn_wait_for_dns_a_record "${kickstart_hostname}"
+    print_info "Checking DNS record for \"${kickstart_hostname}\"..."
+    if ! fn_wait_for_dns_a_record "${kickstart_hostname}" 2
     then
         print_info "No DNS record found for \"${kickstart_hostname}\"."
         
@@ -1459,9 +1460,12 @@ if ! $invoked_with_golden_image; then
 fi
 
 if $invoked_with_golden_image; then
+    print_task "Setting environment variables in network config..."
     fn_set_environment "${ksmanager_hub_dir}"/golden-boot-mac-configs/network-config-"${ipxe_cfg_mac_address}"
+    print_task_done
 fi
 
+print_task "Finalizing configuration files..."
 fn_chown_if_exists "${mac_cache_file}"
 fn_chown_if_exists "${host_kickstart_dir}"
 fn_chown_if_exists "${ksmanager_hub_dir}/addons-for-kickstarts"
@@ -1471,6 +1475,7 @@ fn_chown_if_exists "${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
 if $shared_lock_acquired; then
     fn_release_shared_artifacts_lock
 fi
+print_task_done
 
 fn_update_kea_dhcp_reservations() {
   print_task "Updating KEA DHCP reservations..."
