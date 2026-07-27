@@ -74,7 +74,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 | Red Hat-based | RHEL | 10, 9, 8 | Kickstart (via subscription-manager) |
 | Debian-based | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
 | Debian-based | Debian | 13, 12, 11 | Preseed (netboot) |
-| SUSE-based | openSUSE Leap | 16.0, 15.6 | Agama (16.0), AutoYaST (15.x) |
+| SUSE-based | openSUSE Leap | 16.0 | Agama |
 
 > Distros are set up automatically when needed — manual `tux2lab distro setup`
 > is optional (useful for pre-staging ISOs or managing disk space).

@@ -69,7 +69,8 @@
       "sw_management"
     ],
     "packages": [
-      "nfs-client"
+      "nfs-client",
+      "rsync"
     ]
   },
   "user": {

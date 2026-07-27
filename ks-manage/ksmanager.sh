@@ -1164,20 +1164,10 @@ fi
 
 if ! $invoked_with_golden_image; then
     if [[ "${os_distribution}" == "opensuse-leap" ]]; then
-        # Leap 16+ uses Agama JSON profile; 15.x uses AutoYaST XML
-        local_major_version="${version%%.*}"
-        if [[ "${local_major_version}" -ge 16 ]]; then
-            if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"; then
-                print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
-                fn_release_host_lock
-                exit 1
-            fi
-        else
-            if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-autoinst.xml" "${host_kickstart_dir}/${os_distribution}-${version}-autoinst.xml"; then
-                print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
-                fn_release_host_lock
-                exit 1
-            fi
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"; then
+            print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
         fi
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
         if ! rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
@@ -1315,7 +1305,6 @@ fn_generate_post_install_script() {
     fn_embed_file_content "${post_install_target}" "PS1-env-variable-root-user" "${addons_dir}/PS1-env-variable-root-user"
     fn_embed_file_content "${post_install_target}" "motd.txt" "${addons_dir}/motd.txt"
     fn_embed_file_content "${post_install_target}" "ca-cert" "/tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt"
-    fn_embed_file_content "${post_install_target}" "tux2lab-sync" "${addons_dir}/tux2lab-sync"
     fn_embed_file_content "${post_install_target}" "tux2lab-sync.service" "${addons_dir}/tux2lab-sync.service"
     fn_embed_file_content "${post_install_target}" "tux2lab-sync.timer" "${addons_dir}/tux2lab-sync.timer"
     fn_embed_file_content "${post_install_target}" "golden-image-setup.service" "${addons_dir}/golden-image-setup.service"
@@ -1434,13 +1423,9 @@ if ! $invoked_with_golden_image; then
     mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
 
     if [[ -z "${redhat_based_distro_name}" ]]; then
-        # For openSUSE Leap 16+, use the Agama-specific iPXE template
         local_ipxe_template="ipxe-template-${os_distribution}.ipxe"
         if [[ "${os_distribution}" == "opensuse-leap" ]]; then
-            local_major_version="${version%%.*}"
-            if [[ "${local_major_version}" -ge 16 ]]; then
-                local_ipxe_template="ipxe-template-opensuse-leap-16.ipxe"
-            fi
+            local_ipxe_template="ipxe-template-opensuse-leap-16.ipxe"
         fi
         if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/${local_ipxe_template}"  "${mac_based_ipxe_cfg_file}"; then
             print_error "Failed to copy iPXE template for ${os_distribution}"

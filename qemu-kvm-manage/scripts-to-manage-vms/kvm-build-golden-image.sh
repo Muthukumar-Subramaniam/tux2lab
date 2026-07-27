@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--version)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 15.6)."
+                print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 16.0)."
                 exit 1
             fi
             VERSION_TYPE="$2"
@@ -63,6 +63,15 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-ve
 select_distro_version "$OS_DISTRO" "$VERSION_TYPE"
 OS_DISTRO="$SELECTED_DISTRO"
 VERSION_TYPE="$SELECTED_VERSION"
+
+# Pre-flight: verify internet connectivity (golden image builds require package downloads)
+print_task "Checking internet connectivity..."
+if ! ping -4 -c1 -W3 8.8.8.8 &>/dev/null; then
+    print_task_fail
+    print_error "No internet connectivity. Golden image builds require internet access for package downloads."
+    exit 1
+fi
+print_task_done
 
 # Auto-setup distro if not prepared for PXE boot
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
@@ -123,6 +132,21 @@ fn_release_golden_build_lock() {
     rmdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null || true
 }
 
+fn_cleanup_on_interrupt() {
+    echo ""
+    print_error "Build interrupted. Cleaning up..."
+    sudo virsh destroy "$qemu_kvm_hostname" >/dev/null 2>&1 || true
+    sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true
+    [[ -n "${golden_image_path:-}" ]] && sudo rm -f "${golden_image_path}" 2>/dev/null || true
+    [[ -n "${NVRAM_PATH:-}" ]] && sudo rm -f "${NVRAM_PATH}" 2>/dev/null || true
+    if sudo virsh pool-info golden-images-disk-store >/dev/null 2>&1; then
+        sudo virsh pool-destroy golden-images-disk-store >/dev/null 2>&1 || true
+        sudo virsh pool-undefine golden-images-disk-store >/dev/null 2>&1 || true
+    fi
+    /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    fn_release_golden_build_lock
+}
+
 if ! mkdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null; then
     if [[ -f "${GOLDEN_BUILD_LOCK_DIR}/pid" ]]; then
         existing_pid=$(cat "${GOLDEN_BUILD_LOCK_DIR}/pid" 2>/dev/null)
@@ -142,8 +166,8 @@ fi
 
 printf '%s\n' "$$" > "${GOLDEN_BUILD_LOCK_DIR}/pid"
 trap 'fn_release_golden_build_lock' EXIT
-trap 'fn_release_golden_build_lock; trap - INT; kill -s INT $$' INT
-trap 'fn_release_golden_build_lock; trap - TERM; kill -s TERM $$' TERM
+trap 'fn_cleanup_on_interrupt; trap - INT; kill -s INT $$' INT
+trap 'fn_cleanup_on_interrupt; trap - TERM; kill -s TERM $$' TERM
 
 mkdir -p /tux2lab-data/golden-images-disk-store
 
@@ -163,7 +187,10 @@ DISK_PATH="${golden_image_path}"
 NVRAM_PATH="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}_VARS.fd"
 VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 
-# Run virt-install with console attachment (don't use shared function to avoid complexity)
+# Run virt-install in background (no console attachment)
+# --events on_reboot=destroy: when installer reboots, libvirt destroys the domain and
+# virt-install exits cleanly. This avoids hangs where QEMU fails to process the reset
+# signal (common with Ubuntu's squashfs/loop-device-heavy installer).
 if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MANAGER_DIR}/virt-install" \
     --name "${qemu_kvm_hostname}" \
     --features acpi=on,apic=on \
@@ -177,11 +204,11 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --machine q35 \
     --watchdog none \
     --cpu host-model \
+    --events on_reboot=destroy \
+    --noautoconsole \
     --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},nvram=${NVRAM_PATH},menu=on" \
-    --xml ./os/nvram/@format=raw; then
-    # Reset terminal state — serial console from guest can corrupt UTF-8 encoding
-    stty sane 2>/dev/null; printf '\033c' 2>/dev/null
-    print_error "VM installation failed. Cleaning up..."
+    --xml ./os/nvram/@format=raw >/dev/null; then
+    print_error "Failed to create VM. Cleaning up..."
     sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
     sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
@@ -189,17 +216,112 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     exit 1
 fi
 
-# Reset terminal state — serial console from guest can corrupt UTF-8 encoding
-stty sane 2>/dev/null; printf '\033c' 2>/dev/null
+# --- Stage 1: OS Installation ---
+print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_cyan "[Stage 1] OS Installation via PXE Network Boot"
+print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_yellow "  To monitor: tux2lab vm console -H ${qemu_kvm_hostname}"
+print_yellow "  This may take several minutes depending on the distribution and internet speed."
 
-print_info "VM installation of \"${qemu_kvm_hostname}\" completed."
+# Poll until VM is destroyed (on_reboot=destroy triggers after installer reboots)
+stage_start=$SECONDS
+network_detected=false
+while sudo virsh domstate "$qemu_kvm_hostname" &>/dev/null && \
+      [[ "$(sudo virsh domstate "$qemu_kvm_hostname" 2>/dev/null)" != "shut off" ]]; do
+    elapsed=$(( SECONDS - stage_start ))
+    minutes=$(( elapsed / 60 ))
+    seconds=$(( elapsed % 60 ))
 
-# Cleanup: destroy and undefine the temporary VM
+    if ! $network_detected; then
+        if ping -4 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null || ping -6 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null; then
+            network_detected=true
+        fi
+    fi
+
+    if $network_detected; then
+        printf "\r  Installation in progress... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+    else
+        printf "\r  Booting and loading installer... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+    fi
+
+    sleep 4
+
+    # Timeout: 30 minutes
+    if [[ $elapsed -ge 1800 ]]; then
+        echo ""
+        print_error "Stage 1 timed out after 30 minutes. Cleaning up..."
+        sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
+        sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
+        sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
+        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+        exit 1
+    fi
+done
+
+elapsed=$(( SECONDS - stage_start ))
+minutes=$(( elapsed / 60 ))
+seconds=$(( elapsed % 60 ))
+printf "\r\033[K"
+print_green "  ✓ OS installation completed (${minutes}m ${seconds}s)"
+
+# --- Stage 2: First-boot configuration ---
+print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_cyan "[Stage 2] First-boot and Golden Image Configuration"
+print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_yellow "  To monitor: tux2lab vm console -H ${qemu_kvm_hostname}"
+print_yellow "  This may take several minutes depending on the distribution and internet speed."
+
+# Start VM to boot from disk (golden-image-setup.service runs on first boot)
+if ! sudo virsh start "$qemu_kvm_hostname" >/dev/null 2>&1; then
+    print_error "Failed to start VM for first-boot configuration. Cleaning up..."
+    sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
+    sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
+    /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    exit 1
+fi
+
+# Poll until VM shuts off (golden-image-setup powers off when done)
+stage_start=$SECONDS
+network_detected=false
+while [[ "$(sudo virsh domstate "$qemu_kvm_hostname" 2>/dev/null)" != "shut off" ]]; do
+    elapsed=$(( SECONDS - stage_start ))
+    minutes=$(( elapsed / 60 ))
+    seconds=$(( elapsed % 60 ))
+
+    if ! $network_detected; then
+        if ping -4 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null || ping -6 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null; then
+            network_detected=true
+        fi
+    fi
+
+    if $network_detected; then
+        printf "\r  Configuration in progress... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+    else
+        printf "\r  Booting... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+    fi
+
+    sleep 4
+
+    # Timeout: 30 minutes
+    if [[ $elapsed -ge 1800 ]]; then
+        echo ""
+        print_error "Stage 2 timed out after 30 minutes. Cleaning up..."
+        sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
+        sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
+        sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
+        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+        exit 1
+    fi
+done
+
+elapsed=$(( SECONDS - stage_start ))
+minutes=$(( elapsed / 60 ))
+seconds=$(( elapsed % 60 ))
+printf "\r\033[K"
+print_green "  ✓ First-boot configuration completed (${minutes}m ${seconds}s)"
+
+# Cleanup: undefine the temporary VM (already shut off after golden-image-setup)
 print_info "Cleaning up temporary VM \"${qemu_kvm_hostname}\"..."
-
-# Destroy VM if running
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
-POWEROFF_VM_CONTEXT="Stopping temporary VM" poweroff_vm "$qemu_kvm_hostname"
 
 # Undefine VM
 if error_msg=$(sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>&1); then
@@ -220,4 +342,4 @@ if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
     print_warning "Could not clean up ksmanager databases."
 fi
 
-print_success "Golden image disk created successfully: ${golden_image_path}"
+print_success "Golden image created successfully for ${OS_DISTRO} ${VERSION_TYPE}"

@@ -10,10 +10,16 @@ if [[ $EUID -ne 0 ]]; then
     exec sudo "$0" "$@"
 fi
 
-LAB_SERVER="get_lab_infra_server_hostname"
+# Read config (created by post-install with lab-specific values)
+CONF="/etc/tux2lab-sync.conf"
+if [[ -f "$CONF" ]]; then
+    source "$CONF"
+else
+    echo "ERROR: ${CONF} not found. Cannot determine lab server." >&2
+    exit 1
+fi
+
 LAB_CONFIG_URL="http://${LAB_SERVER}/lab-config"
-ADMIN_USER="get_mgmt_super_user"
-DISTRO_ID="get_os_distribution"
 
 changed=false
 
@@ -106,9 +112,11 @@ if [[ "$DISTRO_ID" == "rhel" ]] && command -v subscription-manager &>/dev/null; 
     fi
 fi
 
-# Output for manual runs
-if [[ -t 1 ]] && [[ "$changed" == "false" ]]; then
-    echo "Everything is up to date."
-    last_run=$(systemctl show tux2lab-sync.service --property=ExecMainExitTimestamp --value 2>/dev/null | grep -v '^$')
-    [[ -n "$last_run" ]] && echo "Last sync: ${last_run}"
+# Status output (only when run interactively or invoked directly, not by timer)
+if [[ "$changed" == "false" ]]; then
+    if [[ -t 1 ]]; then
+        echo "already-in-sync"
+        last_run=$(systemctl show tux2lab-sync.service --property=ExecMainExitTimestamp --value 2>/dev/null | grep -v '^$')
+        [[ -n "$last_run" ]] && echo "Last sync: ${last_run}"
+    fi
 fi

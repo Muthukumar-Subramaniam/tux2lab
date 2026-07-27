@@ -24,7 +24,7 @@ Options:
   -c, --console        Attach console during installation (single VM only)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
+  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
   -h, --help           Show this help message
 
 Examples:

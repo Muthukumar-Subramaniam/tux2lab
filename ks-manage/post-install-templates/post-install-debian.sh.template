@@ -118,9 +118,14 @@ fi
 ######################################################################
 # 9. tux2lab-sync agent (periodic config sync from lab server)
 ######################################################################
-cat > /usr/local/bin/tux2lab-sync << 'EMBED_EOF'
-EMBED_CONTENT:tux2lab-sync
-EMBED_EOF
+cat > /etc/tux2lab-sync.conf << EOF
+LAB_SERVER="get_lab_infra_server_hostname"
+ADMIN_USER="get_mgmt_super_user"
+DISTRO_ID="get_os_distribution"
+EOF
+chmod 644 /etc/tux2lab-sync.conf
+
+curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" -o /usr/local/bin/tux2lab-sync
 chmod +x /usr/local/bin/tux2lab-sync
 
 cat > /etc/systemd/system/tux2lab-sync.service << 'EMBED_EOF'

@@ -71,19 +71,9 @@ iface eth0 inet dhcp
 EOF
 	fi
 elif grep -qi "suse" /etc/os-release; then
-if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
-	# Leap 16+ uses NetworkManager
-	nmcli connection delete eth0 2>/dev/null || true
-	nmcli connection add type ethernet con-name eth0 ifname eth0 \
-		ipv4.method auto connection.autoconnect yes
-else
-	# Leap 15.x uses wicked
-	cat << EOF > /etc/sysconfig/network/ifcfg-eth0
-BOOTPROTO='dhcp'
-STARTMODE='auto'
-ZONE='public'
-EOF
-fi
+nmcli connection delete eth0 2>/dev/null || true
+nmcli connection add type ethernet con-name eth0 ifname eth0 \
+	ipv4.method auto connection.autoconnect yes
 fi
 
 # 6. Remove systemd-networkd configs
@@ -107,14 +97,19 @@ ip link set dev eth0 down
 # 9. Touch a file to mark completion of this script
 touch /root/golden-image-setup-completed
 
-# 10. Stop syslog to prevent buffered messages from being written after truncation
+# 10. Reset GRUB environment to prevent "invalid environment block" on cloned VMs
+if command -v grub-editenv &>/dev/null; then
+	grub-editenv /boot/grub/grubenv create 2>/dev/null || true
+fi
+
+# 11. Stop syslog to prevent buffered messages from being written after truncation
 systemctl stop rsyslog 2>/dev/null || true
 
-# 11. Truncate all log files under /var/log
+# 12. Truncate all log files under /var/log
 find /var/log -type f -exec truncate -s 0 {} \;
 
-# 12. Clear journald persistent logs
+# 13. Clear journald persistent logs
 rm -rf /var/log/journal/*
 
-# 13. Final shutdown
+# 14. Final shutdown
 shutdown -h now

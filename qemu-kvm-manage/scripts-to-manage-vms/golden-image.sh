@@ -50,7 +50,7 @@ SUPPORTED DISTROS AND VERSIONS:
     rhel                        10, 9, 8
     ubuntu-lts                  26.04, 24.04, 22.04
     debian                      13, 12, 11
-    opensuse-leap               16.0, 15.6
+    opensuse-leap               16.0
 
 EXAMPLES:
     tux2lab golden-image list

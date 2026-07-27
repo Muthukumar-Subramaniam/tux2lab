@@ -17,16 +17,7 @@ echo "tux2lab post-install started: $(date)"
 ######################################################################
 # 2. Zypper repository management (deferred to first boot)
 ######################################################################
-# NOTE: zypper cannot run during AutoYaST post-scripts (YaST holds the lock).
 # All zypper operations are handled by tux2lab-zypper-firstboot.service instead.
-
-######################################################################
-# 3. Python3 symlink fix (15.6 only)
-######################################################################
-if [[ "get_version" == "15.6" ]]; then
-    /usr/bin/unlink /usr/bin/python3 2>/dev/null || true
-    /usr/bin/ln -s /usr/bin/python3.11 /usr/bin/python3
-fi
 
 ######################################################################
 # 4. SSH keys
@@ -92,9 +83,14 @@ EMBED_EOF
 ######################################################################
 # 10. tux2lab-sync agent (periodic config sync from lab server)
 ######################################################################
-cat > /usr/local/bin/tux2lab-sync << 'EMBED_EOF'
-EMBED_CONTENT:tux2lab-sync
-EMBED_EOF
+cat > /etc/tux2lab-sync.conf << EOF
+LAB_SERVER="get_lab_infra_server_hostname"
+ADMIN_USER="get_mgmt_super_user"
+DISTRO_ID="get_os_distribution"
+EOF
+chmod 644 /etc/tux2lab-sync.conf
+
+curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" -o /usr/local/bin/tux2lab-sync
 /bin/chmod +x /usr/local/bin/tux2lab-sync
 
 cat > /etc/systemd/system/tux2lab-sync.service << 'EMBED_EOF'
@@ -161,27 +157,12 @@ set -x
 LOG=/root/tux2lab-zypper-firstboot.log
 exec > >(tee -a "$LOG") 2>&1
 echo "zypper firstboot started: $(date)"
-# Detect openSUSE version for repo URL construction
-LEAP_VERSION=$(awk -F= '/^VERSION_ID/ {gsub(/"/, "", $2); print $2}' /etc/os-release)
-# Remove installation media repo (auto-added by YaST, useless after install)
-zypper repos --alias | awk -F'|' '/openSUSE-Leap-.*-[0-9]+/ {gsub(/^ +| +$/, "", $2); print $2}' | while read -r repo; do
+# Remove installation media repo left by Agama (hash-based alias, duplicate of repo-oss)
+zypper repos --alias | awk -F'|' '/https-download.opensuse.org-/ {gsub(/^ +| +$/, "", $2); print $2}' | while read -r repo; do
     zypper --non-interactive removerepo "$repo" && echo "Removed install media repo: $repo"
 done
-# Add missing standard repos if not present
-if ! zypper repos --alias | grep -q 'non-oss-repo'; then
-    zypper --non-interactive addrepo -f "https://download.opensuse.org/distribution/leap/${LEAP_VERSION}/repo/non-oss/" non-oss-repo
-fi
-if ! zypper repos --alias | grep -q 'repo-update'; then
-    zypper --non-interactive addrepo -f "https://download.opensuse.org/update/leap/${LEAP_VERSION}/oss/" repo-update
-fi
-if ! zypper repos --alias | grep -q 'repo-update-non-oss'; then
-    zypper --non-interactive addrepo -f "https://download.opensuse.org/update/leap/${LEAP_VERSION}/non-oss/" repo-update-non-oss
-fi
-# Disable expired EOL repos to suppress metadata warnings
-zypper repos | awk -F'|' '/Backports/ {gsub(/^ +| +$/, "", $2); print $2}' | while read -r repo; do
-    zypper --non-interactive modifyrepo --disable "$repo" && echo "Disabled expired repo: $repo"
-done
-zypper mr --no-refresh --all
+# Enable repo-non-oss (disabled by default in Agama minimal install)
+zypper --non-interactive modifyrepo --enable openSUSE:repo-non-oss 2>/dev/null && echo "Enabled repo-non-oss" || true
 zypper --non-interactive refresh
 zypper --non-interactive update --auto-agree-with-licenses
 touch /root/tux2lab-zypper-firstboot-done

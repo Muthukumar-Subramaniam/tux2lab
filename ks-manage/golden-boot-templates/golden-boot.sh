@@ -39,7 +39,20 @@ error_exit() {
 COMPLETION_MARKER="/root/golden-boot-completed"
 
 if [ -f "$COMPLETION_MARKER" ]; then
-	log "Golden boot already completed, exiting"
+	# Subsequent boots: download latest tux2lab-sync and run it
+	log "Subsequent boot detected, downloading latest tux2lab-sync"
+	if curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" \
+		-o /usr/local/bin/tux2lab-sync 2>/dev/null && chmod +x /usr/local/bin/tux2lab-sync; then
+		log "Download successful"
+	else
+		log "Download failed, using existing version"
+	fi
+	if [ -x /usr/local/bin/tux2lab-sync ]; then
+		log "Executing tux2lab-sync"
+		/usr/local/bin/tux2lab-sync
+	else
+		log "tux2lab-sync not found, skipping"
+	fi
 	exit 0
 fi
 
@@ -197,16 +210,11 @@ case "${DISTRO_FAMILY}" in
 	
 	opensuse)
 		log "Performing OpenSUSE network cleanup"
-		# Leap 16+ uses NetworkManager; 15.x uses wicked
-		if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
-			log "  NetworkManager detected (Leap 16+) - removing existing connections"
-			nmcli -t -f UUID,DEVICE connection show | while IFS=: read -r uuid dev; do
-				[[ "${dev}" == "lo" ]] && continue
-				nmcli connection delete uuid "${uuid}" 2>/dev/null || true
-			done
-		else
-			log "  Wicked detected (Leap 15.x) - minimal cleanup"
-		fi
+		log "  Removing existing NetworkManager connections"
+		nmcli -t -f UUID,DEVICE connection show | while IFS=: read -r uuid dev; do
+			[[ "${dev}" == "lo" ]] && continue
+			nmcli connection delete uuid "${uuid}" 2>/dev/null || true
+		done
 		;;
 esac
 
@@ -413,53 +421,22 @@ EOF
 		fi
 		log "  DNS: ${IPv4_DNS_SERVER}"
 		
-		if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager; then
-			# Leap 16+ uses NetworkManager
-			log "Using NetworkManager (Leap 16+)"
-			nmcli connection add type ethernet con-name eth0 ifname eth0 \
-				ipv4.method manual \
-				ipv4.addresses "${IPv4_ADDRESS}/${IPv4_CIDR}" \
-				ipv4.gateway "${IPv4_GATEWAY}" \
-				ipv4.dns "${IPv4_DNS_SERVER}" \
-				connection.autoconnect yes
-			if [ "$IPV6_ENABLED" = true ]; then
-				nmcli connection modify eth0 \
-					ipv6.method manual \
-					ipv6.addresses "${IPv6_ADDRESS}/${IPv6_PREFIX}" \
-					ipv6.dns "${IPv6_DNS_SERVER}"
-			fi
-			log "Activating NetworkManager connection"
-			if ! nmcli connection up eth0; then
-				error_exit "Failed to activate NetworkManager connection"
-			fi
-		else
-			# Leap 15.x uses wicked
-			log "Using wicked (Leap 15.x)"
-			if [ "$IPV6_ENABLED" = true ]; then
-				cat << EOF > /etc/sysconfig/network/ifcfg-eth0
-IPADDR='${IPv4_ADDRESS}/${IPv4_CIDR}'
-IPADDR_0='${IPv6_ADDRESS}/${IPv6_PREFIX}'
-BOOTPROTO='static'
-STARTMODE='auto'
-ZONE=public
-EOF
-			else
-				cat << EOF > /etc/sysconfig/network/ifcfg-eth0
-IPADDR='${IPv4_ADDRESS}/${IPv4_CIDR}'
-BOOTPROTO='static'
-STARTMODE='auto'
-ZONE=public
-EOF
-			fi
-			
-			cat << EOF > /etc/sysconfig/network/ifroute-eth0
-default ${IPv4_GATEWAY} - eth0
-EOF
-			
-			log "Restarting network service to apply configuration"
-			if ! systemctl restart network; then
-				error_exit "Failed to restart network service"
-			fi
+		log "Using NetworkManager"
+		nmcli connection add type ethernet con-name eth0 ifname eth0 \
+			ipv4.method manual \
+			ipv4.addresses "${IPv4_ADDRESS}/${IPv4_CIDR}" \
+			ipv4.gateway "${IPv4_GATEWAY}" \
+			ipv4.dns "${IPv4_DNS_SERVER}" \
+			connection.autoconnect yes
+		if [ "$IPV6_ENABLED" = true ]; then
+			nmcli connection modify eth0 \
+				ipv6.method manual \
+				ipv6.addresses "${IPv6_ADDRESS}/${IPv6_PREFIX}" \
+				ipv6.dns "${IPv6_DNS_SERVER}"
+		fi
+		log "Activating NetworkManager connection"
+		if ! nmcli connection up eth0; then
+			error_exit "Failed to activate NetworkManager connection"
 		fi
 		;;
 esac
@@ -640,7 +617,16 @@ fi
 log "Marking golden boot as completed"
 touch "$COMPLETION_MARKER"
 
-log "Disabling golden-boot.service to prevent future execution"
-systemctl disable golden-boot.service 2>/dev/null || true
+# Ensure tux2lab-sync config is current (write/overwrite with known-good values)
+cat > /etc/tux2lab-sync.conf << SYNCCONF
+LAB_SERVER="get_lab_infra_server_hostname"
+ADMIN_USER="get_mgmt_super_user"
+DISTRO_ID="get_os_distribution"
+SYNCCONF
+chmod 644 /etc/tux2lab-sync.conf
+
+# Download latest tux2lab-sync script from lab server
+curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" \
+    -o /usr/local/bin/tux2lab-sync 2>/dev/null && chmod +x /usr/local/bin/tux2lab-sync
 
 log "Golden boot configuration completed successfully for ${DISTRO_ID}"

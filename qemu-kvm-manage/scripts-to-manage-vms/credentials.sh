@@ -49,36 +49,36 @@ credentials_show() {
 
     # Password hash
     if [[ -f "${LAB_CONFIG_DIR}/shadow-hash" ]]; then
-        printf "Password hash:        ${MAKE_IT_GREEN}configured${RESET_COLOR}\n"
+        printf "Password hash:        "; print_green "configured"
     else
-        printf "Password hash:        ${MAKE_IT_YELLOW}not set${RESET_COLOR}\n"
+        printf "Password hash:        "; print_yellow "not set"
     fi
 
     # SSH keys
     if [[ -f "${LAB_CONFIG_DIR}/ssh-keys/tux2lab_id_rsa" ]]; then
         local fingerprint
         fingerprint=$(ssh-keygen -lf "${LAB_CONFIG_DIR}/ssh-keys/tux2lab_id_rsa.pub" 2>/dev/null | awk '{print $2}') || fingerprint="unknown"
-        printf "SSH key fingerprint:  ${MAKE_IT_GREEN}${fingerprint}${RESET_COLOR}\n"
+        printf "SSH key fingerprint:  "; print_green "${fingerprint}"
     else
-        printf "SSH keys:             ${MAKE_IT_YELLOW}not generated${RESET_COLOR}\n"
+        printf "SSH keys:             "; print_yellow "not generated"
     fi
 
     # CA certificate
     if [[ -f "${LAB_CONFIG_DIR}/certs/tux2lab-nginx-selfsigned.crt" ]]; then
         local expires
         expires=$(openssl x509 -enddate -noout -in "${LAB_CONFIG_DIR}/certs/tux2lab-nginx-selfsigned.crt" 2>/dev/null | cut -d= -f2) || expires="unknown"
-        printf "CA certificate:       ${MAKE_IT_GREEN}expires ${expires}${RESET_COLOR}\n"
+        printf "CA certificate:       "; print_green "expires ${expires}"
     else
-        printf "CA certificate:       ${MAKE_IT_YELLOW}not generated${RESET_COLOR}\n"
+        printf "CA certificate:       "; print_yellow "not generated"
     fi
 
     # RHEL subscription
     if [[ -f "${LAB_CONFIG_DIR}/rhel-subscription.conf" ]]; then
         local org_id
         org_id=$(grep "RHEL_ORG_ID=" "${LAB_CONFIG_DIR}/rhel-subscription.conf" | cut -d= -f2)
-        printf "RHEL subscription:    ${MAKE_IT_GREEN}configured (org: ${org_id})${RESET_COLOR}\n"
+        printf "RHEL subscription:    "; print_green "configured (org: ${org_id})"
     else
-        printf "RHEL subscription:    ${MAKE_IT_YELLOW}not configured${RESET_COLOR}\n"
+        printf "RHEL subscription:    "; print_yellow "not configured"
     fi
 }
 
