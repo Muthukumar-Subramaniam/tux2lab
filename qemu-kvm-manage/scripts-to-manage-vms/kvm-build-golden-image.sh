@@ -273,6 +273,12 @@ seconds=$(( elapsed % 60 ))
 printf "\r\033[K"
 print_green "  ✓ OS installation completed (${minutes}m ${seconds}s)"
 
+# Clean up PXE/DHCP/DNS configs between stages (prevents PXE re-boot in Stage 2)
+print_info "Cleaning up provisioning environment..."
+if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
+    print_warning "Could not clean up provisioning environment."
+fi
+
 # --- Stage 2: First-boot configuration ---
 print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 print_cyan "[Stage 2] First-boot and Golden Image Configuration"
@@ -317,25 +323,12 @@ printf "\r\033[K"
 print_green "  ✓ First-boot configuration completed (${minutes}m ${seconds}s)"
 
 # Cleanup: undefine the temporary VM (already shut off after golden-image-setup)
-print_info "Cleaning up temporary VM \"${qemu_kvm_hostname}\"..."
-
-# Undefine VM
-if error_msg=$(sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>&1); then
-    print_info "Temporary VM \"${qemu_kvm_hostname}\" cleaned up successfully."
-else
-    print_warning "Could not cleanup temporary VM \"${qemu_kvm_hostname}\": $error_msg"
+print_task "Cleaning up temporary VM..."
+sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true
+if sudo virsh pool-info golden-images-disk-store >/dev/null 2>&1; then
+    sudo virsh pool-destroy golden-images-disk-store >/dev/null 2>&1 || true
+    sudo virsh pool-undefine golden-images-disk-store >/dev/null 2>&1 || true
 fi
-
-# Remove auto-created storage pool (virt-install artifact, not needed)
-if sudo virsh pool-info golden-images-disk-store &>/dev/null; then
-    sudo virsh pool-destroy golden-images-disk-store &>/dev/null || true
-    sudo virsh pool-undefine golden-images-disk-store &>/dev/null || true
-fi
-
-# Clean up ksmanager databases (DNS, MAC cache, kickstart, iPXE, DHCP)
-print_info "Cleaning up ksmanager databases for temporary VM..."
-if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
-    print_warning "Could not clean up ksmanager databases."
-fi
+print_task_done
 
 print_success "Golden image created successfully for ${OS_DISTRO} ${VERSION_TYPE}"
