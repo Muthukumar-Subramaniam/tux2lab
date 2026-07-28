@@ -70,7 +70,8 @@
     ],
     "packages": [
       "nfs-client",
-      "rsync"
+      "rsync",
+      "hostname"
     ]
   },
   "user": {

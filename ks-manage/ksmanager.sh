@@ -1307,8 +1307,6 @@ fn_generate_post_install_script() {
     fn_embed_file_content "${post_install_target}" "ca-cert" "/tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt"
     fn_embed_file_content "${post_install_target}" "tux2lab-sync.service" "${addons_dir}/tux2lab-sync.service"
     fn_embed_file_content "${post_install_target}" "tux2lab-sync.timer" "${addons_dir}/tux2lab-sync.timer"
-    fn_embed_file_content "${post_install_target}" "golden-image-setup.service" "${addons_dir}/golden-image-setup.service"
-    fn_embed_file_content "${post_install_target}" "golden-image-setup.sh" "${addons_dir}/golden-image-setup.sh"
     fn_embed_file_content "${post_install_target}" "golden-boot.service" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service"
     fn_embed_file_content "${post_install_target}" "golden-boot.sh" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.sh"
 

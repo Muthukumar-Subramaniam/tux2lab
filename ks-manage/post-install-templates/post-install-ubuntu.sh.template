@@ -51,13 +51,9 @@ apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
     rsync netcat-openbsd lsof
-# Remove bloat before upgrade (saves downloading firmware/snap updates)
+# Remove bloat (firmware not needed in VMs, snapd/kdump unnecessary)
 apt-get remove --purge -y linux-firmware* snapd 2>/dev/null || true
-# Remove kdump packages to prevent crashkernel from wasting RAM on lab VMs
 apt-get remove --purge -y kdump-tools linux-crashdump 2>/dev/null || true
-apt-get autoremove --purge -y
-apt-get dist-upgrade -y
-# Remove crashkernel grub config that kernel postinst re-creates during upgrade
 rm -f /etc/default/grub.d/kdump-tools.cfg /etc/default/grub.d/kexec-tools.cfg
 apt-get autoremove --purge -y
 apt-get clean
@@ -140,16 +136,6 @@ echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 
-cat > /etc/systemd/system/golden-image-setup.service << 'EMBED_EOF'
-EMBED_CONTENT:golden-image-setup.service
-EMBED_EOF
-
-cat > /root/golden-image-setup.sh << 'EMBED_EOF'
-EMBED_CONTENT:golden-image-setup.sh
-EMBED_EOF
-chmod +x /root/golden-image-setup.sh
-ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
-
 cat > /etc/systemd/system/golden-boot.service << 'EMBED_EOF'
 EMBED_CONTENT:golden-boot.service
 EMBED_EOF
@@ -197,3 +183,29 @@ Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access
 EOF
 
 echo "tux2lab post-install completed: $(date)"
+
+######################################################################
+# Golden image final cleanup (must be last — truncates all logs)
+######################################################################
+if ! get_golden_image_creation_not_requested; then
+touch /root/golden-image-setup-completed
+rm -f /etc/machine-id /run/machine-id /var/lib/dbus/machine-id
+truncate -s 0 /etc/hostname
+rm -f /etc/ssh/ssh_host_*
+rm -f /etc/systemd/system/multi-user.target.wants/ssh.service 2>/dev/null
+rm -f /etc/systemd/system/sockets.target.wants/ssh.socket 2>/dev/null
+rm -rf /etc/netplan/*
+cat << EOF > /etc/netplan/50-golden-boot-dhcp.yaml
+network:
+    version: 2
+    ethernets:
+        golden-boot-dhcp:
+            match:
+                name: "e*"
+            dhcp4: true
+EOF
+chmod 600 /etc/netplan/50-golden-boot-dhcp.yaml
+rm -f /etc/systemd/network/*.link
+find /var/log -type f -exec truncate -s 0 {} \;
+rm -rf /var/log/journal/*
+fi

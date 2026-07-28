@@ -93,16 +93,6 @@ echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 
-cat > /etc/systemd/system/golden-image-setup.service << 'EMBED_EOF'
-EMBED_CONTENT:golden-image-setup.service
-EMBED_EOF
-
-cat > /root/golden-image-setup.sh << 'EMBED_EOF'
-EMBED_CONTENT:golden-image-setup.sh
-EMBED_EOF
-chmod +x /root/golden-image-setup.sh
-ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
-
 cat > /etc/systemd/system/golden-boot.service << 'EMBED_EOF'
 EMBED_CONTENT:golden-boot.service
 EMBED_EOF
@@ -149,12 +139,34 @@ Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access
   LogLevel QUIET
 EOF
 
-######################################################################
-# 10. kexec fast reboot
-######################################################################
 echo "tux2lab post-install completed: $(date)"
-KEXEC_KERNEL=$(ls -t /boot/vmlinuz-* 2>/dev/null | head -1)
-KEXEC_INITRD=$(ls -t /boot/initrd.img-* 2>/dev/null | head -1)
-if [[ -n "$KEXEC_KERNEL" && -n "$KEXEC_INITRD" ]]; then
-    kexec -l "$KEXEC_KERNEL" --initrd="$KEXEC_INITRD" --command-line="$(cat /proc/cmdline)" && systemctl kexec
+
+######################################################################
+# Golden image final cleanup (must be last — truncates all logs)
+######################################################################
+if ! get_golden_image_creation_not_requested; then
+touch /root/golden-image-setup-completed
+rm -f /etc/machine-id /run/machine-id /var/lib/dbus/machine-id
+truncate -s 0 /etc/hostname
+rm -f /etc/ssh/ssh_host_*
+rm -f /etc/systemd/system/multi-user.target.wants/ssh.service 2>/dev/null
+rm -f /etc/systemd/system/multi-user.target.wants/sshd.service 2>/dev/null
+# Debian (ifupdown): generic .link + DHCP for golden-boot
+rm -f /etc/systemd/network/7*-eth*.link 2>/dev/null
+cat << EOF > /etc/systemd/network/70-eth0.link
+[Match]
+Type=ether
+
+[Link]
+Name=eth0
+EOF
+cat << EOF > /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+EOF
+find /var/log -type f -exec truncate -s 0 {} \;
+rm -rf /var/log/journal/*
 fi

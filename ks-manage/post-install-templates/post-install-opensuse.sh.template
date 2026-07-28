@@ -137,23 +137,11 @@ zypper repos --alias | awk -F'|' '/https-download.opensuse.org-/ {gsub(/^ +| +$/
 done
 # Enable repo-non-oss (disabled by default in Agama minimal install)
 zypper --non-interactive modifyrepo --enable openSUSE:repo-non-oss 2>/dev/null && echo "Enabled repo-non-oss" || true
-zypper --non-interactive refresh
-zypper --non-interactive update --auto-agree-with-licenses
 
 ######################################################################
 # 14. Golden image setup (conditional)
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
-
-cat > /etc/systemd/system/golden-image-setup.service << 'EMBED_EOF'
-EMBED_CONTENT:golden-image-setup.service
-EMBED_EOF
-
-cat > /root/golden-image-setup.sh << 'EMBED_EOF'
-EMBED_CONTENT:golden-image-setup.sh
-EMBED_EOF
-/bin/chmod +x /root/golden-image-setup.sh
-/usr/bin/ln -s /etc/systemd/system/golden-image-setup.service /etc/systemd/system/multi-user.target.wants/golden-image-setup.service
 
 cat > /etc/systemd/system/golden-boot.service << 'EMBED_EOF'
 EMBED_CONTENT:golden-boot.service
@@ -168,3 +156,18 @@ EMBED_EOF
 fi
 
 echo "tux2lab post-install completed: $(date)"
+
+######################################################################
+# Golden image final cleanup (must be last — truncates all logs)
+######################################################################
+if ! get_golden_image_creation_not_requested; then
+touch /root/golden-image-setup-completed
+/bin/rm -f /etc/machine-id /run/machine-id /var/lib/dbus/machine-id
+/usr/bin/truncate -s 0 /etc/hostname
+/bin/rm -f /etc/ssh/ssh_host_*
+/bin/rm -f /etc/systemd/system/multi-user.target.wants/sshd.service 2>/dev/null
+/bin/rm -f /etc/NetworkManager/system-connections/* 2>/dev/null
+/bin/rm -f /etc/systemd/network/*.link
+/usr/bin/find /var/log -type f -exec /usr/bin/truncate -s 0 {} \;
+/bin/rm -rf /var/log/journal/*
+fi

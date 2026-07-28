@@ -63,6 +63,11 @@ fi
 
 log "Starting golden boot configuration for ${DISTRO_ID} (${DISTRO_FAMILY} family)"
 
+# Regenerate machine-id to ensure each VM clone has a unique identity
+log "Regenerating machine-id"
+rm -f /etc/machine-id /run/machine-id /var/lib/dbus/machine-id
+systemd-machine-id-setup
+
 log "Checking network connectivity to lab infrastructure server..."
 # Wait for network to be fully ready (DHCP may still be in progress on Debian/ifupdown)
 WAIT_SECS=0

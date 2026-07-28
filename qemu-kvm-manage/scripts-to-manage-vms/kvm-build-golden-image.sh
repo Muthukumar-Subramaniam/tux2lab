@@ -227,7 +227,7 @@ fi
 
 # --- Stage 1: OS Installation ---
 print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-print_cyan "[Stage 1] OS Installation via PXE Network Boot"
+print_cyan "Preparing Golden Image with OS Installation via PXE Network Boot"
 print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 print_yellow "  To monitor: tux2lab vm console -H ${qemu_kvm_hostname}"
 print_yellow "  This may take several minutes depending on the distribution and internet speed."
@@ -248,7 +248,7 @@ while sudo virsh domstate "$qemu_kvm_hostname" &>/dev/null && \
     fi
 
     if $network_detected; then
-        printf "\r  Installation in progress... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+        printf "\r  OS installation in progress... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
     else
         printf "\r  Booting and loading installer... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
     fi
@@ -271,58 +271,12 @@ elapsed=$(( SECONDS - stage_start ))
 minutes=$(( elapsed / 60 ))
 seconds=$(( elapsed % 60 ))
 printf "\r\033[K"
-print_green "  ✓ OS installation completed (${minutes}m ${seconds}s)"
+print_green "  ✓ Golden image preparation completed (${minutes}m ${seconds}s)"
 
-# Clean up PXE/DHCP/DNS configs between stages (prevents PXE re-boot in Stage 2)
-print_info "Cleaning up provisioning environment..."
-if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
-    print_warning "Could not clean up provisioning environment."
-fi
-
-# --- Stage 2: First-boot configuration ---
-print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-print_cyan "[Stage 2] First-boot and Golden Image Configuration"
-print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-print_yellow "  To monitor: tux2lab vm console -H ${qemu_kvm_hostname}"
-print_yellow "  This may take several minutes depending on the distribution and internet speed."
-
-# Start VM to boot from disk (golden-image-setup.service runs on first boot)
-if ! sudo virsh start "$qemu_kvm_hostname" >/dev/null 2>&1; then
-    print_error "Failed to start VM for first-boot configuration. Cleaning up..."
-    sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
-    sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
-    /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
-    exit 1
-fi
-
-# Poll until VM shuts off (golden-image-setup powers off when done)
-stage_start=$SECONDS
-while [[ "$(sudo virsh domstate "$qemu_kvm_hostname" 2>/dev/null)" != "shut off" ]]; do
-    elapsed=$(( SECONDS - stage_start ))
-    minutes=$(( elapsed / 60 ))
-    seconds=$(( elapsed % 60 ))
-    printf "\r  Running golden image cleanup... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
-    sleep 4
-
-    # Timeout: 30 minutes
-    if [[ $elapsed -ge 1800 ]]; then
-        echo ""
-        print_error "Stage 2 timed out after 30 minutes. Cleaning up..."
-        sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
-        sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
-        sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
-        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
-        exit 1
-    fi
-done
-
-elapsed=$(( SECONDS - stage_start ))
-minutes=$(( elapsed / 60 ))
-seconds=$(( elapsed % 60 ))
-printf "\r\033[K"
-print_green "  ✓ First-boot configuration completed (${minutes}m ${seconds}s)"
-
-# Cleanup: undefine the temporary VM (already shut off after golden-image-setup)
+# Cleanup: remove provisioning configs and temporary VM definition
+print_task "Cleaning up provisioning environment..."
+/tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host >/dev/null 2>&1 || true
+print_task_done
 print_task "Cleaning up temporary VM..."
 sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true
 if sudo virsh pool-info golden-images-disk-store >/dev/null 2>&1; then
