@@ -129,34 +129,8 @@ systemctl enable chronyd
 /usr/bin/rm -f /etc/chrony.d/pool.conf
 
 ######################################################################
-# 13. Zypper first-boot service (runs update after YaST releases lock)
+# 13. Zypper repository cleanup and update
 ######################################################################
-cat > /etc/systemd/system/tux2lab-zypper-firstboot.service << 'SVCEOF'
-[Unit]
-Description=tux2lab first-boot zypper update
-After=network-online.target
-Before=golden-image-setup.service
-Wants=network-online.target
-ConditionPathExists=!/root/tux2lab-zypper-firstboot-done
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash /root/tux2lab-zypper-firstboot.sh
-RemainAfterExit=true
-TimeoutStartSec=1800
-StandardOutput=journal+console
-StandardError=journal+console
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
-
-cat > /root/tux2lab-zypper-firstboot.sh << 'SCRIPTEOF'
-#!/bin/bash
-set -x
-LOG=/root/tux2lab-zypper-firstboot.log
-exec > >(tee -a "$LOG") 2>&1
-echo "zypper firstboot started: $(date)"
 # Remove installation media repo left by Agama (hash-based alias, duplicate of repo-oss)
 zypper repos --alias | awk -F'|' '/https-download.opensuse.org-/ {gsub(/^ +| +$/, "", $2); print $2}' | while read -r repo; do
     zypper --non-interactive removerepo "$repo" && echo "Removed install media repo: $repo"
@@ -165,11 +139,6 @@ done
 zypper --non-interactive modifyrepo --enable openSUSE:repo-non-oss 2>/dev/null && echo "Enabled repo-non-oss" || true
 zypper --non-interactive refresh
 zypper --non-interactive update --auto-agree-with-licenses
-touch /root/tux2lab-zypper-firstboot-done
-echo "zypper firstboot completed: $(date)"
-SCRIPTEOF
-/bin/chmod +x /root/tux2lab-zypper-firstboot.sh
-/usr/bin/ln -s /etc/systemd/system/tux2lab-zypper-firstboot.service /etc/systemd/system/multi-user.target.wants/tux2lab-zypper-firstboot.service
 
 ######################################################################
 # 14. Golden image setup (conditional)
