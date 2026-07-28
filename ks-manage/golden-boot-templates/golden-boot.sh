@@ -614,9 +614,6 @@ else
 	log "WARNING: No SSH service unit found (sshd.service or ssh.service)"
 fi
 
-log "Marking golden boot as completed"
-touch "$COMPLETION_MARKER"
-
 # Ensure tux2lab-sync config is current (write/overwrite with known-good values)
 cat > /etc/tux2lab-sync.conf << SYNCCONF
 LAB_SERVER="get_lab_infra_server_hostname"
@@ -625,8 +622,18 @@ DISTRO_ID="get_os_distribution"
 SYNCCONF
 chmod 644 /etc/tux2lab-sync.conf
 
-# Download latest tux2lab-sync script from lab server
-curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" \
-    -o /usr/local/bin/tux2lab-sync 2>/dev/null && chmod +x /usr/local/bin/tux2lab-sync
+# Download and execute latest tux2lab-sync from lab server
+log "Downloading and executing latest tux2lab-sync"
+if curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" \
+    -o /usr/local/bin/tux2lab-sync 2>/dev/null && chmod +x /usr/local/bin/tux2lab-sync; then
+	/usr/local/bin/tux2lab-sync
+fi
+
+# Restart grub2-common.service if it failed due to boot race condition (Ubuntu)
+if systemctl is-failed grub2-common.service &>/dev/null; then
+	log "Restarting failed grub2-common.service"
+	systemctl restart grub2-common.service 2>/dev/null || true
+fi
 
 log "Golden boot configuration completed successfully for ${DISTRO_ID}"
+touch "$COMPLETION_MARKER"

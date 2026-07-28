@@ -28,10 +28,6 @@ autoinstall:
       expire: false
       list:
         - root:get_shadow_password_super_mgmt_user
-    runcmd:
-      - curl -sf http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/post-install.sh -o /root/tux2lab-post-install.sh
-      - chmod 700 /root/tux2lab-post-install.sh
-      - /root/tux2lab-post-install.sh
 
   keyboard:
     layout: us
@@ -124,3 +120,6 @@ autoinstall:
     - curtin in-target --target=/target -- update-grub
     - ln -sf /dev/null /target/etc/systemd/system/systemd-networkd-wait-online.service
     - date '+%Y-%m-%d %H:%M:%S %Z' > /target/etc/bigbang
+    - curl -sf http://get_lab_infra_server_hostname/ksmanager-hub/kickstarts/get_hostname.get_ipv4_domain/post-install.sh -o /target/root/tux2lab-post-install.sh
+    - chmod 700 /target/root/tux2lab-post-install.sh
+    - curtin in-target --target=/target -- /root/tux2lab-post-install.sh

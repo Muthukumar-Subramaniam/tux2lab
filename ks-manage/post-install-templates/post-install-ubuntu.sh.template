@@ -6,13 +6,19 @@ set -x
 # Generated: get_time_of_last_update
 
 LOG=/root/tux2lab-post-install.log
-exec > >(tee -a "$LOG") 2>&1
+exec > "$LOG" 2>&1
 echo "tux2lab post-install started: $(date)"
 
 ######################################################################
-# 0. Set root password (cloud-init is disabled, so chpasswd won't run)
+# 0. Set root password and ensure admin user exists
 ######################################################################
 echo "root:get_shadow_password_super_mgmt_user" | chpasswd -e
+# On Ubuntu 22.04, subiquity defers user creation to cloud-init (which we disable).
+# Create the user explicitly if it doesn't exist.
+if ! id get_mgmt_super_user &>/dev/null; then
+    useradd -m -s /bin/bash -G sudo get_mgmt_super_user
+    echo "get_mgmt_super_user:get_shadow_password_super_mgmt_user" | chpasswd -e
+fi
 
 ######################################################################
 # 1. APT sources (DEB822 format for 24.04+, traditional for 22.04)
@@ -45,12 +51,17 @@ apt-get update
 apt-get install -y kexec-tools chrony vim less bash-completion nfs-common tmux \
     sysstat tcpdump traceroute wget tar inetutils-ping dnsutils \
     rsync netcat-openbsd lsof
+# Remove bloat before upgrade (saves downloading firmware/snap updates)
+apt-get remove --purge -y linux-firmware* snapd 2>/dev/null || true
 # Remove kdump packages to prevent crashkernel from wasting RAM on lab VMs
-apt-get remove -y kdump-tools linux-crashdump 2>/dev/null || true
-rm -f /etc/default/grub.d/kdump-tools.cfg
+apt-get remove --purge -y kdump-tools linux-crashdump 2>/dev/null || true
+apt-get autoremove --purge -y
 apt-get dist-upgrade -y
+# Remove crashkernel grub config that kernel postinst re-creates during upgrade
+rm -f /etc/default/grub.d/kdump-tools.cfg /etc/default/grub.d/kexec-tools.cfg
 apt-get autoremove --purge -y
 apt-get clean
+update-grub
 
 ######################################################################
 # 2. SSH keys
@@ -185,8 +196,4 @@ Host *.get_ipv4_domain get_subnets_to_allow_ssh_pub_access
   LogLevel QUIET
 EOF
 
-######################################################################
-# 11. kexec fast reboot
-######################################################################
 echo "tux2lab post-install completed: $(date)"
-kexec -l /boot/vmlinuz --initrd=/boot/initrd.img --command-line="$(cat /proc/cmdline)" && systemctl kexec

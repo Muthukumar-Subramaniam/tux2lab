@@ -102,8 +102,9 @@ if command -v grub-editenv &>/dev/null; then
 	grub-editenv /boot/grub/grubenv create 2>/dev/null || true
 fi
 
-# 11. Stop syslog to prevent buffered messages from being written after truncation
+# 11. Stop logging services before truncating their files
 systemctl stop rsyslog 2>/dev/null || true
+systemctl stop systemd-journald 2>/dev/null || true
 
 # 12. Truncate all log files under /var/log
 find /var/log -type f -exec truncate -s 0 {} \;
@@ -112,4 +113,4 @@ find /var/log -type f -exec truncate -s 0 {} \;
 rm -rf /var/log/journal/*
 
 # 14. Final shutdown
-shutdown -h now
+systemctl poweroff --force

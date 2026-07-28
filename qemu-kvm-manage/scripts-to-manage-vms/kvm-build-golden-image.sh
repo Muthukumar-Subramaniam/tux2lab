@@ -138,9 +138,15 @@ fn_release_golden_build_lock() {
 fn_cleanup_on_interrupt() {
     echo ""
     print_error "Build interrupted. Cleaning up..."
+    print_task "Stopping and removing temporary VM..."
     sudo virsh destroy "$qemu_kvm_hostname" >/dev/null 2>&1 || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true
-    [[ -n "${golden_image_path:-}" ]] && sudo rm -f "${golden_image_path}" 2>/dev/null || true
+    print_task_done
+    if [[ -n "${golden_image_path:-}" ]]; then
+        print_task "Removing golden image disk..."
+        sudo rm -f "${golden_image_path}" 2>/dev/null || true
+        print_task_done
+    fi
     [[ -n "${NVRAM_PATH:-}" ]] && sudo rm -f "${NVRAM_PATH}" 2>/dev/null || true
     if sudo virsh pool-info golden-images-disk-store >/dev/null 2>&1; then
         sudo virsh pool-destroy golden-images-disk-store >/dev/null 2>&1 || true
@@ -285,24 +291,11 @@ fi
 
 # Poll until VM shuts off (golden-image-setup powers off when done)
 stage_start=$SECONDS
-network_detected=false
 while [[ "$(sudo virsh domstate "$qemu_kvm_hostname" 2>/dev/null)" != "shut off" ]]; do
     elapsed=$(( SECONDS - stage_start ))
     minutes=$(( elapsed / 60 ))
     seconds=$(( elapsed % 60 ))
-
-    if ! $network_detected; then
-        if ping -4 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null || ping -6 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null; then
-            network_detected=true
-        fi
-    fi
-
-    if $network_detected; then
-        printf "\r  Configuration in progress... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
-    else
-        printf "\r  Booting... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
-    fi
-
+    printf "\r  Running golden image cleanup... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
     sleep 4
 
     # Timeout: 30 minutes
