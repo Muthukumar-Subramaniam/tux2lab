@@ -23,7 +23,7 @@ else
 fi
 
 # Setup logging to both file and console
-LOGFILE="/var/log/golden-boot-${DISTRO_FAMILY}.log"
+LOGFILE="/var/log/tux2lab-golden-boot-${DISTRO_FAMILY}.log"
 exec > >(tee -a "$LOGFILE") 2>&1
 
 log() {
@@ -36,7 +36,7 @@ error_exit() {
 	exit 1
 }
 
-COMPLETION_MARKER="/root/golden-boot-completed"
+COMPLETION_MARKER="/root/tux2lab-golden-boot-completed"
 
 if [ -f "$COMPLETION_MARKER" ]; then
 	# Subsequent boots: download latest tux2lab-sync and run it

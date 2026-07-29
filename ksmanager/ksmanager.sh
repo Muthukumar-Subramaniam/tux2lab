@@ -1205,8 +1205,8 @@ if ! $invoked_with_golden_image; then
         fi
     fi
     if ! $golden_image_creation_not_requested; then
-        if ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service" "${host_kickstart_dir}"/ || \
-           ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/golden-boot.sh" "${host_kickstart_dir}"/; then
+        if ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.service" "${host_kickstart_dir}"/ || \
+           ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.sh" "${host_kickstart_dir}"/; then
             print_error "Failed to copy golden-boot templates"
             fn_release_host_lock
             exit 1
@@ -1306,8 +1306,8 @@ fn_generate_post_install_script() {
     fn_embed_file_content "${post_install_target}" "ca-cert" "/tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt"
     fn_embed_file_content "${post_install_target}" "tux2lab-sync.service" "${addons_dir}/tux2lab-sync.service"
     fn_embed_file_content "${post_install_target}" "tux2lab-sync.timer" "${addons_dir}/tux2lab-sync.timer"
-    fn_embed_file_content "${post_install_target}" "golden-boot.service" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.service"
-    fn_embed_file_content "${post_install_target}" "golden-boot.sh" "${ksmanager_main_dir}/golden-boot-templates/golden-boot.sh"
+    fn_embed_file_content "${post_install_target}" "tux2lab-golden-boot.service" "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.service"
+    fn_embed_file_content "${post_install_target}" "tux2lab-golden-boot.sh" "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.sh"
 
     chmod 644 "${post_install_target}"
 }

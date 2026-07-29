@@ -257,12 +257,12 @@ set host get_hostname
 set domain get_ipv4_domain
 EOF
 
-	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/golden-boot.service" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/tux2lab-golden-boot.service" <<'EOF'
 [Unit]
 Description=golden-boot
 EOF
 
-	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/golden-boot.sh" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/tux2lab-golden-boot.sh" <<'EOF'
 #!/usr/bin/env bash
 echo golden
 EOF

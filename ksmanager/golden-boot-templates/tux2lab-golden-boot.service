@@ -1,11 +1,11 @@
 [Unit]
-Description=Golden Boot Initialization
+Description=tux2lab Golden Boot Initialization
 After=network-online.target systemd-user-sessions.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash /root/golden-boot.sh
+ExecStart=/bin/bash /root/tux2lab-golden-boot.sh
 RemainAfterExit=true
 
 [Install]

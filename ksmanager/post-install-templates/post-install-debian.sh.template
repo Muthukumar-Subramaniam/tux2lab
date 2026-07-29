@@ -93,15 +93,15 @@ echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 
-cat > /etc/systemd/system/golden-boot.service << 'EMBED_EOF'
-EMBED_CONTENT:golden-boot.service
+cat > /etc/systemd/system/tux2lab-golden-boot.service << 'EMBED_EOF'
+EMBED_CONTENT:tux2lab-golden-boot.service
 EMBED_EOF
 
-cat > /root/golden-boot.sh << 'EMBED_EOF'
-EMBED_CONTENT:golden-boot.sh
+cat > /root/tux2lab-golden-boot.sh << 'EMBED_EOF'
+EMBED_CONTENT:tux2lab-golden-boot.sh
 EMBED_EOF
-chmod +x /root/golden-boot.sh
-ln -s /etc/systemd/system/golden-boot.service /etc/systemd/system/multi-user.target.wants/golden-boot.service
+chmod +x /root/tux2lab-golden-boot.sh
+ln -s /etc/systemd/system/tux2lab-golden-boot.service /etc/systemd/system/multi-user.target.wants/tux2lab-golden-boot.service
 
 fi
 
