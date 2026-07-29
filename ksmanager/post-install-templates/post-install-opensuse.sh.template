@@ -162,11 +162,23 @@ echo "tux2lab post-install completed: $(date)"
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 touch /root/golden-image-setup-completed
-/bin/rm -f /etc/machine-id /run/machine-id /var/lib/dbus/machine-id
 /usr/bin/truncate -s 0 /etc/hostname
 /bin/rm -f /etc/ssh/ssh_host_*
 /bin/rm -f /etc/systemd/system/multi-user.target.wants/sshd.service 2>/dev/null
 /bin/rm -f /etc/NetworkManager/system-connections/* 2>/dev/null
+cat << EOF > /etc/NetworkManager/system-connections/dhcp.nmconnection
+[connection]
+id=dhcp
+type=ethernet
+autoconnect=true
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
+EOF
+/bin/chmod 600 /etc/NetworkManager/system-connections/dhcp.nmconnection
 /bin/rm -f /etc/systemd/network/*.link
 /usr/bin/find /var/log -type f -exec /usr/bin/truncate -s 0 {} \;
 /bin/rm -rf /var/log/journal/*

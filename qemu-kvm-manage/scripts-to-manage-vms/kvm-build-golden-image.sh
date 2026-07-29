@@ -245,9 +245,9 @@ while sudo virsh domstate "$qemu_kvm_hostname" &>/dev/null && \
     fi
 
     if $network_detected; then
-        printf "\r  OS installation in progress... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+        printf "\033[2K\r  OS installation in progress... (%dm %02ds)" "$minutes" "$seconds"
     else
-        printf "\r  Booting and loading installer... (elapsed: %dm %02ds)\033[K" "$minutes" "$seconds"
+        printf "\033[2K\r  PXE Booting... (%dm %02ds)" "$minutes" "$seconds"
     fi
 
     sleep 4
