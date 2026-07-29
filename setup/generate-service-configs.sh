@@ -85,6 +85,11 @@ http {
 
         root ${DATA_DIR};
 
+        location /tux2lab/ {
+            alias /tux2lab/;
+            autoindex on;
+        }
+
         autoindex on;
         autoindex_exact_size off;
         autoindex_localtime on;
@@ -102,6 +107,11 @@ http {
         ssl_prefer_server_ciphers on;
 
         root ${DATA_DIR};
+
+        location /tux2lab/ {
+            alias /tux2lab/;
+            autoindex on;
+        }
 
         autoindex on;
         autoindex_exact_size off;
@@ -367,10 +377,8 @@ setup_named_dirs() {
 # SYNC COMMON UTILS (served via HTTP for golden-boot etc.)
 # ============================================================================
 sync_common_utils() {
-    mkdir -p "${DATA_DIR}/common-utils"
-    cp /tux2lab/common-utils/lab-rootfs-extender "${DATA_DIR}/common-utils/"
-    cp /tux2lab/common-utils/growpart "${DATA_DIR}/common-utils/"
-    cp /tux2lab/ksmanager/addons-for-kickstarts/tux2lab-sync "${DATA_DIR}/common-utils/"
+    # common-utils/ is bind-mounted directly into the container (read-only)
+    # No file copies needed — nginx serves from the mount
     # Write shadow-hash file for golden-boot to fetch via HTTP
     local password_hash
     password_hash=$(jq -r '.admin.password_hash' "${LAB_ENV_JSON}")

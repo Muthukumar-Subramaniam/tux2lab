@@ -137,7 +137,7 @@ DISTRO_ID="get_os_distribution"
 EOF
 chmod 644 /etc/tux2lab-sync.conf
 
-curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" -o /usr/local/bin/tux2lab-sync
+curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/tux2lab-sync" -o /usr/local/bin/tux2lab-sync
 /bin/chmod +x /usr/local/bin/tux2lab-sync
 
 cat > /etc/systemd/system/tux2lab-sync.service << 'EMBED_EOF'

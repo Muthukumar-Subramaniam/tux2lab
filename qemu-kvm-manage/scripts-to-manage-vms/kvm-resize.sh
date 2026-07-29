@@ -519,7 +519,7 @@ fn_start_vm_after_resize() {
             fi
         done
 
-        if ! /tux2lab/common-utils/lab-rootfs-extender $SSH_TARGET_HOST; then
+        if ! /tux2lab/tux2lab/common-utils/lab-rootfs-extender $SSH_TARGET_HOST; then
             print_error "Failed to extend root filesystem."
             exit 1
         fi

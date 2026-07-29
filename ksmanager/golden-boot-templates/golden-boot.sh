@@ -41,7 +41,7 @@ COMPLETION_MARKER="/root/golden-boot-completed"
 if [ -f "$COMPLETION_MARKER" ]; then
 	# Subsequent boots: download latest tux2lab-sync and run it
 	log "Subsequent boot detected, downloading latest tux2lab-sync"
-	if curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" \
+	if curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/tux2lab-sync" \
 		-o /usr/local/bin/tux2lab-sync 2>/dev/null && chmod +x /usr/local/bin/tux2lab-sync; then
 		log "Download successful"
 	else
@@ -585,7 +585,7 @@ else
 fi
 
 log "Running lab rootfs extender"
-if ! curl -fsSL "http://get_lab_infra_server_hostname/common-utils/lab-rootfs-extender" | bash -s -- localhost --lab-infra-host=get_lab_infra_server_hostname; then
+if ! curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/lab-rootfs-extender" | bash -s -- localhost --lab-infra-host=get_lab_infra_server_hostname; then
 	log "WARNING: Lab rootfs extender failed, continuing anyway"
 fi
 
@@ -629,7 +629,7 @@ chmod 644 /etc/tux2lab-sync.conf
 
 # Download and execute latest tux2lab-sync from lab server
 log "Downloading and executing latest tux2lab-sync"
-if curl -fsSL "http://get_lab_infra_server_hostname/common-utils/tux2lab-sync" \
+if curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/tux2lab-sync" \
     -o /usr/local/bin/tux2lab-sync 2>/dev/null && chmod +x /usr/local/bin/tux2lab-sync; then
 	/usr/local/bin/tux2lab-sync
 fi

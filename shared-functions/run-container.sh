@@ -25,6 +25,7 @@ run_tux2lab_container() {
         --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
         --log-opt "max-size=10mb" \
         -v "${data_dir}:${data_dir}:ro,rslave" \
+        -v "/tux2lab:/tux2lab:ro" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
         -e "TUX2LAB_BRIDGE_IP=${bridge_ip}" \
         -e "TUX2LAB_BRIDGE_IF=${bridge_if}" \

@@ -77,9 +77,6 @@ print_task_done
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
 auto_setup_distro "$OS_DISTRO" "$VERSION_TYPE"
 
-# Sync tux2lab-sync to served location (ensures golden image gets the latest version)
-cp -f /tux2lab/ksmanager/addons-for-kickstarts/tux2lab-sync /tux2lab-data/common-utils/tux2lab-sync
-
 # Check if golden image already exists (early check before ksmanager work)
 if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
     _version_dashed="${VERSION_TYPE//./-}"
