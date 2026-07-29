@@ -71,7 +71,8 @@
     "packages": [
       "nfs-client",
       "rsync",
-      "hostname"
+      "hostname",
+      "growpart"
     ]
   },
   "user": {
