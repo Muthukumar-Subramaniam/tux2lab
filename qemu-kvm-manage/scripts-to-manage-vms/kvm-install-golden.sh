@@ -51,7 +51,7 @@ validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
 
 # If no distro/version specified on cmdline, select from available golden images
 if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
-    source /tux2lab/ks-manage/distro-versions.conf
+    source /tux2lab/ksmanager/distro-versions.conf
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
 
     # Discover available golden images

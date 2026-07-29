@@ -14,16 +14,16 @@ run_ksmanager() {
     # Execute ksmanager — output flows directly to terminal
     local ksmanager_exit_code=0
     if [[ -z "$hostname" ]]; then
-        /tux2lab/ks-manage/ksmanager.sh ${ksmanager_options} || ksmanager_exit_code=$?
+        /tux2lab/ksmanager/ksmanager.sh ${ksmanager_options} || ksmanager_exit_code=$?
     else
-        /tux2lab/ks-manage/ksmanager.sh "${hostname}" ${ksmanager_options} || ksmanager_exit_code=$?
+        /tux2lab/ksmanager/ksmanager.sh "${hostname}" ${ksmanager_options} || ksmanager_exit_code=$?
     fi
 
     # Check if user cancelled (exit code 130)
     if [[ $ksmanager_exit_code -eq 130 ]]; then
         if [[ "$cleanup_on_cancel" == "true" ]] && [[ -n "$hostname" ]]; then
             print_info "Cleaning up resources for '${hostname}' due to cancellation..."
-            /tux2lab/ks-manage/ksmanager.sh "${hostname}" --remove-host || true
+            /tux2lab/ksmanager/ksmanager.sh "${hostname}" --remove-host || true
             print_info "Cleanup completed for '${hostname}' due to cancellation.\n"
         fi
         return 1

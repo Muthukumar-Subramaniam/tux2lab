@@ -78,7 +78,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distr
 auto_setup_distro "$OS_DISTRO" "$VERSION_TYPE"
 
 # Sync tux2lab-sync to served location (ensures golden image gets the latest version)
-cp -f /tux2lab/ks-manage/addons-for-kickstarts/tux2lab-sync /tux2lab-data/common-utils/tux2lab-sync
+cp -f /tux2lab/ksmanager/addons-for-kickstarts/tux2lab-sync /tux2lab-data/common-utils/tux2lab-sync
 
 # Check if golden image already exists (early check before ksmanager work)
 if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
@@ -152,7 +152,7 @@ fn_cleanup_on_interrupt() {
         sudo virsh pool-destroy golden-images-disk-store >/dev/null 2>&1 || true
         sudo virsh pool-undefine golden-images-disk-store >/dev/null 2>&1 || true
     fi
-    /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    /tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
     fn_release_golden_build_lock
 }
 
@@ -221,7 +221,7 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
     sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
-    /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    /tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
     exit 1
 fi
 
@@ -262,7 +262,7 @@ while sudo virsh domstate "$qemu_kvm_hostname" &>/dev/null && \
         sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
         sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
         sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
-        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+        /tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
         exit 1
     fi
 done
@@ -275,7 +275,7 @@ print_green "  ✓ Golden image preparation completed (${minutes}m ${seconds}s)"
 
 # Cleanup: remove provisioning configs and temporary VM definition
 print_task "Cleaning up provisioning environment..."
-/tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host >/dev/null 2>&1 || true
+/tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host >/dev/null 2>&1 || true
 print_task_done
 print_task "Cleaning up temporary VM..."
 sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true

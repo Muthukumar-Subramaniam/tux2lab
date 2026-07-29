@@ -17,7 +17,7 @@ auto_setup_distro() {
 
     if [[ "$distro_ready" == "false" ]]; then
         print_info "${distro} ${version} is not prepared for PXE boot. Setting it up..."
-        if ! /tux2lab/ks-manage/prepare-distro-for-ksmanager.sh --setup "$distro" -v "$version"; then
+        if ! /tux2lab/ksmanager/prepare-distro-for-ksmanager.sh --setup "$distro" -v "$version"; then
             print_error "Distro setup failed."
             return 1
         fi

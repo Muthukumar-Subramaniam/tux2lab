@@ -8,7 +8,7 @@
 #----------------------------------------------------------------------------------------#
 
 source /tux2lab/common-utils/color-functions.sh
-source /tux2lab/ks-manage/distro-versions.conf
+source /tux2lab/ksmanager/distro-versions.conf
 
 
 # ============================================================================

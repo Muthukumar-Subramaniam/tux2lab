@@ -4,7 +4,7 @@ set -u
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
-SOURCE_KSMANAGER="${REPO_ROOT}/ks-manage/ksmanager.sh"
+SOURCE_KSMANAGER="${REPO_ROOT}/ksmanager/ksmanager.sh"
 
 if [[ ! -f "${SOURCE_KSMANAGER}" ]]; then
 	echo "[FAIL] Cannot find ${SOURCE_KSMANAGER}"
@@ -188,11 +188,11 @@ EOF
 
 setup_sandbox() {
 	mkdir -p "${SANDBOX_HUB}/common-utils"
-	mkdir -p "${SANDBOX_HUB}/ks-manage/ks-templates"
-	mkdir -p "${SANDBOX_HUB}/ks-manage/ipxe-templates"
-	mkdir -p "${SANDBOX_HUB}/ks-manage/addons-for-kickstarts"
-	mkdir -p "${SANDBOX_HUB}/ks-manage/golden-boot-templates"
-	mkdir -p "${SANDBOX_HUB}/ks-manage/post-install-templates"
+	mkdir -p "${SANDBOX_HUB}/ksmanager/ks-templates"
+	mkdir -p "${SANDBOX_HUB}/ksmanager/ipxe-templates"
+	mkdir -p "${SANDBOX_HUB}/ksmanager/addons-for-kickstarts"
+	mkdir -p "${SANDBOX_HUB}/ksmanager/golden-boot-templates"
+	mkdir -p "${SANDBOX_HUB}/ksmanager/post-install-templates"
 	mkdir -p "${SANDBOX_HUB}/named-manage"
 	mkdir -p "${TEST_ROOT}/etc"
 
@@ -210,7 +210,7 @@ print_green() { echo "$*"; }
 print_yellow() { echo "$*"; }
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/distro-versions.conf" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/distro-versions.conf" <<'EOF'
 #!/usr/bin/env bash
 declare -A DISTRO_AVAILABLE_VERSIONS=(
 	[almalinux]="10 9 8"
@@ -245,33 +245,33 @@ fn_get_distro_family() {
 }
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/ks-templates/redhat-based-10-ks.cfg" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/ks-templates/redhat-based-10-ks.cfg" <<'EOF'
 hostname=get_hostname
 domain=get_ipv4_domain
 gw=get_ipv4_gateway
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/ipxe-templates/ipxe-template-redhat-based.ipxe" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/ipxe-templates/ipxe-template-redhat-based.ipxe" <<'EOF'
 #!ipxe
 set host get_hostname
 set domain get_ipv4_domain
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/golden-boot-templates/golden-boot.service" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/golden-boot.service" <<'EOF'
 [Unit]
 Description=golden-boot
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/golden-boot-templates/golden-boot.sh" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/golden-boot.sh" <<'EOF'
 #!/usr/bin/env bash
 echo golden
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/golden-boot-templates/network-config-for-mac-address" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/network-config-for-mac-address" <<'EOF'
 HOST=get_hostname
 EOF
 
-	cat > "${SANDBOX_HUB}/ks-manage/post-install-templates/post-install-redhat.sh.template" <<'EOF'
+	cat > "${SANDBOX_HUB}/ksmanager/post-install-templates/post-install-redhat.sh.template" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "post-install for get_hostname.get_ipv4_domain"
@@ -283,10 +283,10 @@ exit 0
 EOF
 	chmod +x "${SANDBOX_HUB}/named-manage/dnsbinder.sh"
 
-	cp "${SOURCE_KSMANAGER}" "${SANDBOX_HUB}/ks-manage/ksmanager.sh"
-	sed -i "s|^source /etc/environment|source ${TEST_ROOT}/etc/environment|" "${SANDBOX_HUB}/ks-manage/ksmanager.sh"
-	sed -i "s|/tux2lab|${SANDBOX_HUB}|g" "${SANDBOX_HUB}/ks-manage/ksmanager.sh"
-	chmod +x "${SANDBOX_HUB}/ks-manage/ksmanager.sh"
+	cp "${SOURCE_KSMANAGER}" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
+	sed -i "s|^source /etc/environment|source ${TEST_ROOT}/etc/environment|" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
+	sed -i "s|/tux2lab|${SANDBOX_HUB}|g" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
+	chmod +x "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
 
 	cat > "${TEST_ROOT}/etc/environment" <<EOF
 mgmt_super_user=${USER}
@@ -310,7 +310,7 @@ EOF
 }
 
 run_ksmanager() {
-	PATH="${MOCK_BIN}:$PATH" USER="${USER}" bash "${SANDBOX_HUB}/ks-manage/ksmanager.sh" "$@"
+	PATH="${MOCK_BIN}:$PATH" USER="${USER}" bash "${SANDBOX_HUB}/ksmanager/ksmanager.sh" "$@"
 }
 
 test_create_host_noninteractive() {

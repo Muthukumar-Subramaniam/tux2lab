@@ -12,15 +12,15 @@ select_distro_version() {
     # Distro selection (if not provided)
     if [[ -z "$SELECTED_DISTRO" ]]; then
         local _distro_keys
-        _distro_keys=$(bash -c "source /tux2lab/ks-manage/distro-versions.conf; echo \"\${DISTRO_KEYS[*]}\"")
+        _distro_keys=$(bash -c "source /tux2lab/ksmanager/distro-versions.conf; echo \"\${DISTRO_KEYS[*]}\"")
         local _distro_arr=($_distro_keys)
         while true; do
             echo "Select the OS distribution:"
             for i in "${!_distro_arr[@]}"; do
                 local _dk="${_distro_arr[$i]}"
                 local _dn _dv
-                _dn=$(bash -c "source /tux2lab/ks-manage/distro-versions.conf; echo \"\${DISTRO_DISPLAY_NAMES[$_dk]}\"")
-                _dv=$(bash -c "source /tux2lab/ks-manage/distro-versions.conf; echo \"\${DISTRO_AVAILABLE_VERSIONS[$_dk]}\"")
+                _dn=$(bash -c "source /tux2lab/ksmanager/distro-versions.conf; echo \"\${DISTRO_DISPLAY_NAMES[$_dk]}\"")
+                _dv=$(bash -c "source /tux2lab/ksmanager/distro-versions.conf; echo \"\${DISTRO_AVAILABLE_VERSIONS[$_dk]}\"")
                 printf "  %d)  %-24s (versions: %s)\n" $((i+1)) "$_dn" "$_dv"
             done
             echo "  q)  Quit"
@@ -40,8 +40,8 @@ select_distro_version() {
     # Version selection (if not provided)
     if [[ -z "$SELECTED_VERSION" ]]; then
         local _ver_string _display_name
-        _ver_string=$(bash -c "source /tux2lab/ks-manage/distro-versions.conf; echo \"\${DISTRO_AVAILABLE_VERSIONS[$SELECTED_DISTRO]:-}\"")
-        _display_name=$(bash -c "source /tux2lab/ks-manage/distro-versions.conf; echo \"\${DISTRO_DISPLAY_NAMES[$SELECTED_DISTRO]:-$SELECTED_DISTRO}\"")
+        _ver_string=$(bash -c "source /tux2lab/ksmanager/distro-versions.conf; echo \"\${DISTRO_AVAILABLE_VERSIONS[$SELECTED_DISTRO]:-}\"")
+        _display_name=$(bash -c "source /tux2lab/ksmanager/distro-versions.conf; echo \"\${DISTRO_DISPLAY_NAMES[$SELECTED_DISTRO]:-$SELECTED_DISTRO}\"")
         local _versions=($_ver_string)
         while true; do
             echo "Available versions for ${_display_name}: ${_versions[*]}"

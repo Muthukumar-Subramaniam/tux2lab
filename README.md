@@ -312,7 +312,7 @@ tux2lab/
 │   └── generate-service-configs.sh  Generate all service configs from JSON
 ├── qemu-kvm-manage/             KVM host scripts (VM management)
 │   └── scripts-to-manage-vms/    CLI dispatcher and all tux2lab subcommands
-├── ks-manage/                   Kickstart/cloud-init templates and ksmanager
+├── ksmanager/                   Kickstart/cloud-init templates and ksmanager
 ├── named-manage/                DNS zone management (dnsbinder)
 ├── common-utils/                Shared utilities (color output, disk tools)
 └── vendor/                      Vendored virt-manager (no system package needed)

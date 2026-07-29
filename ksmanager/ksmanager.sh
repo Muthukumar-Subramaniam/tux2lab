@@ -11,7 +11,7 @@ if [[ -z "${mgmt_super_user:-}" && -n "${lab_infra_admin_username:-}" ]]; then
     mgmt_super_user="${lab_infra_admin_username}"
 fi
 source /tux2lab/common-utils/color-functions.sh
-source /tux2lab/ks-manage/distro-versions.conf
+source /tux2lab/ksmanager/distro-versions.conf
 
 # ====== HELP ======
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -71,7 +71,7 @@ ipv6_nameserver="${dnsbinder_server_ipv6_address}"
 ##rhel_activation_key=$(cat /tux2lab/rhel-activation-key.base64 | base64 -d)
 time_of_last_update=$(date +"%Y-%m-%d_%H-%M-%S_%Z")
 dnsbinder_script='/tux2lab/named-manage/dnsbinder.sh'
-ksmanager_main_dir='/tux2lab/ks-manage'
+ksmanager_main_dir='/tux2lab/ksmanager'
 ksmanager_hub_dir="/tux2lab-data/ksmanager-hub"
 ipxe_web_dir="/tux2lab-data/ipxe"
 shadow_password_super_mgmt_user="${lab_admin_shadow_password:-}"

@@ -45,7 +45,7 @@ _tux2lab_completions() {
     # Distro names and versions (sourced from single source of truth)
     # Unset guard so re-sourcing works (declare -A is function-local, doesn't persist)
     unset _DISTRO_VERSIONS_CONF_LOADED
-    source /tux2lab/ks-manage/distro-versions.conf 2>/dev/null || true
+    source /tux2lab/ksmanager/distro-versions.conf 2>/dev/null || true
     local all_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
     local rhel_distros="almalinux rocky oraclelinux centos-stream rhel"
 

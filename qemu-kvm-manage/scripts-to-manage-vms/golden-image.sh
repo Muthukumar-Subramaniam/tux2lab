@@ -10,7 +10,7 @@ set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
-source /tux2lab/ks-manage/distro-versions.conf
+source /tux2lab/ksmanager/distro-versions.conf
 
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
 readonly SCRIPT_DIR="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"

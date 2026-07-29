@@ -16,7 +16,7 @@ validate_distro_version() {
 
     # Source distro-versions.conf if not already loaded
     if [[ -z "${DISTRO_AVAILABLE_VERSIONS[*]:-}" ]]; then
-        source /tux2lab/ks-manage/distro-versions.conf
+        source /tux2lab/ksmanager/distro-versions.conf
     fi
 
     if [[ -z "${DISTRO_AVAILABLE_VERSIONS[$distro]:-}" ]]; then

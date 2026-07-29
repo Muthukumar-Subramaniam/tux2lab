@@ -10,7 +10,7 @@ set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 
-readonly PREPARE_SCRIPT="/tux2lab/ks-manage/prepare-distro-for-ksmanager.sh"
+readonly PREPARE_SCRIPT="/tux2lab/ksmanager/prepare-distro-for-ksmanager.sh"
 
 show_distro_help() {
     print_cyan "USAGE:
