@@ -1667,23 +1667,21 @@ if curl -s -o /dev/null http://127.0.0.1:8000/ 2>/dev/null; then
     fn_update_kea_dhcp_reservations
 fi
 
-config_summary="Configuration Summary:
-  ✓ Hostname         : ${kickstart_hostname}
-  ✓ MAC Address      : ${mac_address_of_host}
-  ✓ IPv4 Address     : ${ipv4_address}
-  ✓ IPv4 Netmask     : ${ipv4_netmask}
-  ✓ IPv4 Gateway     : ${ipv4_gateway}
-  ✓ IPv4 Network     : ${ipv4_network_cidr}
-  ✓ IPv4 DNS         : ${ipv4_nameserver}
-  ✓ IPv6 Address     : ${ipv6_address}
-  ✓ IPv6 Prefix      : ${ipv6_prefix}
-  ✓ IPv6 Gateway     : ${ipv6_gateway}
-  ✓ IPv6 Network     : ${ipv6_ula_subnet}
-  ✓ Domain           : ${ipv4_domain}
-  ✓ Lab Infra Server : ${lab_infra_server_hostname}
-  ✓ Requested OS     : ${os_name_and_version}"
-
-print_info "$config_summary"
+echo -e "Configuration Summary:
+  ${MAKE_IT_CYAN}✓ Hostname         :${RESET_COLOR} ${kickstart_hostname}
+  ${MAKE_IT_CYAN}✓ MAC Address      :${RESET_COLOR} ${mac_address_of_host}
+  ${MAKE_IT_CYAN}✓ IPv4 Address     :${RESET_COLOR} ${ipv4_address}
+  ${MAKE_IT_CYAN}✓ IPv4 Netmask     :${RESET_COLOR} ${ipv4_netmask}
+  ${MAKE_IT_CYAN}✓ IPv4 Gateway     :${RESET_COLOR} ${ipv4_gateway}
+  ${MAKE_IT_CYAN}✓ IPv4 Network     :${RESET_COLOR} ${ipv4_network_cidr}
+  ${MAKE_IT_CYAN}✓ IPv4 DNS         :${RESET_COLOR} ${ipv4_nameserver}
+  ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${ipv6_address}
+  ${MAKE_IT_CYAN}✓ IPv6 Prefix      :${RESET_COLOR} ${ipv6_prefix}
+  ${MAKE_IT_CYAN}✓ IPv6 Gateway     :${RESET_COLOR} ${ipv6_gateway}
+  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}
+  ${MAKE_IT_CYAN}✓ Domain           :${RESET_COLOR} ${ipv4_domain}
+  ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${lab_infra_server_hostname}
+  ${MAKE_IT_CYAN}✓ Requested OS     :${RESET_COLOR} ${os_name_and_version}"
 
 # Determine provision method from invocation flags
 provision_method="pxe"
