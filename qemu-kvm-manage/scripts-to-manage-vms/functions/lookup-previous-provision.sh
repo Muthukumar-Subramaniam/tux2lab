@@ -29,7 +29,7 @@ lookup_previous_provision() {
     fi
 
     local provision_json=""
-    provision_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/kickstarts/${fqdn}/provision-result.json" 2>/dev/null) || true
+    provision_json=$(cat /tux2lab-data/ksmanager-hub/kickstarts/${fqdn}/provision-result.json 2>/dev/null) || true
 
     if [[ -z "$provision_json" ]]; then
         return 1

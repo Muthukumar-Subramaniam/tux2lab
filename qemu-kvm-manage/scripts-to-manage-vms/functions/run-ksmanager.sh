@@ -45,7 +45,7 @@ run_ksmanager() {
 
         if [[ -n "$golden_mac" ]]; then
             local hosts_json=""
-            hosts_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/hosts.json" 2>/dev/null) || true
+            hosts_json=$(cat /tux2lab-data/ksmanager-hub/hosts.json 2>/dev/null) || true
 
             if [[ -n "$hosts_json" ]]; then
                 EXTRACTED_HOSTNAME=$(printf '%s' "$hosts_json" | jq -r --arg mac "$golden_mac" '.[] | select(.mac_address == $mac) | .hostname // empty')
@@ -53,10 +53,10 @@ run_ksmanager() {
         fi
 
         if [[ -n "${EXTRACTED_HOSTNAME:-}" ]]; then
-            provision_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/kickstarts/${EXTRACTED_HOSTNAME}/provision-result.json" 2>/dev/null) || true
+            provision_json=$(cat /tux2lab-data/ksmanager-hub/kickstarts/${EXTRACTED_HOSTNAME}/provision-result.json 2>/dev/null) || true
         fi
     else
-        provision_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/kickstarts/${hostname}/provision-result.json" 2>/dev/null) || true
+        provision_json=$(cat /tux2lab-data/ksmanager-hub/kickstarts/${hostname}/provision-result.json 2>/dev/null) || true
     fi
 
     if [[ -n "$provision_json" ]]; then
