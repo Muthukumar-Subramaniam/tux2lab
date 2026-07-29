@@ -10,6 +10,15 @@ exec > >(tee -a "$LOG") 2>&1
 echo "tux2lab post-install started: $(date)"
 
 ######################################################################
+# 0. CentOS Stream 8 EOL: switch from dead mirrorlist to vault.centos.org
+######################################################################
+if [[ -f /etc/centos-release ]] && grep -q "CentOS Stream release 8" /etc/centos-release 2>/dev/null; then
+    /bin/sed -i 's/mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-Stream-*.repo
+    /bin/sed -i 's/#baseurl=/baseurl=/g' /etc/yum.repos.d/CentOS-Stream-*.repo
+    /bin/sed -i 's/mirror.centos.org/vault.centos.org/g' /etc/yum.repos.d/CentOS-Stream-*.repo
+fi
+
+######################################################################
 # 1. Persistent interface naming (eth0, eth1, ...)
 ######################################################################
 /bin/mkdir -p /etc/systemd/network
