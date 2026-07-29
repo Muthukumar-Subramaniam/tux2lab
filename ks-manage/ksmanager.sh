@@ -1222,8 +1222,7 @@ if ! $invoked_with_golden_image; then
         exit 1
     fi
 
-    if rsync -a -q --delete "${ksmanager_main_dir}"/addons-for-kickstarts/ "${ksmanager_hub_dir}"/addons-for-kickstarts/ && \
-        mkdir -p "${ksmanager_hub_dir}"/golden-boot-mac-configs; then
+    if mkdir -p "${ksmanager_hub_dir}"/golden-boot-mac-configs; then
         print_task_done
     else
         fn_release_shared_artifacts_lock
@@ -1256,7 +1255,7 @@ fi
 fn_generate_post_install_script() {
     local post_install_template=""
     local post_install_target="${host_kickstart_dir}/post-install.sh"
-    local addons_dir="${ksmanager_hub_dir}/addons-for-kickstarts"
+    local addons_dir="${ksmanager_main_dir}/addons-for-kickstarts"
 
     # Select the appropriate template based on distro family
     if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
