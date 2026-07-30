@@ -128,7 +128,17 @@ if command -v resolvectl &>/dev/null; then
 fi
 print_task_done
 
-# ====== STEP 8: Health check ======
+# ====== STEP 8: Update /etc/hosts ======
+print_task "Updating /etc/hosts for ${lab_infra_server_hostname}..."
+# Remove any stale entries for this hostname
+local_escaped_hostname="${lab_infra_server_hostname//./\.}"
+sudo sed -i "/${local_escaped_hostname}/d" /etc/hosts 2>/dev/null || true
+# Add correct entries
+echo "${lab_infra_server_ipv4_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts >/dev/null
+echo "${lab_infra_server_ipv6_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts >/dev/null
+print_task_done
+
+# ====== STEP 9: Health check ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi

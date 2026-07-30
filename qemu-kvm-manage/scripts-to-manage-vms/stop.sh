@@ -159,5 +159,11 @@ else
     print_warning "Some ISO mounts could not be unmounted."
 fi
 
+# ====== STEP 8: Remove /etc/hosts entries ======
+print_task "Removing ${lab_infra_server_hostname} from /etc/hosts..."
+local_escaped_hostname="${lab_infra_server_hostname//./\.}"
+sudo sed -i "/${local_escaped_hostname}/d" /etc/hosts 2>/dev/null || true
+print_task_done
+
 print_cyan "--------------------------------------------------------------"
 print_success "tux2lab infrastructure stopped."
