@@ -107,11 +107,20 @@ else
     fi
 fi
 
-# ====== STEP 5: Start NFS on host ======
+# ====== STEP 5: Mount ISOs ======
+print_task "Mounting ISO images..."
+if sudo /tux2lab/common-utils/tux2lab-iso-mounts.sh start >/dev/null 2>&1; then
+    print_task_done
+else
+    print_task_fail
+    print_warning "Some ISO mounts failed. Check /tux2lab-data/iso-mounts.conf"
+fi
+
+# ====== STEP 6: Start NFS on host ======
 source /tux2lab/shared-functions/host-nfs.sh
 start_host_nfs "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
 
-# ====== STEP 6: Configure DNS on host ======
+# ====== STEP 7: Configure DNS on host ======
 print_task "Configuring DNS for ${lab_infra_bridge_interface}..."
 if command -v resolvectl &>/dev/null; then
     sudo resolvectl dns "${lab_infra_bridge_interface}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}" 2>/dev/null || true
@@ -119,7 +128,7 @@ if command -v resolvectl &>/dev/null; then
 fi
 print_task_done
 
-# ====== STEP 7: Health check ======
+# ====== STEP 8: Health check ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi

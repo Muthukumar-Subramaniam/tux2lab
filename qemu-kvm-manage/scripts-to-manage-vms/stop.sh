@@ -150,5 +150,14 @@ else
     print_warning "Failed to stop libvirtd."
 fi
 
+# ====== STEP 7: Unmount ISO mounts ======
+print_task "Unmounting ISO mounts..."
+if sudo /tux2lab/common-utils/tux2lab-iso-mounts.sh stop >/dev/null 2>&1; then
+    print_task_done
+else
+    print_task_fail
+    print_warning "Some ISO mounts could not be unmounted."
+fi
+
 print_cyan "--------------------------------------------------------------"
 print_success "tux2lab infrastructure stopped."

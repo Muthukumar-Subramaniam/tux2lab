@@ -665,16 +665,6 @@ fn_setup_distro() {
         print_info "ISO already mounted."
     fi
 
-    # Ensure the iso-mounts service is enabled
-    if ! systemctl is-enabled tux2lab-iso-mounts.service &>/dev/null; then
-        print_task "Enabling tux2lab-iso-mounts service..."
-        sudo cp /tux2lab/common-utils/tux2lab-iso-mounts.service /etc/systemd/system/
-        sudo chmod 644 /etc/systemd/system/tux2lab-iso-mounts.service
-        sudo systemctl daemon-reload
-        sudo systemctl enable tux2lab-iso-mounts.service &>/dev/null
-        print_task_done
-    fi
-
     print_success "Setup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
 }
 

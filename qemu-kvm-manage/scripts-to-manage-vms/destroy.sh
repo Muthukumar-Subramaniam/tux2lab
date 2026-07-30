@@ -195,18 +195,6 @@ fi
 source /tux2lab/shared-functions/host-nfs.sh
 stop_host_nfs
 
-# ====== STEP 5.2: STOP AND REMOVE ISO MOUNTS SERVICE ======
-print_task "Stopping and removing tux2lab-iso-mounts.service..."
-if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
-    sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
-    sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
-    sudo systemctl daemon-reload
-    print_task_done
-else
-    print_task_skip
-fi
-
 # ====== STEP 6: CLEAN /etc/hosts ENTRIES ======
 print_task "Cleaning lab entries from /etc/hosts..."
 if [[ -n "$lab_domain" ]] && grep -q "${lab_domain}" /etc/hosts 2>/dev/null; then
