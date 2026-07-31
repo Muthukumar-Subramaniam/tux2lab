@@ -79,6 +79,54 @@ if [[ "${skip_confirm}" != "true" ]]; then
     fi
 fi
 
+# ====== STEP 0: Ensure infrastructure is up ======
+if ! sudo systemctl is-active --quiet libvirtd; then
+    print_task "Starting libvirtd..."
+    if sudo systemctl start libvirtd; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Failed to start libvirtd."
+        exit 1
+    fi
+fi
+
+if ! sudo virsh net-info tux2lab &>/dev/null; then
+    print_task "Defining tux2lab virtual network..."
+    if sudo virsh net-define /tux2lab/qemu-kvm-manage/labbr0.xml &>/dev/null; then
+        sudo virsh net-start tux2lab &>/dev/null || true
+        sudo virsh net-autostart tux2lab &>/dev/null || true
+        print_task_done
+    else
+        print_task_fail
+        print_error "Failed to define virtual network."
+        exit 1
+    fi
+elif ! sudo virsh net-list --name 2>/dev/null | grep -q '^tux2lab$'; then
+    print_task "Starting tux2lab virtual network..."
+    sudo virsh net-start tux2lab &>/dev/null || true
+    print_task_done
+fi
+
+if ! ip link show "${lab_infra_bridge_interface}" &>/dev/null; then
+    print_task "Waiting for ${lab_infra_bridge_interface}..."
+    local_timeout=15
+    local_elapsed=0
+    until ip link show "${lab_infra_bridge_interface}" &>/dev/null; do
+        if [[ $local_elapsed -ge $local_timeout ]]; then
+            print_task_fail
+            print_error "Timeout waiting for ${lab_infra_bridge_interface}."
+            exit 1
+        fi
+        sleep 1
+        local_elapsed=$((local_elapsed + 1))
+    done
+    print_task_done
+fi
+
+source /tux2lab/shared-functions/lablink0.sh
+ensure_lablink0 "${lab_infra_bridge_interface}"
+
 # ====== STEP 1: Regenerate service configs ======
 print_task "Regenerating service configurations..."
 echo ""
@@ -215,13 +263,41 @@ else
     exit 1
 fi
 
-# ====== STEP 6: Restart NFS on host ======
+# ====== STEP 6: Mount ISOs ======
+print_task "Mounting ISO images..."
+if sudo /tux2lab/common-utils/tux2lab-iso-mounts.sh start >/dev/null 2>&1; then
+    print_task_done
+else
+    print_task_fail
+    print_warning "Some ISO mounts failed. Check /tux2lab-data/iso-mounts.conf"
+fi
+
+# ====== STEP 7: Restart NFS on host ======
 source /tux2lab/shared-functions/host-nfs.sh
 restart_host_nfs
 
-# ====== STEP 7: Ensure bridge firewall is open ======
+# ====== STEP 8: Ensure bridge firewall is open ======
 source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
+
+# ====== STEP 9: Update /etc/hosts ======
+print_task "Syncing /etc/hosts..."
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+add_etc_hosts_entry "${lab_infra_server_hostname}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
+print_task_done
+
+# ====== STEP 10: Configure DNS on host ======
+print_task "Configuring DNS for ${lab_infra_bridge_interface}..."
+if command -v resolvectl &>/dev/null; then
+    sudo resolvectl dns "${lab_infra_bridge_interface}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}" 2>/dev/null || true
+    sudo resolvectl domain "${lab_infra_bridge_interface}" "${lab_infra_domain_name}" 2>/dev/null || true
+fi
+print_task_done
+
+# ====== STEP 11: Ensure boot service is enabled ======
+if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh ]]; then
+    /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh
+fi
 
 # ====== DONE ======
 print_success "Rebuild complete. Lab services updated to v${local_version}."

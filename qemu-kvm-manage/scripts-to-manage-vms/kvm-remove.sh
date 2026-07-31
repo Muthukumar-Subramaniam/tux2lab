@@ -8,8 +8,6 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
-ETC_HOSTS_FILE='/etc/hosts'
-
 # Function to show help
 fn_show_help() {
     print_cyan "Usage: tux2lab vm remove [OPTIONS]
@@ -116,23 +114,15 @@ remove_vm() {
         fi
     fi
     
-    # Remove from /etc/hosts (escape dots for regex)
-    local escaped_vm_name="${vm_name//./\\.}"
-    if grep -q "${vm_name}" "$ETC_HOSTS_FILE" 2>/dev/null; then
+    # Remove from /etc/hosts
+    if grep -q "${vm_name}" /etc/hosts 2>/dev/null; then
         print_task "Removing from /etc/hosts..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-        if fn_acquire_etc_hosts_lock; then
-            if sudo sed -i.bak "/[[:space:]]${escaped_vm_name}$/d" "$ETC_HOSTS_FILE" 2>/dev/null; then
-                fn_release_etc_hosts_lock
-                print_task_done
-            else
-                fn_release_etc_hosts_lock
-                print_task_fail
-                print_warning "Could not update /etc/hosts."
-            fi
+        if remove_etc_hosts_entry "${vm_name}"; then
+            print_task_done
         else
             print_task_fail
-            print_warning "Could not acquire /etc/hosts lock."
+            print_warning "Could not update /etc/hosts."
         fi
     fi
     

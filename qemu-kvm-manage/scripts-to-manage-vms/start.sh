@@ -47,35 +47,50 @@ else
     fi
 fi
 
-# ====== STEP 2: Wait for labbr0 ======
-print_task "Waiting for ${lab_infra_bridge_interface} to be created..."
-local_timeout=30
-local_elapsed=0
-net_start_attempted=false
-until ip link show "${lab_infra_bridge_interface}" &>/dev/null; do
-    if [[ $local_elapsed -ge $local_timeout ]]; then
+# ====== STEP 2: Ensure virtual network exists and is started ======
+if ! sudo virsh net-info tux2lab &>/dev/null; then
+    print_task "Defining tux2lab virtual network..."
+    if sudo virsh net-define /tux2lab/qemu-kvm-manage/labbr0.xml &>/dev/null; then
+        sudo virsh net-start tux2lab &>/dev/null || true
+        sudo virsh net-autostart tux2lab &>/dev/null || true
+        print_task_done
+    else
         print_task_fail
-        print_error "Timeout waiting for ${lab_infra_bridge_interface}."
+        print_error "Failed to define virtual network."
         exit 1
     fi
-    if [[ $local_elapsed -ge 5 ]] && ! $net_start_attempted; then
-        sudo virsh net-start tux2lab &>/dev/null || true
-        net_start_attempted=true
-    fi
-    sleep 1
-    local_elapsed=$((local_elapsed + 1))
-done
-print_task_done
+elif ! sudo virsh net-list --name 2>/dev/null | grep -q '^tux2lab$'; then
+    print_task "Starting tux2lab virtual network..."
+    sudo virsh net-start tux2lab &>/dev/null || true
+    print_task_done
+fi
 
-# ====== STEP 3: Ensure bridge is UP ======
+# ====== STEP 3: Wait for labbr0 ======
+if ! ip link show "${lab_infra_bridge_interface}" &>/dev/null; then
+    print_task "Waiting for ${lab_infra_bridge_interface}..."
+    local_timeout=15
+    local_elapsed=0
+    until ip link show "${lab_infra_bridge_interface}" &>/dev/null; do
+        if [[ $local_elapsed -ge $local_timeout ]]; then
+            print_task_fail
+            print_error "Timeout waiting for ${lab_infra_bridge_interface}."
+            exit 1
+        fi
+        sleep 1
+        local_elapsed=$((local_elapsed + 1))
+    done
+    print_task_done
+fi
+
+# ====== STEP 4: Ensure bridge is UP ======
 source /tux2lab/shared-functions/lablink0.sh
 ensure_lablink0 "${lab_infra_bridge_interface}"
 
-# ====== STEP 3.1: Open bridge firewall (if host has restrictive iptables) ======
+# ====== STEP 4.1: Open bridge firewall (if host has restrictive iptables) ======
 source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
 
-# ====== STEP 4: Start container ======
+# ====== STEP 5: Start container ======
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     print_info "Container '${CONTAINER_NAME}' is already running."
 else
@@ -107,7 +122,7 @@ else
     fi
 fi
 
-# ====== STEP 5: Mount ISOs ======
+# ====== STEP 6: Mount ISOs ======
 print_task "Mounting ISO images..."
 if sudo /tux2lab/common-utils/tux2lab-iso-mounts.sh start >/dev/null 2>&1; then
     print_task_done
@@ -116,11 +131,11 @@ else
     print_warning "Some ISO mounts failed. Check /tux2lab-data/iso-mounts.conf"
 fi
 
-# ====== STEP 6: Start NFS on host ======
+# ====== STEP 7: Start NFS on host ======
 source /tux2lab/shared-functions/host-nfs.sh
 start_host_nfs "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
 
-# ====== STEP 7: Configure DNS on host ======
+# ====== STEP 8: Configure DNS on host ======
 print_task "Configuring DNS for ${lab_infra_bridge_interface}..."
 if command -v resolvectl &>/dev/null; then
     sudo resolvectl dns "${lab_infra_bridge_interface}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}" 2>/dev/null || true
@@ -128,17 +143,13 @@ if command -v resolvectl &>/dev/null; then
 fi
 print_task_done
 
-# ====== STEP 8: Update /etc/hosts ======
-print_task "Updating /etc/hosts for ${lab_infra_server_hostname}..."
-# Remove any stale entries for this hostname
-local_escaped_hostname="${lab_infra_server_hostname//./\.}"
-sudo sed -i "/${local_escaped_hostname}/d" /etc/hosts 2>/dev/null || true
-# Add correct entries
-echo "${lab_infra_server_ipv4_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts >/dev/null
-echo "${lab_infra_server_ipv6_address} ${lab_infra_server_hostname}" | sudo tee -a /etc/hosts >/dev/null
+# ====== STEP 9: Update /etc/hosts ======
+print_task "Syncing /etc/hosts..."
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+add_etc_hosts_entry "${lab_infra_server_hostname}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
 print_task_done
 
-# ====== STEP 9: Health check ======
+# ====== STEP 10: Health check ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi

@@ -117,11 +117,14 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Update /etc/hosts
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+        print_task_fail
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
+    print_task_done
 
     # Start installation process via PXE boot
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-installation.sh

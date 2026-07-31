@@ -197,24 +197,26 @@ stop_host_nfs
 
 # ====== STEP 6: CLEAN /etc/hosts ENTRIES ======
 print_task "Cleaning lab entries from /etc/hosts..."
-if [[ -n "$lab_domain" ]] && grep -q "${lab_domain}" /etc/hosts 2>/dev/null; then
-    escaped_domain="${lab_domain//./\\.}"
-    sudo sed -i "/${escaped_domain}/d" /etc/hosts 2>/dev/null || true
-    print_task_done
-else
-    print_task_skip
-fi
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+remove_etc_hosts_block
+rm -f "${ETC_HOSTS_STATE}" 2>/dev/null || true
+print_task_done
 
 # ====== STEP 6: REMOVE SSH AND SSL ARTIFACTS ======
 print_task "Removing SSH and SSL artifacts..."
 has_artifacts=false
 [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] && has_artifacts=true
-[[ -f "$HOME/.ssh/config.d/tux2lab.conf" ]] && has_artifacts=true
+grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null && has_artifacts=true
 [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
 [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
 
 if $has_artifacts; then
     rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
+    # Remove tux2lab block from config.custom
+    if grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null; then
+        sed -i '/# BEGIN tux2lab/,/# END tux2lab/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
+    fi
+    # Legacy cleanup
     rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
     if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_domain" ]]; then
         escaped_domain="${lab_domain//./\\.}"

@@ -160,9 +160,9 @@ else
 fi
 
 # ====== STEP 8: Remove /etc/hosts entries ======
-print_task "Removing ${lab_infra_server_hostname} from /etc/hosts..."
-local_escaped_hostname="${lab_infra_server_hostname//./\.}"
-sudo sed -i "/${local_escaped_hostname}/d" /etc/hosts 2>/dev/null || true
+print_task "Syncing /etc/hosts..."
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+remove_etc_hosts_block
 print_task_done
 
 print_cyan "--------------------------------------------------------------"

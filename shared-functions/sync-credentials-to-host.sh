@@ -1,4 +1,4 @@
-# Sync lab credentials (SSH keys, CA cert) to the KVM host.
+# Sync lab credentials (SSH keys, CA cert, SSH client config) to the KVM host.
 # Compares lab-config with host files — only updates if different.
 # Usage: source this file, then call sync_credentials_to_host
 
@@ -28,6 +28,55 @@ sync_credentials_to_host() {
             chown -R "${_admin_user}:$(id -g "$_admin_user")" "${_host_ssh_dir}"
             _changed=true
         fi
+    fi
+
+    # SSH client config (marker-based block in ~/.ssh/config.custom)
+    local _ssh_custom="${_host_ssh_dir}/config.custom"
+    local _marker_begin="# BEGIN tux2lab"
+    local _marker_end="# END tux2lab"
+    local _ipv4_network _ipv4_broadcast _ipv6_prefix_base
+    local _ssh_host_patterns="*.${_lab_domain}"
+    _ipv4_network=$(jq -r '.network.ipv4.network' "$_lab_env")
+    _ipv4_broadcast=$(jq -r '.network.ipv4.broadcast' "$_lab_env")
+    _ipv6_prefix_base=$(jq -r '.network.ipv6.prefix_base' "$_lab_env")
+    local _n1 _n2 _n3 _dummy _b3
+    IFS=. read -r _n1 _n2 _n3 _dummy <<< "$_ipv4_network"
+    IFS=. read -r _dummy _dummy _b3 _dummy <<< "$_ipv4_broadcast"
+    for _octet3 in $(seq "$_n3" "$_b3"); do
+        _ssh_host_patterns+=" ${_n1}.${_n2}.${_octet3}.*"
+    done
+    _ssh_host_patterns+=" ${_ipv6_prefix_base}:*"
+
+    local _expected_block
+    _expected_block=$(cat <<EOF
+Host ${_ssh_host_patterns}
+  IdentityFile ~/.ssh/tux2lab_id_rsa
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  LogLevel QUIET
+EOF
+    )
+
+    # Extract current block content (without markers) and compare
+    local _current_block=""
+    if grep -q "$_marker_begin" "$_ssh_custom" 2>/dev/null; then
+        _current_block=$(sed -n "/${_marker_begin}/,/${_marker_end}/{ /${_marker_begin}/d; /${_marker_end}/d; p; }" "$_ssh_custom")
+    fi
+
+    if [[ "$_current_block" != "$_expected_block" ]]; then
+        # Remove existing block if present
+        if grep -q "$_marker_begin" "$_ssh_custom" 2>/dev/null; then
+            sed -i "/${_marker_begin}/,/${_marker_end}/d" "$_ssh_custom"
+        fi
+        cat >> "$_ssh_custom" <<EOF
+
+${_marker_begin}
+${_expected_block}
+${_marker_end}
+EOF
+        chmod 644 "$_ssh_custom"
+        chown "${_admin_user}:$(id -g "$_admin_user")" "$_ssh_custom"
+        _changed=true
     fi
 
     # CA certificate

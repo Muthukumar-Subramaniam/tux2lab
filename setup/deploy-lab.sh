@@ -605,15 +605,8 @@ configure_host_dns() {
     print_task "Configuring DNS resolution on host..."
 
     # Add /etc/hosts entry (needed before DNS container is running)
-    local hosts_entry="${IPV4_ADDRESS} ${INFRA_FQDN} ${INFRA_HOSTNAME}"
-    if ! grep -qF "${INFRA_FQDN}" /etc/hosts 2>/dev/null; then
-        echo "${hosts_entry}" | sudo tee -a /etc/hosts &>/dev/null
-    fi
-    # IPv6 entry
-    local hosts_entry_v6="${IPV6_ADDRESS} ${INFRA_FQDN} ${INFRA_HOSTNAME}"
-    if ! grep -qF "${IPV6_ADDRESS}" /etc/hosts 2>/dev/null; then
-        echo "${hosts_entry_v6}" | sudo tee -a /etc/hosts &>/dev/null
-    fi
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+    add_etc_hosts_entry "${INFRA_FQDN}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
 
     # Configure resolvectl to use our DNS for the lab domain
     if command -v resolvectl &>/dev/null; then
@@ -637,30 +630,29 @@ configure_host_ssh() {
     for octet3 in $(seq "$n3" "$b3"); do
         ssh_host_patterns+=" ${n1}.${n2}.${octet3}.*"
     done
+    ssh_host_patterns+=" ${IPV6_PREFIX_BASE}:*"
 
-    local ssh_config_dir="$HOME/.ssh"
-    local ssh_config_file="${ssh_config_dir}/config.d/tux2lab.conf"
+    local ssh_custom="$HOME/.ssh/config.custom"
+    local marker_begin="# BEGIN tux2lab"
+    local marker_end="# END tux2lab"
 
-    mkdir -p "${ssh_config_dir}/config.d"
+    # Remove existing tux2lab block if present, then re-add
+    if grep -q "$marker_begin" "$ssh_custom" 2>/dev/null; then
+        sed -i "/${marker_begin//\//\\/}/,/${marker_end//\//\\/}/d" "$ssh_custom"
+    fi
 
-    cat > "$ssh_config_file" <<EOF
+    cat >> "$ssh_custom" <<EOF
+
+${marker_begin}
 Host ${ssh_host_patterns}
   IdentityFile ~/.ssh/tux2lab_id_rsa
   StrictHostKeyChecking no
   UserKnownHostsFile /dev/null
   LogLevel QUIET
+${marker_end}
 EOF
 
-    chmod 644 "$ssh_config_file"
-
-    # Ensure main ssh_config includes config.d
-    local main_config="${ssh_config_dir}/config"
-    if [[ ! -f "$main_config" ]] || ! grep -q "Include.*config.d" "$main_config" 2>/dev/null; then
-        echo "Include ${ssh_config_dir}/config.d/*" | cat - "$main_config" 2>/dev/null > "${main_config}.tmp" || \
-            echo "Include ${ssh_config_dir}/config.d/*" > "${main_config}.tmp"
-        mv "${main_config}.tmp" "$main_config"
-        chmod 600 "$main_config"
-    fi
+    chmod 644 "$ssh_custom"
 
     print_task_done
 }
