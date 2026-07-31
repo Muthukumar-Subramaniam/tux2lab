@@ -1,0 +1,13 @@
+[Unit]
+Description=tux2lab Load Balancer IP Restore
+After=network-online.target nginx.service
+Wants=network-online.target
+Requires=nginx.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/bash /tux2lab/lb-manage/lbmanager.sh restore
+
+[Install]
+WantedBy=multi-user.target

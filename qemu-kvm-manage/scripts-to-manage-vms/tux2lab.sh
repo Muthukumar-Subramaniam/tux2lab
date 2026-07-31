@@ -47,12 +47,15 @@ LAB OPERATIONS:
     disable          Disable lab infrastructure auto-start on boot
     health           Check lab infrastructure health
     info             Display lab deployment information
+    sync             Sync /tux2lab from host to infra server VM
+
+LAB ADD-ONS:
+    lb               Manage TCP load balancers
 
 LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
-    destroy          Permanently destroy the entire lab environment
     rebuild          Tear down and redeploy lab using existing config
-    sync             Sync /tux2lab from host to infra server VM
+    destroy          Permanently destroy the entire lab environment
 
 OPTIONS:
     -h, --help       Show this help message
@@ -106,6 +109,9 @@ main() {
             ;;
         dns)
             exec "$SCRIPT_DIR/dns.sh" "$@"
+            ;;
+        lb)
+            exec "$SCRIPT_DIR/lb.sh" "$@"
             ;;
         deploy)
             exec "$SCRIPT_DIR/deploy.sh" "$@"

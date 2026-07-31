@@ -689,6 +689,59 @@ EOF
 }
 
 # =====================================================================
+# Load Balancer Prerequisites
+# =====================================================================
+configure_lb_prerequisites() {
+    print_info "Configuring load balancer prerequisites..."
+
+    # Ensure nginx stream.d directory exists
+    print_task "Creating /etc/nginx/stream.d directory..."
+    sudo mkdir -p /etc/nginx/stream.d
+    print_task_done
+
+    # Add stream block to nginx.conf if not present
+    print_task "Ensuring stream block in nginx.conf..."
+    if grep -q 'stream.d' /etc/nginx/nginx.conf; then
+        print_task_skip
+    else
+        sudo cat >> /etc/nginx/nginx.conf <<'EOF'
+
+stream {
+    include /etc/nginx/stream.d/*.conf;
+}
+EOF
+        print_task_done
+    fi
+
+    # Create LB state directory
+    print_task "Creating /tux2lab-data/lb-hub directory..."
+    sudo mkdir -p /tux2lab-data/lb-hub
+    print_task_done
+
+    # Initialize empty registry if not exists
+    print_task "Initializing load balancer registry..."
+    if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
+        print_task_skip
+    else
+        echo '{"load_balancers":[]}' | sudo tee /tux2lab-data/lb-hub/lb-registry.json > /dev/null
+        print_task_done
+    fi
+
+    # Install and enable systemd service
+    print_task "Installing tux2lab-lb systemd service..."
+    sudo cp -f /tux2lab/lb-manage/tux2lab-lb.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable tux2lab-lb.service &>/dev/null
+    print_task_done
+
+    # Create lbmanager CLI symlink
+    print_task "Creating CLI symlink (lbmanager)..."
+    sudo chmod 0755 /tux2lab/lb-manage/lbmanager.sh
+    sudo ln -sf /tux2lab/lb-manage/lbmanager.sh /usr/sbin/lbmanager
+    print_task_done
+}
+
+# =====================================================================
 # Main execution — mirrors the former playbook role order
 # =====================================================================
 print_info "Configuring Lab Infra Services..."
@@ -700,6 +753,7 @@ if ! $is_host_mode; then
     configure_git_and_prompt
 fi
 setup_pxe_boot
+configure_lb_prerequisites
 
 local_version=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"' -f4)
 print_success "All Lab Infra Services have been configured successfully (v${local_version})."
