@@ -27,6 +27,7 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 - Complete VM lifecycle management — deploy, resize, snapshot, destroy
 - Multi-distribution support across Red Hat, Debian, and SUSE families
 - Dual-stack networking (IPv4 + IPv6) out of the box
+- TCP load balancer management with dedicated dual-stack IPs
 
 ---
 
@@ -297,6 +298,12 @@ tux2lab ipv6-route disable        Remove IPv6 route
 tux2lab ipv6-route check          Check IPv6 connectivity and route status
 tux2lab ipv6-route auto           Auto-configure based on host IPv6 connectivity
 tux2lab ipv6-route status         Show current IPv6 route status
+tux2lab lb create                 Create a TCP load balancer with dedicated IP
+tux2lab lb delete                 Delete a load balancer
+tux2lab lb update                 Update backends, ports, or algorithm
+tux2lab lb list                   List all configured load balancers
+tux2lab lb status                 Check load balancer health
+tux2lab lb restore                Re-apply secondary IPs from registry
 tux2lab version                   Show version information
 ```
 
@@ -314,6 +321,7 @@ These tools run on the infrastructure server and power the provisioning pipeline
 | **dnsbinder** | Manages BIND DNS zone records — automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
 | **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
 | **prepare-distro-for-ksmanager** | Downloads ISOs, mounts them, and registers distributions with ksmanager for PXE provisioning |
+| **lbmanager** | Manages nginx TCP stream load balancers — creates dedicated dual-stack IPs, generates stream configs, handles lifecycle and boot persistence |
 
 ---
 
@@ -328,6 +336,7 @@ tux2lab/
 ├── configure-lab-infra-server/ Bash scripts and config files for infra server setup
 ├── ks-manage/                  Kickstart/cloud-init templates and ksmanager
 ├── named-manage/               DNS zone management (dnsbinder)
+├── lb-manage/                  TCP load balancer management (lbmanager)
 ├── common-utils/               Shared utilities (color output, disk tools)
 └── vendor/                     Vendored virt-manager (no system package needed)
 ```
