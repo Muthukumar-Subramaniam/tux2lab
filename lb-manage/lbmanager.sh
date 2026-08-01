@@ -473,8 +473,8 @@ server {
     proxy_timeout 10m;
     proxy_connect_timeout 5s;
 
-    access_log /var/log/nginx/${name}_access.log ${log_format_name};
-    error_log  /var/log/nginx/${name}_error.log info;
+    access_log /tux2lab-data/logs/nginx/${name}_access.log ${log_format_name};
+    error_log  /tux2lab-data/logs/nginx/${name}_error.log info;
 }
 EOF
 

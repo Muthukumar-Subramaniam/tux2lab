@@ -50,11 +50,12 @@ UPSTREAM_DNS=$(jq -r '.network.upstream_dns[]' "${LAB_ENV_JSON}")
 generate_nginx() {
     print_task "Generating nginx config..."
     mkdir -p "${DATA_DIR}/nginx"
+    mkdir -p "${DATA_DIR}/logs/nginx"
 
     cat > "${DATA_DIR}/nginx/nginx.conf" <<EOF
 user nginx;
 worker_processes auto;
-error_log /var/log/nginx/error.log notice;
+error_log ${DATA_DIR}/logs/nginx/error.log notice;
 pid /run/nginx.pid;
 
 include /usr/share/nginx/modules/*.conf;
@@ -68,7 +69,7 @@ http {
                     '\$status \$body_bytes_sent "\$http_referer" '
                     '"\$http_user_agent"';
 
-    access_log /var/log/nginx/access.log main;
+    access_log ${DATA_DIR}/logs/nginx/access.log main;
 
     sendfile on;
     tcp_nopush on;
@@ -134,6 +135,7 @@ generate_kea_dhcp4() {
     print_task "Generating kea-dhcp4 config..."
     mkdir -p "${DATA_DIR}/kea"
     mkdir -p "${DATA_DIR}/kea/leases"
+    mkdir -p "${DATA_DIR}/logs/kea"
 
     cat > "${DATA_DIR}/kea/kea-dhcp4.conf" <<EOF
 {
@@ -153,6 +155,15 @@ generate_kea_dhcp4() {
     "rebind-timer": 1800,
     "hooks-libraries": [
       { "library": "/usr/lib64/kea/hooks/libdhcp_lease_cmds.so" }
+    ],
+    "loggers": [
+      {
+        "name": "kea-dhcp4",
+        "output_options": [
+          { "output": "${DATA_DIR}/logs/kea/kea-dhcp4.log", "maxsize": 10485760, "maxver": 3 }
+        ],
+        "severity": "INFO"
+      }
     ],
     "subnet4": [
       {
@@ -216,6 +227,15 @@ generate_kea_dhcp6() {
     "hooks-libraries": [
       { "library": "/usr/lib64/kea/hooks/libdhcp_lease_cmds.so" }
     ],
+    "loggers": [
+      {
+        "name": "kea-dhcp6",
+        "output_options": [
+          { "output": "${DATA_DIR}/logs/kea/kea-dhcp6.log", "maxsize": 10485760, "maxver": 3 }
+        ],
+        "severity": "INFO"
+      }
+    ],
     "subnet6": [
       {
         "id": 1,
@@ -269,7 +289,16 @@ generate_kea_ctrl_agent() {
         "socket-type": "unix",
         "socket-name": "/var/run/kea/kea6-ctrl-socket"
       }
-    }
+    },
+    "loggers": [
+      {
+        "name": "kea-ctrl-agent",
+        "output_options": [
+          { "output": "${DATA_DIR}/logs/kea/kea-ctrl-agent.log", "maxsize": 10485760, "maxver": 3 }
+        ],
+        "severity": "INFO"
+      }
+    ]
   }
 }
 EOF
@@ -322,13 +351,14 @@ EOF
 generate_chrony() {
     print_task "Generating chrony config..."
     mkdir -p "${DATA_DIR}/chrony"
+    mkdir -p "${DATA_DIR}/logs/chrony"
 
     cat > "${DATA_DIR}/chrony/chrony.conf" <<EOF
 pool time.google.com iburst
 
 driftfile /var/lib/chrony/drift
 ntsdumpdir /var/lib/chrony
-logdir /var/log/chrony
+logdir ${DATA_DIR}/logs/chrony
 
 bindaddress ${IPV4_ADDRESS}
 bindaddress ${IPV6_ADDRESS}

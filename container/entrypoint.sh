@@ -38,6 +38,10 @@ chown named:named /run/named
 # Clean stale PID files from previous container run (podman start reuses filesystem)
 rm -f /var/run/kea/*.pid /run/named/named.pid /run/radvd/radvd.pid /run/chrony/chronyd.pid /run/nginx.pid
 
+# Create persistent log directories
+mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,chrony,tftpd,radvd}
+chown named:named "${DATA_DIR}/logs/named"
+
 # Generate rndc key if missing (needed for rndc reload/status)
 if [[ ! -f /etc/rndc.key ]]; then
     rndc-confgen -a -u named &>/dev/null
@@ -151,7 +155,8 @@ echo "[*] Starting in.tftpd (TFTP)..."
     --listen \
     --address "${BRIDGE_IP}:69" \
     --secure \
-    "${DATA_DIR}/tftpboot" &
+    --verbosity 3 \
+    "${DATA_DIR}/tftpboot" >> "${DATA_DIR}/logs/tftpd/tftpd.log" 2>&1 &
 # IPv6 TFTP instance
 BRIDGE_IPV6=$(ip -6 addr show dev "${BRIDGE_IF}" scope global 2>/dev/null | grep -oP 'inet6 \K[^/]+' | head -1)
 if [[ -n "${BRIDGE_IPV6}" ]]; then
@@ -160,7 +165,8 @@ if [[ -n "${BRIDGE_IPV6}" ]]; then
         --listen \
         --address "[${BRIDGE_IPV6}]:69" \
         --secure \
-        "${DATA_DIR}/tftpboot" &
+        --verbosity 3 \
+        "${DATA_DIR}/tftpboot" >> "${DATA_DIR}/logs/tftpd/tftpd-ipv6.log" 2>&1 &
     echo "    → tftpd started on ${BRIDGE_IP}:69 + [${BRIDGE_IPV6}]:69"
 else
     echo "    → tftpd started on ${BRIDGE_IP}:69 (IPv6 not available)"
@@ -183,7 +189,7 @@ fi
 # Sends RAs on labbr0 so guest VMs get IPv6 addresses
 echo "[*] Starting radvd (IPv6 RA)..."
 if [[ -f "${DATA_DIR}/radvd/radvd.conf" ]]; then
-    /usr/sbin/radvd -C "${DATA_DIR}/radvd/radvd.conf" -n &
+    /usr/sbin/radvd -C "${DATA_DIR}/radvd/radvd.conf" -n -l logfile -F "${DATA_DIR}/logs/radvd/radvd.log" &
     echo "    → radvd started (IPv6 RA on ${BRIDGE_IF})"
 else
     echo "    → SKIPPED: no radvd.conf found"

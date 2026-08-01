@@ -68,11 +68,11 @@ options {
 
 logging {
 	channel default_debug {
-		file "data/named.run";
+		file "/tux2lab-data/logs/named/named.run";
 		severity dynamic;
 	};
 	channel query_log {
-		file "data/query.log" versions 3 size 10m;
+		file "/tux2lab-data/logs/named/query.log" versions 3 size 10m;
 		severity info;
 		print-time yes;
 		print-category yes;
