@@ -302,7 +302,7 @@ print_task_done
 # ====== STEP 12: Restore load balancer IPs ======
 if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
     print_task "Restoring load balancer IPs..."
-    /tux2lab/lb-manage/lbmanager.sh restore 2>/dev/null || true
+    sudo /tux2lab/lb-manage/lbmanager.sh restore 2>/dev/null || true
     print_task_done
 fi
 
