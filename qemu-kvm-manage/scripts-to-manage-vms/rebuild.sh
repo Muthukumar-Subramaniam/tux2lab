@@ -301,9 +301,7 @@ print_task_done
 
 # ====== STEP 12: Restore load balancer IPs ======
 if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
-    print_task "Restoring load balancer IPs..."
-    sudo /tux2lab/lb-manage/lbmanager.sh restore 2>/dev/null || true
-    print_task_done
+    sudo /tux2lab/lb-manage/lbmanager.sh restore || true
 fi
 
 # ====== STEP 13: Ensure boot service is enabled ======
