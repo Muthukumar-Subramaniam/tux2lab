@@ -359,6 +359,7 @@ pool time.google.com iburst
 driftfile /var/lib/chrony/drift
 ntsdumpdir /var/lib/chrony
 logdir ${DATA_DIR}/logs/chrony
+log tracking measurements statistics
 
 bindaddress ${IPV4_ADDRESS}
 bindaddress ${IPV6_ADDRESS}
