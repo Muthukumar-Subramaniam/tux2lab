@@ -16,7 +16,7 @@ run_tux2lab_container() {
     local bridge_ipv6
     bridge_ipv6=$(jq -r '.network.ipv6.address' "${data_dir}/lab-config/lab_environment.json")
 
-    sudo mkdir -p "${data_dir}/log" "${data_dir}/logs"/{nginx,named,kea,chrony,tftpd,radvd} "${data_dir}/nginx/stream.d"
+    sudo mkdir -p "${data_dir}/logs"/{nginx,named,kea,chrony,tftpd,radvd} "${data_dir}/nginx/stream.d"
     sudo chown named:named "${data_dir}/logs/named" 2>/dev/null || true
     sudo podman run -d \
         --name "${name}" \
@@ -24,9 +24,7 @@ run_tux2lab_container() {
         --uts=private \
         --network=host \
         --privileged \
-        --log-driver=k8s-file \
-        --log-opt "path=${data_dir}/log/tux2lab-engine.log" \
-        --log-opt "max-size=10mb" \
+        --log-driver=none \
         -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "/tux2lab:/tux2lab:ro" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
