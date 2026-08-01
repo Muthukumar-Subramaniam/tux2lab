@@ -12,6 +12,7 @@ if [[ -z "${mgmt_super_user:-}" && -n "${lab_infra_admin_username:-}" ]]; then
 fi
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/ksmanager/distro-versions.conf
+source /tux2lab/shared-functions/flush-dns-cache.sh
 
 # ====== HELP ======
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -363,6 +364,7 @@ fn_check_and_create_host_record() {
                 print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
                 exit 1
             fi
+            flush_dns_cache
         else
             while :
             do
@@ -376,6 +378,7 @@ fn_check_and_create_host_record() {
                         print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
                         exit 1
                     fi
+                    flush_dns_cache
                     break
 
                 elif [[ "${v_confirmation}" == "n" ]]
@@ -722,6 +725,7 @@ EOF
         
         if ${record_deleted}; then
             print_info "Removed DNS record"
+            flush_dns_cache
         else
             print_warning "DNS record may not have been removed properly"
         fi

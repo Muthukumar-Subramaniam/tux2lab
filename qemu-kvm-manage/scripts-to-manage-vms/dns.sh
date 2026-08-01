@@ -104,4 +104,7 @@ print_info "Invoking dnsbinder utility..."
 exit_code=0
 sudo /tux2lab/named-manage/dnsbinder.sh "$@" || exit_code=$?
 
+source /tux2lab/shared-functions/flush-dns-cache.sh
+flush_dns_cache
+
 exit $exit_code
