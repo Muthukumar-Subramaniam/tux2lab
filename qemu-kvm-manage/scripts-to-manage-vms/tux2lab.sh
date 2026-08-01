@@ -49,6 +49,9 @@ LAB OPERATIONS:
     info             Display lab deployment information
     credentials      Manage lab credentials (password, SSH keys, cert)
 
+LAB ADD-ONS:
+    lb               Manage TCP load balancers
+
 LAB LIFECYCLE:
     deploy           Deploy a new lab infrastructure server
     rebuild          Regenerate configs and recreate container
@@ -106,6 +109,9 @@ main() {
             ;;
         dns)
             exec "$SCRIPT_DIR/dns.sh" "$@"
+            ;;
+        lb)
+            exec "$SCRIPT_DIR/lb.sh" "$@"
             ;;
         deploy)
             exec "$SCRIPT_DIR/deploy.sh" "$@"

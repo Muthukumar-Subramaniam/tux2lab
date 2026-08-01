@@ -22,7 +22,7 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Top-level commands
-    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild start stop enable disable health info dns version"
+    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild start stop enable disable health info dns lb version"
 
     # Top-level options
     local options="-h --help -v --version"
@@ -410,6 +410,112 @@ _tux2lab_completions() {
             fi
         fi
 
+        return 0
+    fi
+
+    # ===== LB COMMAND =====
+    if [[ "${cmd}" == "lb" ]]; then
+        local lb_subcommands="create delete update list status restore"
+        if [[ ${COMP_CWORD} -eq 2 ]]; then
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "${lb_subcommands}" -- "${cur}") )
+            fi
+            return 0
+        fi
+
+        local lb_subcmd="${COMP_WORDS[2]}"
+        case "${lb_subcmd}" in
+            create)
+                if [[ "${prev}" == "--algorithm" ]]; then
+                    COMPREPLY=( $(compgen -W "round-robin least-conn ip-hash" -- "${cur}") )
+                elif [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name --port --target-port --backends --algorithm -y --yes -h --help" -- "${cur}") )
+                fi
+                ;;
+            delete)
+                if [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name -y --yes -h --help" -- "${cur}") )
+                fi
+                ;;
+            update)
+                if [[ "${prev}" == "--algorithm" ]]; then
+                    COMPREPLY=( $(compgen -W "round-robin least-conn ip-hash" -- "${cur}") )
+                elif [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name --add-backend --remove-backend --port --target-port --algorithm -h --help" -- "${cur}") )
+                fi
+                ;;
+            status)
+                if [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name -h --help" -- "${cur}") )
+                fi
+                ;;
+            *)
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+                ;;
+        esac
+        return 0
+    fi
+
+    # ===== LB COMMAND =====
+    if [[ "${cmd}" == "lb" ]]; then
+        local lb_subcommands="create delete update list status restore"
+        if [[ ${COMP_CWORD} -eq 2 ]]; then
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "${lb_subcommands}" -- "${cur}") )
+            fi
+            return 0
+        fi
+
+        local lb_subcmd="${COMP_WORDS[2]}"
+        case "${lb_subcmd}" in
+            create)
+                if [[ "${prev}" == "--algorithm" ]]; then
+                    COMPREPLY=( $(compgen -W "round-robin least-conn ip-hash" -- "${cur}") )
+                elif [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name --port --target-port --backends --algorithm -y --yes -h --help" -- "${cur}") )
+                fi
+                ;;
+            delete)
+                if [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name -y --yes -h --help" -- "${cur}") )
+                fi
+                ;;
+            update)
+                if [[ "${prev}" == "--algorithm" ]]; then
+                    COMPREPLY=( $(compgen -W "round-robin least-conn ip-hash" -- "${cur}") )
+                elif [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name --add-backend --remove-backend --port --target-port --algorithm -h --help" -- "${cur}") )
+                fi
+                ;;
+            status)
+                if [[ "${prev}" == --* ]]; then
+                    return 0
+                else
+                    COMPREPLY=( $(compgen -W "--name -h --help" -- "${cur}") )
+                fi
+                ;;
+            *)
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+                ;;
+        esac
         return 0
     fi
 
