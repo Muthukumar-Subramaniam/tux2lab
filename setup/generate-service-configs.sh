@@ -118,7 +118,12 @@ http {
         autoindex_localtime on;
     }
 }
+
+stream {
+    include /etc/nginx/stream.d/*.conf;
+}
 EOF
+    mkdir -p "${DATA_DIR}/nginx/stream.d"
     print_task_done
 }
 

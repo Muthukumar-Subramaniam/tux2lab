@@ -149,7 +149,14 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts
 add_etc_hosts_entry "${lab_infra_server_hostname}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
 print_task_done
 
-# ====== STEP 10: Health check ======
+# ====== STEP 10: Restore load balancer IPs ======
+if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
+    print_task "Restoring load balancer IPs..."
+    /tux2lab/lb-manage/lbmanager.sh restore 2>/dev/null || true
+    print_task_done
+fi
+
+# ====== STEP 11: Health check ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi

@@ -26,6 +26,10 @@ readonly LB_REGISTRY="${LB_HUB_DIR}/lb-registry.json"
 readonly STREAM_CONF_DIR="/etc/nginx/stream.d"
 readonly LOCK_DIR="/tux2lab-data/.lbmanager.lock"
 
+# Ensure required directories and registry exist
+mkdir -p "$LB_HUB_DIR" "$STREAM_CONF_DIR"
+[[ -f "$LB_REGISTRY" ]] || echo '{"load_balancers":[]}' > "$LB_REGISTRY"
+
 # Determine management interface name
 readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
 
