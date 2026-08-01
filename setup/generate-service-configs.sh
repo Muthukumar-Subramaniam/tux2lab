@@ -160,7 +160,7 @@ generate_kea_dhcp4() {
       {
         "name": "kea-dhcp4",
         "output_options": [
-          { "output": "${DATA_DIR}/logs/kea/kea-dhcp4.log", "maxsize": 10485760, "maxver": 3 }
+          { "output": "/var/log/kea/kea-dhcp4.log", "maxsize": 10485760, "maxver": 3 }
         ],
         "severity": "INFO"
       }
@@ -231,7 +231,7 @@ generate_kea_dhcp6() {
       {
         "name": "kea-dhcp6",
         "output_options": [
-          { "output": "${DATA_DIR}/logs/kea/kea-dhcp6.log", "maxsize": 10485760, "maxver": 3 }
+          { "output": "/var/log/kea/kea-dhcp6.log", "maxsize": 10485760, "maxver": 3 }
         ],
         "severity": "INFO"
       }
@@ -294,7 +294,7 @@ generate_kea_ctrl_agent() {
       {
         "name": "kea-ctrl-agent",
         "output_options": [
-          { "output": "${DATA_DIR}/logs/kea/kea-ctrl-agent.log", "maxsize": 10485760, "maxver": 3 }
+          { "output": "/var/log/kea/kea-ctrl-agent.log", "maxsize": 10485760, "maxver": 3 }
         ],
         "severity": "INFO"
       }

@@ -42,6 +42,10 @@ rm -f /var/run/kea/*.pid /run/named/named.pid /run/radvd/radvd.pid /run/chrony/c
 mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,chrony,tftpd,radvd}
 chown named:named "${DATA_DIR}/logs/named"
 
+# Symlink /var/log/kea → persistent kea log dir (kea restricts output paths)
+rm -rf /var/log/kea
+ln -sf "${DATA_DIR}/logs/kea" /var/log/kea
+
 # Clear LB stream configs — restored by lbmanager after DNS is ready
 rm -f "${DATA_DIR}/nginx/stream.d"/*.conf 2>/dev/null || true
 
