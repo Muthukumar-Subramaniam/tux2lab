@@ -31,11 +31,20 @@ readonly CONTAINER_NAME="tux2lab-engine"
 mkdir -p "$LB_HUB_DIR" "$STREAM_CONF_DIR"
 [[ -f "$LB_REGISTRY" ]] || echo '{"load_balancers":[]}' > "$LB_REGISTRY"
 
-# Determine management interface name
-readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
+# Determine management interface from lab environment
+if [[ -f "$LAB_ENV_JSON" ]]; then
+    readonly MGMT_INTERFACE=$(jq -r '.network.bridge_interface' "$LAB_ENV_JSON")
+else
+    readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
+fi
 
-# Domain from dnsbinder
-readonly DOMAIN="${dnsbinder_domain:-}"
+# Domain from lab environment
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
+if [[ -f "$LAB_ENV_JSON" ]]; then
+    readonly DOMAIN=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
+else
+    readonly DOMAIN="${dnsbinder_domain:-}"
+fi
 
 lock_acquired=false
 
@@ -263,7 +272,8 @@ fn_create_dns_record() {
     if getent hosts "${name}.${DOMAIN}" &>/dev/null; then
         local resolved_ip
         resolved_ip=$(getent ahostsv4 "${name}.${DOMAIN}" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
-        local infra_ip="${dnsbinder_server_ipv4_address:-}"
+        local infra_ip
+        infra_ip=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON" 2>/dev/null || echo "")
 
         if [[ -n "$infra_ip" ]] && [[ "$resolved_ip" == "$infra_ip" ]]; then
             print_warning "Existing record for ${name}.${DOMAIN} points to infra server (${infra_ip})."
