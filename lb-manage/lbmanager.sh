@@ -102,16 +102,18 @@ fn_to_fqdn() {
 
 fn_validate_name() {
     local name="$1"
-    if [[ -z "$name" ]]; then
+    # Extract hostname part (before first dot) for validation
+    local hostname="${name%%.*}"
+    if [[ -z "$hostname" ]]; then
         print_error "Load balancer name cannot be empty."
         return 1
     fi
-    if [[ ! "$name" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
-        print_error "Invalid name '${name}'. Must be lowercase alphanumeric with hyphens, cannot start or end with a hyphen."
+    if [[ ! "$hostname" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+        print_error "Invalid name '${hostname}'. Must be lowercase alphanumeric with hyphens, cannot start or end with a hyphen."
         return 1
     fi
-    if [[ ${#name} -gt 63 ]]; then
-        print_error "Name '${name}' exceeds 63 characters."
+    if [[ ${#hostname} -gt 63 ]]; then
+        print_error "Name '${hostname}' exceeds 63 characters."
         return 1
     fi
 }
