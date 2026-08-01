@@ -488,7 +488,7 @@ fn_remove_nginx_config() {
 
 fn_validate_nginx() {
     print_task "Validating nginx configuration..."
-    if podman exec "$CONTAINER_NAME" nginx -t &>/dev/null; then
+    if podman exec "$CONTAINER_NAME" nginx -t -c /tux2lab-data/nginx/nginx.conf &>/dev/null; then
         print_task_done
     else
         print_task_fail
@@ -499,7 +499,7 @@ fn_validate_nginx() {
 
 fn_reload_nginx() {
     print_task "Reloading nginx..."
-    if podman exec "$CONTAINER_NAME" nginx -s reload &>/dev/null; then
+    if podman exec "$CONTAINER_NAME" nginx -c /tux2lab-data/nginx/nginx.conf -s reload &>/dev/null; then
         print_task_done
     else
         print_task_fail
