@@ -950,26 +950,40 @@ fn_list() {
         return 0
     fi
 
-    printf "${MAKE_IT_CYAN}%-20s %-16s %-25s %-8s %-12s %-12s %s${RESET_COLOR}\n" \
-        "NAME" "IPv4" "IPv6" "PORT" "TARGET PORT" "ALGORITHM" "BACKENDS"
-    printf "%-20s %-16s %-25s %-8s %-12s %-12s %s\n" \
-        "----" "----" "----" "----" "-----------" "---------" "--------"
-
+    # Collect data first to calculate column widths
+    local names=() ipv4s=() ipv6s=() ports=() tports=() algos=() bcounts=()
     while IFS= read -r lb_name; do
         local lb_json
         lb_json=$(fn_get_lb "$lb_name")
-        local ipv4 ipv6 port target_port algorithm backends_count
-        ipv4=$(echo "$lb_json" | jq -r '.ipv4')
-        ipv6=$(echo "$lb_json" | jq -r '.ipv6')
-        port=$(echo "$lb_json" | jq -r '.port')
-        target_port=$(echo "$lb_json" | jq -r '.target_port')
-        algorithm=$(echo "$lb_json" | jq -r '.algorithm')
-        backends_count=$(echo "$lb_json" | jq '.backends | length')
-
-        printf "%-20s %-16s %-25s %-8s %-12s %-12s %s\n" \
-            "$lb_name" "$ipv4" "$ipv6" "$port" "$target_port" "$algorithm" "${backends_count} backend(s)"
+        names+=("${lb_name}.${DOMAIN}")
+        ipv4s+=("$(echo "$lb_json" | jq -r '.ipv4')")
+        ipv6s+=("$(echo "$lb_json" | jq -r '.ipv6')")
+        ports+=("$(echo "$lb_json" | jq -r '.port')")
+        tports+=("$(echo "$lb_json" | jq -r '.target_port')")
+        algos+=("$(echo "$lb_json" | jq -r '.algorithm')")
+        bcounts+=("$(echo "$lb_json" | jq '.backends | length') backend(s)")
     done < <(jq -r '.load_balancers[].name' "$LB_REGISTRY")
 
+    # Determine max widths
+    local w_name=4 w_ipv4=4 w_ipv6=4
+    for i in "${!names[@]}"; do
+        (( ${#names[$i]} > w_name )) && w_name=${#names[$i]}
+        (( ${#ipv4s[$i]} > w_ipv4 )) && w_ipv4=${#ipv4s[$i]}
+        (( ${#ipv6s[$i]} > w_ipv6 )) && w_ipv6=${#ipv6s[$i]}
+    done
+    w_name=$((w_name + 2))
+    w_ipv4=$((w_ipv4 + 2))
+    w_ipv6=$((w_ipv6 + 2))
+
+    printf "${MAKE_IT_CYAN}%-${w_name}s %-${w_ipv4}s %-${w_ipv6}s %-8s %-12s %-12s %s${RESET_COLOR}\n" \
+        "NAME" "IPv4" "IPv6" "PORT" "TARGET PORT" "ALGORITHM" "BACKENDS"
+    printf "%-${w_name}s %-${w_ipv4}s %-${w_ipv6}s %-8s %-12s %-12s %s\n" \
+        "----" "----" "----" "----" "-----------" "---------" "--------"
+
+    for i in "${!names[@]}"; do
+        printf "%-${w_name}s %-${w_ipv4}s %-${w_ipv6}s %-8s %-12s %-12s %s\n" \
+            "${names[$i]}" "${ipv4s[$i]}" "${ipv6s[$i]}" "${ports[$i]}" "${tports[$i]}" "${algos[$i]}" "${bcounts[$i]}"
+    done
 }
 
 # ====== SUBCOMMAND: STATUS ======
