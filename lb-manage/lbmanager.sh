@@ -620,6 +620,27 @@ fn_create() {
         exit 1
     fi
 
+    # Wait for IPv6 DAD to complete before nginx binds
+    print_task "Waiting for addresses to be ready..."
+    local dad_retries=20
+    while [[ $dad_retries -gt 0 ]]; do
+        local ipv4_ready=false ipv6_ready=false
+        ip addr show dev "$MGMT_INTERFACE" | grep -qw "$ipv4" && ipv4_ready=true
+        ip -6 addr show dev "$MGMT_INTERFACE" | grep "$ipv6" | grep -qv "tentative" && ipv6_ready=true
+        $ipv4_ready && $ipv6_ready && break
+        sleep 0.5
+        dad_retries=$((dad_retries - 1))
+    done
+    if $ipv4_ready && $ipv6_ready; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Addresses not ready on ${MGMT_INTERFACE}."
+        fn_remove_secondary_ip "$ipv4" "$ipv6" "$MGMT_INTERFACE"
+        fn_delete_dns_record "$name"
+        exit 1
+    fi
+
     # Step 5: Generate nginx config
     fn_generate_nginx_config "$name" "$port" "$target_port" "$algorithm" "$ipv4" "$ipv6" "$backends"
 
