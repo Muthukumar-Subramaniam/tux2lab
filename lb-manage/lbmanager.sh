@@ -158,9 +158,14 @@ fn_validate_backends() {
             return 1
         fi
         if ! getent hosts "${backend}.${DOMAIN}" &>/dev/null; then
-            print_error "Backend '${backend}' does not resolve (${backend}.${DOMAIN})."
-            print_info "Create a DNS record first: dnsbinder -c ${backend}"
-            return 1
+            print_task "Creating DNS record for backend ${backend}..."
+            if /tux2lab/named-manage/dnsbinder.sh -cy "$backend" &>/dev/null; then
+                print_task_done
+            else
+                print_task_fail
+                print_error "Failed to create DNS record for backend '${backend}'."
+                return 1
+            fi
         fi
     done
 }
