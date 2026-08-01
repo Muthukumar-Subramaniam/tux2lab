@@ -17,32 +17,23 @@ if [[ "${UID}" -ne 0 ]]; then
 fi
 
 # ====== ENVIRONMENT ======
-if [[ -f /etc/environment ]]; then
-    source /etc/environment
-fi
-
 readonly LB_HUB_DIR="/tux2lab-data/lb-hub"
 readonly LB_REGISTRY="${LB_HUB_DIR}/lb-registry.json"
 readonly STREAM_CONF_DIR="/tux2lab-data/nginx/stream.d"
 readonly LOCK_DIR="/tux2lab-data/.lbmanager.lock"
 readonly CONTAINER_NAME="tux2lab-engine"
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
 
 # Ensure required directories and registry exist
 mkdir -p "$LB_HUB_DIR" "$STREAM_CONF_DIR"
 [[ -f "$LB_REGISTRY" ]] || echo '{"load_balancers":[]}' > "$LB_REGISTRY"
 
-# Determine management interface from lab environment
+# Read config from lab environment
 if [[ -f "$LAB_ENV_JSON" ]]; then
     readonly MGMT_INTERFACE=$(jq -r '.network.bridge_interface' "$LAB_ENV_JSON")
-else
-    readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
-fi
-
-# Domain from lab environment
-readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
-if [[ -f "$LAB_ENV_JSON" ]]; then
     readonly DOMAIN=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
 else
+    readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
     readonly DOMAIN="${dnsbinder_domain:-}"
 fi
 
