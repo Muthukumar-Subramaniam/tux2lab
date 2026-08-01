@@ -32,9 +32,11 @@ mkdir -p "$LB_HUB_DIR" "$STREAM_CONF_DIR"
 if [[ -f "$LAB_ENV_JSON" ]]; then
     readonly MGMT_INTERFACE=$(jq -r '.network.bridge_interface' "$LAB_ENV_JSON")
     readonly DOMAIN=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
+    readonly DNS_SERVER=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON")
 else
     readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
     readonly DOMAIN="${dnsbinder_domain:-}"
+    readonly DNS_SERVER="127.0.0.1"
 fi
 
 lock_acquired=false
@@ -157,7 +159,7 @@ fn_validate_backends() {
             print_error "Empty backend entry found in list."
             return 1
         fi
-        if ! getent hosts "${backend}.${DOMAIN}" &>/dev/null; then
+        if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
             print_task "Creating DNS record for backend ${backend}..."
             echo ""
             if /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
@@ -266,9 +268,9 @@ fn_update_lb_in_registry() {
 fn_create_dns_record() {
     local name="$1"
 
-    if getent hosts "${name}.${DOMAIN}" &>/dev/null; then
+    if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${name}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
         local resolved_ip
-        resolved_ip=$(getent ahostsv4 "${name}.${DOMAIN}" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+        resolved_ip=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${name}.${DOMAIN}" 2>/dev/null | head -1)
         local infra_ip
         infra_ip=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON" 2>/dev/null || echo "")
 
@@ -299,7 +301,7 @@ fn_create_dns_record() {
 fn_delete_dns_record() {
     local name="$1"
     print_task "Deleting DNS record for ${name}.${DOMAIN}..."
-    if ! getent hosts "${name}.${DOMAIN}" &>/dev/null; then
+    if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${name}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
         print_task_skip
         return 0
     fi
@@ -320,8 +322,8 @@ fn_resolve_ip() {
     local retries=10
 
     while [[ $retries -gt 0 ]]; do
-        ipv4=$(getent ahostsv4 "$fqdn" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
-        ipv6=$(getent ahostsv6 "$fqdn" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+        ipv4=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "$fqdn" 2>/dev/null | head -1)
+        ipv6=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 AAAA "$fqdn" 2>/dev/null | head -1)
         [[ -n "$ipv4" ]] && [[ -n "$ipv6" ]] && break
         sleep 0.5
         retries=$((retries - 1))
@@ -1030,7 +1032,7 @@ fn_status() {
 
         # Check 1: DNS record
         print_task "DNS record (${lb_name}.${DOMAIN})..."
-        if getent hosts "${lb_name}.${DOMAIN}" &>/dev/null; then
+        if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${lb_name}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
             print_task_done
             total_pass=$((total_pass + 1))
         else
