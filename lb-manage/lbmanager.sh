@@ -1182,7 +1182,6 @@ fn_restore() {
         # Ensure nginx config exists
         if [[ ! -f "${STREAM_CONF_DIR}/${lb_name}.conf" ]]; then
             fn_generate_nginx_config "$lb_name" "$port" "$target_port" "$algorithm" "$ipv4" "$ipv6" "$backends"
-            needs_reload=true
         fi
     done < <(jq -r '.load_balancers[].name' "$LB_REGISTRY")
 

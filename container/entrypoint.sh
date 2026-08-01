@@ -42,6 +42,9 @@ rm -f /var/run/kea/*.pid /run/named/named.pid /run/radvd/radvd.pid /run/chrony/c
 mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,chrony,tftpd,radvd}
 chown named:named "${DATA_DIR}/logs/named"
 
+# Clear LB stream configs — restored by lbmanager after DNS is ready
+rm -f "${DATA_DIR}/nginx/stream.d"/*.conf 2>/dev/null || true
+
 # Generate rndc key if missing (needed for rndc reload/status)
 if [[ ! -f /etc/rndc.key ]]; then
     rndc-confgen -a -u named &>/dev/null
@@ -189,7 +192,7 @@ fi
 # Sends RAs on labbr0 so guest VMs get IPv6 addresses
 echo "[*] Starting radvd (IPv6 RA)..."
 if [[ -f "${DATA_DIR}/radvd/radvd.conf" ]]; then
-    /usr/sbin/radvd -C "${DATA_DIR}/radvd/radvd.conf" -n -l logfile -F "${DATA_DIR}/logs/radvd/radvd.log" &
+    /usr/sbin/radvd -C "${DATA_DIR}/radvd/radvd.conf" -n -m logfile -l "${DATA_DIR}/logs/radvd/radvd.log" &
     echo "    → radvd started (IPv6 RA on ${BRIDGE_IF})"
 else
     echo "    → SKIPPED: no radvd.conf found"
