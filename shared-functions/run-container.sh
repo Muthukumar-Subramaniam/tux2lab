@@ -24,7 +24,9 @@ run_tux2lab_container() {
         --uts=private \
         --network=host \
         --privileged \
-        --log-driver=none \
+        --log-driver=k8s-file \
+        --log-opt "path=${data_dir}/logs/tux2lab-engine.log" \
+        --log-opt "max-size=10mb" \
         -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "/tux2lab:/tux2lab:ro" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
