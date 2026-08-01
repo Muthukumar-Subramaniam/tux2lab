@@ -581,9 +581,10 @@ fn_create() {
     fn_acquire_lock
 
     print_info "Creating load balancer: ${name}.${DOMAIN}"
+    local backends_fqdn="${backends//,/.${DOMAIN},}.${DOMAIN}"
     print_notify "  Listen     : ${port}"
     print_notify "  Target     : ${target_port}"
-    print_notify "  Backends   : ${backends}"
+    print_notify "  Backends   : ${backends_fqdn}"
     print_notify "  Algorithm  : ${algorithm}"
     print_notify "  Interface  : ${MGMT_INTERFACE}"
 
