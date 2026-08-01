@@ -23,8 +23,9 @@ fi
 
 readonly LB_HUB_DIR="/tux2lab-data/lb-hub"
 readonly LB_REGISTRY="${LB_HUB_DIR}/lb-registry.json"
-readonly STREAM_CONF_DIR="/etc/nginx/stream.d"
+readonly STREAM_CONF_DIR="/tux2lab-data/nginx/stream.d"
 readonly LOCK_DIR="/tux2lab-data/.lbmanager.lock"
+readonly CONTAINER_NAME="tux2lab-engine"
 
 # Ensure required directories and registry exist
 mkdir -p "$LB_HUB_DIR" "$STREAM_CONF_DIR"
@@ -485,7 +486,7 @@ fn_remove_nginx_config() {
 
 fn_validate_nginx() {
     print_task "Validating nginx configuration..."
-    if nginx -t &>/dev/null; then
+    if podman exec "$CONTAINER_NAME" nginx -t &>/dev/null; then
         print_task_done
     else
         print_task_fail
@@ -496,7 +497,7 @@ fn_validate_nginx() {
 
 fn_reload_nginx() {
     print_task "Reloading nginx..."
-    if systemctl reload nginx &>/dev/null; then
+    if podman exec "$CONTAINER_NAME" nginx -s reload &>/dev/null; then
         print_task_done
     else
         print_task_fail

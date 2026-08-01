@@ -120,7 +120,7 @@ http {
 }
 
 stream {
-    include /etc/nginx/stream.d/*.conf;
+    include /tux2lab-data/nginx/stream.d/*.conf;
 }
 EOF
     mkdir -p "${DATA_DIR}/nginx/stream.d"
