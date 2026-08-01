@@ -761,8 +761,9 @@ fn_delete() {
 
     print_info "Deleting load balancer: ${name}"
 
-    # Step 1: Remove nginx config
+    # Step 1: Remove nginx config and logs
     fn_remove_nginx_config "$name"
+    rm -f "/tux2lab-data/logs/nginx/${name}_access.log" "/tux2lab-data/logs/nginx/${name}_error.log" 2>/dev/null
 
     # Step 2: Validate nginx (ensure remaining config is still valid)
     fn_validate_nginx || true
