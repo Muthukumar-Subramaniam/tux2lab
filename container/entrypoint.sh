@@ -13,6 +13,7 @@ set -euo pipefail
 # --- Configuration from environment ---
 BRIDGE_IP="${TUX2LAB_BRIDGE_IP:-}"
 BRIDGE_IF="${TUX2LAB_BRIDGE_IF:-labbr0}"
+BRIDGE_IPV6="${TUX2LAB_BRIDGE_IPV6:-}"
 DATA_DIR="${TUX2LAB_DATA_DIR:-/tux2lab-data}"
 
 if [[ -z "${BRIDGE_IP}" ]]; then
@@ -165,7 +166,6 @@ echo "[*] Starting in.tftpd (TFTP)..."
     --verbosity 3 \
     "${DATA_DIR}/tftpboot" >> "${DATA_DIR}/logs/tftpd/tftpd.log" 2>&1 &
 # IPv6 TFTP instance
-BRIDGE_IPV6=$(ip -6 addr show dev "${BRIDGE_IF}" scope global 2>/dev/null | grep -oP 'inet6 \K[^/]+' | head -1)
 if [[ -n "${BRIDGE_IPV6}" ]]; then
     /usr/sbin/in.tftpd \
         --foreground \
