@@ -1,27 +1,47 @@
-# Plan: IPv6 Offset Mapping + Stack Mode + TTL + Resource Overrides
+# Plan: v2.0.0 Remaining Features (6 Phases)
 
 ## TL;DR
 Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, resource allocation overrides, and self-managing IPv6 routes via tux2lab-sync. Enables IPv4-only, IPv6-only, and dual-stack VM deployments. LB stays dual-stack always.
 
-## Phase 1: dnsbinder — Offset IPv6 Mapping
+## Phase 1: dnsbinder — Offset IPv6 Mapping + DHCPv6 Pool (~4h)
 
-**Goal**: Replace 4-octet hex embedding with simple offset-based mapping.
+**Goal**: Replace 4-octet hex embedding with simple offset-based mapping. Reposition DHCPv6 pool.
 
 **Mapping**:
 - IPv4: `network_base + offset` (e.g., offset 2 → 10.28.28.2)
 - IPv6: `prefix::offset` (e.g., offset 2 → fd28:2808:2020:3000::2)
 - Offsets 1–1022: dual-stack or IPv4-only hosts (IPv6 slot reserved even if unused)
 - Offsets 1023+: IPv6-only hosts
+- DHCPv6 pool: `::f001` to `::f063` (99 leases, matching IPv4 pool size)
 
-**Files**: `named-manage/dnsbinder.sh` — AAAA creation section (~line 1620-1640)
+**Files**: `named-manage/dnsbinder.sh`, `setup/generate-service-configs.sh`
 
 **Changes**:
 - Replace hex-octet embedding with: offset = IPv4 - network_base; IPv6 = prefix::offset_hex
 - Reverse zone PTR creation updated accordingly
+- DHCPv6 pool: `::f001` to `::f063` (99 leases)
+- DHCP pool DNS reservations:
+  - `dhcp-v4-lease1` to `dhcp-v4-lease99` (A records, `-c4` style, prevents allocation into IPv4 pool)
+  - `dhcp-v6-lease1` to `dhcp-v6-lease99` (AAAA records, `-c6` style, prevents allocation into IPv6 pool)
 
 ---
 
-## Phase 2: dnsbinder — `-c4` and `-c6` Flags
+## Phase 2: dnsbinder — TTL Support (~1.5h)
+
+**Goal**: Per-record TTL for A/AAAA/CNAME.
+
+**Flags**: `--ttl <seconds>` with create, standalone `dnsbinder --ttl hostname 60`
+
+**Files**: `named-manage/dnsbinder.sh` — zone write, new --ttl dispatch
+
+**Changes**:
+- TTL in zone format: `hostname 300 IN A x.x.x.x`
+- Standalone update: sed-replace record line with TTL version
+- Applies to A + AAAA + CNAME + PTR
+
+---
+
+## Phase 3: dnsbinder — `-c4` and `-c6` Flags (~3h)
 
 **Goal**: Create IPv4-only or IPv6-only records.
 
@@ -36,22 +56,7 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 
 ---
 
-## Phase 3: dnsbinder — TTL Support
-
-**Goal**: Per-record TTL for A/AAAA/CNAME.
-
-**Flags**: `--ttl <seconds>` with create, standalone `dnsbinder --ttl hostname 60`
-
-**Files**: `named-manage/dnsbinder.sh` — zone write, new --ttl dispatch
-
-**Changes**:
-- TTL in zone format: `hostname 300 IN A x.x.x.x`
-- Standalone update: sed-replace record line with TTL version
-- Applies to A + AAAA + PTR
-
----
-
-## Phase 4: ksmanager — `--stack` Mode
+## Phase 4: ksmanager — `--stack dual|ipv4|ipv6` Mode (~6h)
 
 **Goal**: Deploy VMs as IPv4-only, IPv6-only, or dual-stack.
 
@@ -72,17 +77,7 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 
 ---
 
-## Phase 5: generate-service-configs.sh — DHCPv6 Pool Reposition
-
-**Goal**: Move DHCPv6 pool to non-overlapping range.
-
-**New pool**: `::f000` to `::ffff` (4096 leases)
-
-**Files**: `setup/generate-service-configs.sh` — generate_kea_dhcp6
-
----
-
-## Phase 6: VM Resource Allocation Overrides
+## Phase 5: VM Resource Allocation Overrides (~3h)
 
 **Goal**: Allow custom CPU, memory, and disk size per VM at create/reimage time.
 
@@ -91,15 +86,12 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 **Applicable to**: `tux2lab vm install` and `tux2lab vm reimage` (both golden and PXE)
 
 **Files**:
-- `qemu-kvm-manage/scripts-to-manage-vms/functions/parse-vm-command-args.sh` — parse new flags
-- `qemu-kvm-manage/scripts-to-manage-vms/kvm-install-golden.sh` — pass to virt-install
-- `qemu-kvm-manage/scripts-to-manage-vms/kvm-install-pxe.sh` — pass to virt-install
-- `qemu-kvm-manage/scripts-to-manage-vms/kvm-reimage-golden.sh` — resize disk if needed
-- `qemu-kvm-manage/scripts-to-manage-vms/kvm-reimage-pxe.sh` — resize disk if needed
-- `qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh` — default values
+- `parse-vm-command-args.sh` — parse new flags
+- `kvm-install-golden.sh` / `kvm-install-pxe.sh` — pass to virt-install
+- `kvm-reimage-golden.sh` / `kvm-reimage-pxe.sh` — resize disk if needed
+- `functions/defaults.sh` — default values
 
 **Changes**:
-- Parse --cpu, --memory, --root-disk-size from args
 - Default: cpu=2, memory=2048, root-disk-size=30 (from defaults.sh)
 - Pass to virt-install: --vcpus, --memory, --disk size=
 - Reimage: if new disk size > current, resize. If smaller, warn and skip.
@@ -107,27 +99,21 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 
 ---
 
-## Phase 7: IPv6 Default Route via tux2lab-sync
+## Phase 6: IPv6 Default Route via tux2lab-sync (~1.5h)
 
-**Goal**: Replace SSH-based `ipv6-route enable/disable` with self-managing VMs via tux2lab-sync.
+**Goal**: Replace SSH-based `ipv6-route enable/disable` with self-managing VMs.
 
 **Mechanism**:
 - `tux2lab ipv6-route enable` → creates `/tux2lab-data/lab-config/ipv6-route-active`
 - `tux2lab ipv6-route disable` → removes the flag file
-- `tux2lab-sync` (runs every 5min on VMs) checks `http://infra-server/lab-config/ipv6-route-active`
-  - If present → `ip -6 route add default via <gateway>` (idempotent)
-  - If absent → `ip -6 route del default` (idempotent)
-- `tux2lab start` → re-enables IPv6 forwarding on host if flag file exists
-
-**Files**:
-- `common-utils/tux2lab-sync` — add ipv6 route check section
-- `qemu-kvm-manage/scripts-to-manage-vms/kvm-ipv6-route.sh` — simplify to just manage flag file + host forwarding
-- `qemu-kvm-manage/scripts-to-manage-vms/start.sh` — re-enable forwarding if flag present
+- `tux2lab-sync` (every 5min) checks flag via HTTP:
+  - Present → `ip -6 route add default via <gateway>` (idempotent)
+  - Absent → `ip -6 route del default` (idempotent)
+- `tux2lab start` → re-enables IPv6 forwarding on host if flag present
 
 **Benefits**:
-- New VMs get the route automatically on first sync
-- No SSH dependency
-- Self-healing (route re-applied every 5 min if lost)
+- New VMs get route on first sync (no SSH needed)
+- Self-healing (re-applied every 5 min)
 - Single source of truth (flag file)
 
 ---
@@ -139,14 +125,18 @@ fd28:2808:2020:3000::/64
 
 ::1              = gateway (infra server)
 ::2 to ::3fe     = dual-stack / IPv4-only (offsets 2–1022)
+                   (offsets ~924–1022 reserved by IPv4 DHCP pool, IPv6 counterparts unused)
 ::3ff to ::efff  = IPv6-only hosts (offset 1023+)
-::f000 to ::ffff = DHCPv6 dynamic pool
+::f001 to ::f063 = DHCPv6 dynamic pool (99 leases)
 ```
 
 ## Key Decisions
 - LB always dual-stack (no --stack for LB)
-- PXE --stack ipv6: temporarily assigns IPv4 for install (dual-stack boot), post-install removes IPv4 config and A record, final state is IPv6-only
+- PXE --stack ipv6: temp IPv4 for install, post-install removes it, final state IPv6-only
 - Golden image builds always dual-stack; clones get per-VM stack
 - IPv6-only warning only if ipv6-route not active
 - Default --stack=dual — zero change for existing workflows
+- DHCP pool DNS records prevent accidental allocation into pool ranges
 - All changes additive — no existing behavior changes
+
+## Execution: ~19h total across 2–3 focused sessions
