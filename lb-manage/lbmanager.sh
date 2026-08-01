@@ -100,16 +100,6 @@ fn_to_fqdn() {
     fi
 }
 
-# Strip domain for dnsbinder calls
-fn_to_shortname() {
-    local input="$1"
-    if [[ -n "$DOMAIN" ]] && [[ "$input" == *".${DOMAIN}" ]]; then
-        echo "${input%.${DOMAIN}}"
-    else
-        echo "$input"
-    fi
-}
-
 fn_validate_name() {
     local name="$1"
     if [[ -z "$name" ]]; then
@@ -170,10 +160,8 @@ fn_validate_backends() {
             return 1
         fi
         if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}" 2>/dev/null | grep -q '^[0-9]'; then
-            local backend_short
-            backend_short=$(fn_to_shortname "$backend")
             print_info "Creating DNS record for backend ${backend}..."
-            if ! /tux2lab/named-manage/dnsbinder.sh -c "$backend_short"; then
+            if ! /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
                 print_error "Failed to create DNS record for backend '${backend}'."
                 return 1
             fi
@@ -275,8 +263,6 @@ fn_update_lb_in_registry() {
 # ====== DNS FUNCTIONS ======
 fn_create_dns_record() {
     local fqdn="$1"
-    local shortname
-    shortname=$(fn_to_shortname "$fqdn")
 
     if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | grep -q '^[0-9]'; then
         local resolved_ip
@@ -287,8 +273,8 @@ fn_create_dns_record() {
         if [[ -n "$infra_ip" ]] && [[ "$resolved_ip" == "$infra_ip" ]]; then
             print_warning "Existing record for ${fqdn} points to infra server (${infra_ip})."
             print_info "Removing stale record and creating a dedicated LB record..."
-            /tux2lab/named-manage/dnsbinder.sh -dcy "$shortname" &>/dev/null || true
-            /tux2lab/named-manage/dnsbinder.sh -dc "$shortname" &>/dev/null || true
+            /tux2lab/named-manage/dnsbinder.sh -dcy "$fqdn" &>/dev/null || true
+            /tux2lab/named-manage/dnsbinder.sh -dc "$fqdn" &>/dev/null || true
         else
             print_task "DNS record for ${fqdn}..."
             print_task_skip
@@ -298,7 +284,7 @@ fn_create_dns_record() {
     fi
 
     print_info "Creating DNS A/AAAA record for ${fqdn}..."
-    if ! /tux2lab/named-manage/dnsbinder.sh -c "$shortname"; then
+    if ! /tux2lab/named-manage/dnsbinder.sh -c "$fqdn"; then
         print_error "Failed to create DNS record for ${fqdn}"
         return 1
     fi
@@ -306,15 +292,13 @@ fn_create_dns_record() {
 
 fn_delete_dns_record() {
     local fqdn="$1"
-    local shortname
-    shortname=$(fn_to_shortname "$fqdn")
     print_task "Deleting DNS record for ${fqdn}..."
     if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | grep -q '^[0-9]'; then
         print_task_skip
         return 0
     fi
 
-    if /tux2lab/named-manage/dnsbinder.sh -dy "$shortname" &>/dev/null; then
+    if /tux2lab/named-manage/dnsbinder.sh -dy "$fqdn" &>/dev/null; then
         print_task_done
     else
         print_task_fail
