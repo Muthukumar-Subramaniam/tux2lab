@@ -14,7 +14,8 @@ run_tux2lab_container() {
     local bridge_ip="$5"
     local bridge_if="$6"
 
-    sudo mkdir -p "${data_dir}/log"
+    sudo mkdir -p "${data_dir}/log" "${data_dir}/logs"/{nginx,named,kea,chrony,tftpd,radvd} "${data_dir}/nginx/stream.d"
+    sudo chown named:named "${data_dir}/logs/named" 2>/dev/null || true
     sudo podman run -d \
         --name "${name}" \
         --hostname "${hostname}" \
@@ -27,6 +28,8 @@ run_tux2lab_container() {
         -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "/tux2lab:/tux2lab:ro" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
+        -v "${data_dir}/logs:${data_dir}/logs" \
+        -v "${data_dir}/nginx/stream.d:${data_dir}/nginx/stream.d" \
         -e "TUX2LAB_BRIDGE_IP=${bridge_ip}" \
         -e "TUX2LAB_BRIDGE_IF=${bridge_if}" \
         "${image}" &>/dev/null
