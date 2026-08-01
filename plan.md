@@ -1,7 +1,7 @@
 # Plan: IPv6 Offset Mapping + Stack Mode + TTL + Resource Overrides
 
 ## TL;DR
-Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, and resource allocation overrides. Enables IPv4-only, IPv6-only, and dual-stack VM deployments. LB stays dual-stack always.
+Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, resource allocation overrides, and self-managing IPv6 routes via tux2lab-sync. Enables IPv4-only, IPv6-only, and dual-stack VM deployments. LB stays dual-stack always.
 
 ## Phase 1: dnsbinder — Offset IPv6 Mapping
 
@@ -104,6 +104,31 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 - Pass to virt-install: --vcpus, --memory, --disk size=
 - Reimage: if new disk size > current, resize. If smaller, warn and skip.
 - Store in VM metadata for info display
+
+---
+
+## Phase 7: IPv6 Default Route via tux2lab-sync
+
+**Goal**: Replace SSH-based `ipv6-route enable/disable` with self-managing VMs via tux2lab-sync.
+
+**Mechanism**:
+- `tux2lab ipv6-route enable` → creates `/tux2lab-data/lab-config/ipv6-route-active`
+- `tux2lab ipv6-route disable` → removes the flag file
+- `tux2lab-sync` (runs every 5min on VMs) checks `http://infra-server/lab-config/ipv6-route-active`
+  - If present → `ip -6 route add default via <gateway>` (idempotent)
+  - If absent → `ip -6 route del default` (idempotent)
+- `tux2lab start` → re-enables IPv6 forwarding on host if flag file exists
+
+**Files**:
+- `common-utils/tux2lab-sync` — add ipv6 route check section
+- `qemu-kvm-manage/scripts-to-manage-vms/kvm-ipv6-route.sh` — simplify to just manage flag file + host forwarding
+- `qemu-kvm-manage/scripts-to-manage-vms/start.sh` — re-enable forwarding if flag present
+
+**Benefits**:
+- New VMs get the route automatically on first sync
+- No SSH dependency
+- Self-healing (route re-applied every 5 min if lost)
+- Single source of truth (flag file)
 
 ---
 
