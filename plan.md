@@ -56,11 +56,11 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 
 ---
 
-## Phase 4: ksmanager — `--stack dual|ipv4|ipv6` Mode (~6h)
+## Phase 4: ksmanager — `--ipv4-only` / `--ipv6-only` Flags (~6h)
 
 **Goal**: Deploy VMs as IPv4-only, IPv6-only, or dual-stack.
 
-**Flag**: `--stack dual|ipv4|ipv6` (default: dual)
+**Flags**: `--ipv4-only` or `--ipv6-only` (no flag = dual-stack default)
 
 **Files**:
 - `ksmanager/ksmanager.sh` — DNS, DHCP, network-config
@@ -68,12 +68,12 @@ Implement offset-based IPv6 addressing, per-record TTL, `--stack` mode for VMs, 
 - `golden-boot-templates/network-config-for-mac-address` — conditional sections
 
 **Changes**:
-- DNS: call `-c`/`-c4`/`-c6` based on stack
-- DHCP: skip DHCPv4 or DHCPv6 reservation per stack
+- DNS: call `-c`/`-c4`/`-c6` based on flag
+- DHCP: skip DHCPv4 or DHCPv6 reservation per flag
 - Network-config: disable unused stack in NM config
-- MAC cache: store stack mode
-- PXE --stack ipv6: temp IPv4 for install, post-install removes IPv4 config + A record
-- Warning if `--stack ipv6` and ipv6-route not active
+- MAC cache: store stack mode (ipv4-only/ipv6-only/dual)
+- PXE --ipv6-only: temp IPv4 for install, post-install removes IPv4 config + A record
+- Warning if `--ipv6-only` and ipv6-route not active
 
 ---
 
@@ -132,7 +132,7 @@ fd28:2808:2020:3000::/64
 
 ## Key Decisions
 - LB always dual-stack (no --stack for LB)
-- PXE --stack ipv6: temp IPv4 for install, post-install removes it, final state IPv6-only
+- PXE --ipv6-only: temp IPv4 for install, post-install removes it, final state IPv6-only
 - Golden image builds always dual-stack; clones get per-VM stack
 - IPv6-only warning only if ipv6-route not active
 - Default --stack=dual — zero change for existing workflows
