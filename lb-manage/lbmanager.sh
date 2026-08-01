@@ -663,7 +663,11 @@ fn_create() {
     # Step 7: Register in state
     fn_add_lb_to_registry "$name" "$port" "$target_port" "$algorithm" "$ipv4" "$ipv6" "$MGMT_INTERFACE" "$backends"
 
-    # Step 8: Reload nginx
+    # Step 8: Update /etc/hosts
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+    add_etc_hosts_entry "$name" "$ipv4" "$ipv6"
+
+    # Step 9: Reload nginx
     fn_reload_nginx
 
     print_success "Load balancer '${name}' created successfully!"
@@ -763,12 +767,16 @@ fn_delete() {
     # Step 4: Delete DNS record
     fn_delete_dns_record "$name"
 
-    # Step 5: Remove from registry
+    # Step 5: Remove from /etc/hosts
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+    remove_etc_hosts_entry "$name"
+
+    # Step 6: Remove from registry
     print_task "Removing from registry..."
     fn_remove_lb_from_registry "$name"
     print_task_done
 
-    # Step 6: Reload nginx
+    # Step 7: Reload nginx
     fn_reload_nginx
 
     print_success "Load balancer '${name}' deleted successfully!"
