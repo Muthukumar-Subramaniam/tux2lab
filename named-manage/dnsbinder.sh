@@ -305,6 +305,64 @@ Examples of valid domain names:
 "
 }
 
+fn_reconfigure_named() {
+    local named_conf="/tux2lab-data/named/named.conf"
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local template_file="${script_dir}/named.conf.template"
+
+    if [[ ! -f "$named_conf" ]]; then
+        print_error "No existing named.conf found. Run 'dnsbinder --setup' first."
+        exit 1
+    fi
+
+    if [[ ! -f "$template_file" ]]; then
+        print_error "Template file not found: ${template_file}"
+        exit 1
+    fi
+
+    # Extract the zone block from existing named.conf
+    local zone_block
+    zone_block=$(sed -n '/^# BEGIN zones-of-/,/^# END zones-of-/p' "$named_conf")
+    if [[ -z "$zone_block" ]]; then
+        print_error "Could not find zone block in existing named.conf."
+        exit 1
+    fi
+
+    print_task "Backing up named.conf..."
+    cp -p "$named_conf" "${named_conf}_bkp_by_dnsbinder"
+    print_task_done
+
+    # Read config from lab_environment.json
+    local listen_ipv4="${dnsbinder_server_ipv4_address}"
+    local listen_ipv6="${dnsbinder_server_ipv6_address:-none}"
+    local allow_networks="localhost; ${dnsbinder_network_cidr}"
+    if [[ -n "${dnsbinder_ipv6_ula_subnet:-}" ]]; then
+        allow_networks="${allow_networks}; ${dnsbinder_ipv6_ula_subnet}"
+    fi
+
+    print_task "Regenerating named.conf from template..."
+    if [[ "$listen_ipv6" != "none" ]]; then
+        sed -e "s|LISTEN_IPV4_ADDRESSES|${listen_ipv4}|g" \
+            -e "s|LISTEN_IPV6_ADDRESSES|${listen_ipv6}|g" \
+            -e "s|ALLOW_QUERY_NETWORKS|${allow_networks}|g" \
+            -e "s|ALLOW_RECURSION_NETWORKS|${allow_networks}|g" \
+            "$template_file" > "$named_conf"
+    else
+        sed -e "s|LISTEN_IPV4_ADDRESSES|${listen_ipv4}|g" \
+            -e "/listen-on-v6 port 53/d" \
+            -e "s|ALLOW_QUERY_NETWORKS|${allow_networks}|g" \
+            -e "s|ALLOW_RECURSION_NETWORKS|${allow_networks}|g" \
+            "$template_file" > "$named_conf"
+    fi
+
+    # Re-append zone block
+    echo "$zone_block" >> "$named_conf"
+    print_task_done
+
+    print_success "named.conf regenerated from template. Zone files untouched."
+}
+
 fn_configure_named_dns_server() {
 
     # Get the directory where dnsbinder script is located (resolve symlinks)
@@ -2717,6 +2775,7 @@ Use one of the following Options :
                                  Both IPv4 and IPv6 networks are auto-detected from system
                                  Usage: dnsbinder --setup <domain>
                                  Example: dnsbinder --setup tux2lab.internal
+    --reconfigure                Regenerate named.conf from template (preserves zone files)
     -h,    --help                To print this usage info 
 
 Note: All host record operations automatically create/manage both IPv4 (A) and IPv6 (AAAA) records
@@ -2896,6 +2955,10 @@ then
             ;;
         --setup)
             fn_configure_named_dns_server "${2}"
+            exit
+            ;;
+        --reconfigure)
+            fn_reconfigure_named
             exit
             ;;
         -q|--query)

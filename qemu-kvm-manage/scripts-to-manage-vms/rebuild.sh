@@ -138,7 +138,12 @@ else
     exit 1
 fi
 
-# ====== STEP 2: Sync lab credentials to KVM host ======
+# ====== STEP 2: Reconfigure named.conf from template ======
+if [[ -f /tux2lab-data/named/named.conf ]]; then
+    sudo /tux2lab/named-manage/dnsbinder.sh --reconfigure
+fi
+
+# ====== STEP 3: Sync lab credentials to KVM host ======
 print_task "Syncing lab credentials to host..."
 source /tux2lab/shared-functions/sync-credentials-to-host.sh
 if sync_credentials_to_host; then
@@ -147,7 +152,7 @@ else
     print_task_skip
 fi
 
-# ====== STEP 3: Refresh DNS ======
+# ====== STEP 4: Refresh DNS ======
 print_task "Refreshing DNS configuration..."
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     sudo podman exec "${CONTAINER_NAME}" rndc reload &>/dev/null || true
@@ -169,7 +174,7 @@ if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp-lease156.${pool_domain}
     print_task_done
 fi
 
-# ====== STEP 4: Pull container image (if needed) ======
+# ====== STEP 5: Pull container image (if needed) ======
 container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
 container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
 container_image=""
@@ -221,7 +226,7 @@ else
     print_task_done
 fi
 
-# ====== STEP 5: Recreate container ======
+# ====== STEP 6: Recreate container ======
 print_task "Recreating tux2lab-engine container..."
 recreate_start=$SECONDS
 
@@ -263,7 +268,7 @@ else
     exit 1
 fi
 
-# ====== STEP 6: Mount ISOs ======
+# ====== STEP 7: Mount ISOs ======
 print_task "Mounting ISO images..."
 if sudo /tux2lab/common-utils/tux2lab-iso-mounts.sh start >/dev/null 2>&1; then
     print_task_done
@@ -272,21 +277,21 @@ else
     print_warning "Some ISO mounts failed. Check /tux2lab-data/iso-mounts.conf"
 fi
 
-# ====== STEP 7: Restart NFS on host ======
+# ====== STEP 8: Restart NFS on host ======
 source /tux2lab/shared-functions/host-nfs.sh
 restart_host_nfs
 
-# ====== STEP 8: Ensure bridge firewall is open ======
+# ====== STEP 9: Ensure bridge firewall is open ======
 source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
 
-# ====== STEP 9: Update /etc/hosts ======
+# ====== STEP 10: Update /etc/hosts ======
 print_task "Syncing /etc/hosts..."
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
 add_etc_hosts_entry "${lab_infra_server_hostname}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
 print_task_done
 
-# ====== STEP 10: Configure DNS on host ======
+# ====== STEP 11: Configure DNS on host ======
 print_task "Configuring DNS for ${lab_infra_bridge_interface}..."
 if command -v resolvectl &>/dev/null; then
     sudo resolvectl dns "${lab_infra_bridge_interface}" "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}" 2>/dev/null || true
@@ -294,7 +299,7 @@ if command -v resolvectl &>/dev/null; then
 fi
 print_task_done
 
-# ====== STEP 11: Ensure boot service is enabled ======
+# ====== STEP 12: Ensure boot service is enabled ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh
 fi
