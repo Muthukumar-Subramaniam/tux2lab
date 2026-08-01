@@ -48,6 +48,7 @@ LAB OPERATIONS:
     health           Check lab infrastructure health
     info             Display lab deployment information
     credentials      Manage lab credentials (password, SSH keys, cert)
+    logflush         Truncate all service log files
 
 LAB ADD-ONS:
     lb               Manage TCP load balancers
@@ -134,6 +135,9 @@ main() {
             ;;
         credentials)
             exec "$SCRIPT_DIR/credentials.sh" "$@"
+            ;;
+        logflush)
+            exec "$SCRIPT_DIR/logflush.sh" "$@"
             ;;
         *)
             print_error "Unknown command: $command"

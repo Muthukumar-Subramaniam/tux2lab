@@ -22,7 +22,7 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Top-level commands
-    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild start stop enable disable health info dns lb version"
+    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild start stop enable disable health info dns lb logflush version"
 
     # Top-level options
     local options="-h --help -v --version"
