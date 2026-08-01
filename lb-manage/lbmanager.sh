@@ -160,9 +160,9 @@ fn_validate_backends() {
             return 1
         fi
         if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
-            print_info "Creating DNS record for backend ${backend}..."
+            print_info "Creating DNS record for backend ${backend}.${DOMAIN}..."
             if ! /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
-                print_error "Failed to create DNS record for backend '${backend}'."
+                print_error "Failed to create DNS record for backend '${backend}.${DOMAIN}'."
                 return 1
             fi
         fi
@@ -285,7 +285,7 @@ fn_create_dns_record() {
 
     print_info "Creating DNS A/AAAA record for ${name}.${DOMAIN}..."
     if ! /tux2lab/named-manage/dnsbinder.sh -c "$name"; then
-        print_error "Failed to create DNS record for ${name}"
+        print_error "Failed to create DNS record for ${name}.${DOMAIN}"
         return 1
     fi
 }
@@ -302,7 +302,7 @@ fn_delete_dns_record() {
         print_task_done
     else
         print_task_fail
-        print_error "Failed to delete DNS record for ${name}"
+        print_error "Failed to delete DNS record for ${name}.${DOMAIN}"
         return 1
     fi
 }
@@ -574,13 +574,13 @@ fn_create() {
 
     # Check if LB already exists
     if fn_lb_exists "$name"; then
-        print_error "Load balancer '${name}' already exists."
+        print_error "Load balancer '${name}.${DOMAIN}' already exists."
         exit 1
     fi
 
     fn_acquire_lock
 
-    print_info "Creating load balancer: ${name}"
+    print_info "Creating load balancer: ${name}.${DOMAIN}"
     print_notify "  Listen     : ${port}"
     print_notify "  Target     : ${target_port}"
     print_notify "  Backends   : ${backends}"
@@ -659,7 +659,7 @@ fn_create() {
     # Step 8: Reload nginx
     fn_reload_nginx
 
-    print_success "Load balancer '${name}' created successfully!"
+    print_success "Load balancer '${name}.${DOMAIN}' created successfully!"
     print_notify "  Endpoint : ${name}.${DOMAIN}:${port}"
     print_notify "  IPv4     : ${ipv4}:${port}"
     print_notify "  IPv6     : [${ipv6}]:${port}"
@@ -713,7 +713,7 @@ fn_delete() {
 
     # Validate LB exists
     if ! fn_lb_exists "$name"; then
-        print_error "Load balancer '${name}' does not exist."
+        print_error "Load balancer '${name}.${DOMAIN}' does not exist."
         exit 1
     fi
 
@@ -728,7 +728,7 @@ fn_delete() {
 
     # Confirmation
     if ! $yes_flag; then
-        print_warning "About to delete load balancer '${name}' (${ipv4}:${port})"
+        print_warning "About to delete load balancer '${name}.${DOMAIN}' (${ipv4}:${port})"
         local confirm
         while :; do
             read -rp "Please confirm deletion (y/n): " confirm
@@ -742,7 +742,7 @@ fn_delete() {
 
     fn_acquire_lock
 
-    print_info "Deleting load balancer: ${name}"
+    print_info "Deleting load balancer: ${name}.${DOMAIN}"
 
     # Step 1: Remove nginx config
     fn_remove_nginx_config "$name"
@@ -764,7 +764,7 @@ fn_delete() {
     # Step 6: Reload nginx
     fn_reload_nginx
 
-    print_success "Load balancer '${name}' deleted successfully!"
+    print_success "Load balancer '${name}.${DOMAIN}' deleted successfully!"
 }
 
 # ====== SUBCOMMAND: UPDATE ======
@@ -849,7 +849,7 @@ fn_update() {
 
     # Validate LB exists
     if ! fn_lb_exists "$name"; then
-        print_error "Load balancer '${name}' does not exist."
+        print_error "Load balancer '${name}.${DOMAIN}' does not exist."
         exit 1
     fi
 
@@ -893,7 +893,7 @@ fn_update() {
                 fi
             done
             if $already_exists; then
-                print_warning "Backend '${new_backend}' already exists, skipping."
+                print_warning "Backend '${new_backend}.${DOMAIN}' already exists, skipping."
             else
                 updated_backends="${updated_backends},${new_backend}"
             fi
@@ -928,7 +928,7 @@ fn_update() {
 
     fn_acquire_lock
 
-    print_info "Updating load balancer: ${name}"
+    print_info "Updating load balancer: ${name}.${DOMAIN}"
 
     # Regenerate nginx config
     fn_generate_nginx_config "$name" "$updated_port" "$updated_target_port" "$updated_algorithm" \
@@ -958,7 +958,7 @@ fn_update() {
     # Reload nginx
     fn_reload_nginx
 
-    print_success "Load balancer '${name}' updated successfully!"
+    print_success "Load balancer '${name}.${DOMAIN}' updated successfully!"
 }
 
 # ====== SUBCOMMAND: LIST ======
@@ -1034,7 +1034,7 @@ fn_status() {
     local lb_names=()
     if [[ -n "$name" ]]; then
         if ! fn_lb_exists "$name"; then
-            print_error "Load balancer '${name}' does not exist."
+            print_error "Load balancer '${name}.${DOMAIN}' does not exist."
             exit 1
         fi
         lb_names+=("$name")
@@ -1055,7 +1055,7 @@ fn_status() {
         port=$(echo "$lb_json" | jq -r '.port')
         interface=$(echo "$lb_json" | jq -r '.interface')
 
-        print_info "Load Balancer: ${lb_name} (${ipv4}:${port})"
+        print_info "Load Balancer: ${lb_name}.${DOMAIN} (${ipv4}:${port})"
 
         # Check 1: DNS record
         print_task "DNS record (${lb_name}.${DOMAIN})..."
