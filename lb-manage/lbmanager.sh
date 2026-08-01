@@ -1122,8 +1122,6 @@ fn_restore() {
 
     print_info "Restoring ${count} load balancer(s)..."
 
-    local needs_reload=false
-
     while IFS= read -r lb_name; do
         local lb_json
         lb_json=$(fn_get_lb "$lb_name")
@@ -1146,11 +1144,9 @@ fn_restore() {
         fi
     done < <(jq -r '.load_balancers[].name' "$LB_REGISTRY")
 
-    # Reload nginx once if any configs were regenerated
-    if $needs_reload; then
-        fn_validate_nginx
-        fn_reload_nginx
-    fi
+    # Always reload nginx to ensure stream configs are active
+    fn_validate_nginx
+    fn_reload_nginx
 
     print_success "All load balancers restored."
 }
