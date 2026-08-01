@@ -90,8 +90,18 @@ trap 'fn_cleanup; exit 130' INT TERM HUP QUIT
 
 # ====== VALIDATION FUNCTIONS ======
 
-# Strip domain suffix if user provides FQDN (e.g., k8s-cp.lab.internal → k8s-cp)
-fn_strip_domain() {
+# Ensure name is always FQDN internally
+fn_to_fqdn() {
+    local input="$1"
+    if [[ -n "$DOMAIN" ]] && [[ "$input" == *".${DOMAIN}" ]]; then
+        echo "$input"
+    else
+        echo "${input}.${DOMAIN}"
+    fi
+}
+
+# Strip domain for dnsbinder calls
+fn_to_shortname() {
     local input="$1"
     if [[ -n "$DOMAIN" ]] && [[ "$input" == *".${DOMAIN}" ]]; then
         echo "${input%.${DOMAIN}}"
@@ -159,10 +169,12 @@ fn_validate_backends() {
             print_error "Empty backend entry found in list."
             return 1
         fi
-        if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
-            print_info "Creating DNS record for backend ${backend}.${DOMAIN}..."
-            if ! /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
-                print_error "Failed to create DNS record for backend '${backend}.${DOMAIN}'."
+        if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}" 2>/dev/null | grep -q '^[0-9]'; then
+            local backend_short
+            backend_short=$(fn_to_shortname "$backend")
+            print_info "Creating DNS record for backend ${backend}..."
+            if ! /tux2lab/named-manage/dnsbinder.sh -c "$backend_short"; then
+                print_error "Failed to create DNS record for backend '${backend}'."
                 return 1
             fi
         fi
@@ -262,54 +274,57 @@ fn_update_lb_in_registry() {
 
 # ====== DNS FUNCTIONS ======
 fn_create_dns_record() {
-    local name="$1"
+    local fqdn="$1"
+    local shortname
+    shortname=$(fn_to_shortname "$fqdn")
 
-    if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${name}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
+    if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | grep -q '^[0-9]'; then
         local resolved_ip
-        resolved_ip=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${name}.${DOMAIN}" 2>/dev/null | head -1)
+        resolved_ip=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | head -1)
         local infra_ip
         infra_ip=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON" 2>/dev/null || echo "")
 
         if [[ -n "$infra_ip" ]] && [[ "$resolved_ip" == "$infra_ip" ]]; then
-            print_warning "Existing record for ${name}.${DOMAIN} points to infra server (${infra_ip})."
+            print_warning "Existing record for ${fqdn} points to infra server (${infra_ip})."
             print_info "Removing stale record and creating a dedicated LB record..."
-            /tux2lab/named-manage/dnsbinder.sh -dcy "$name" &>/dev/null || true
-            /tux2lab/named-manage/dnsbinder.sh -dc "$name" &>/dev/null || true
+            /tux2lab/named-manage/dnsbinder.sh -dcy "$shortname" &>/dev/null || true
+            /tux2lab/named-manage/dnsbinder.sh -dc "$shortname" &>/dev/null || true
         else
-            print_task "DNS record for ${name}.${DOMAIN}..."
+            print_task "DNS record for ${fqdn}..."
             print_task_skip
             print_info "Already exists with IP ${resolved_ip}"
             return 0
         fi
     fi
 
-    print_info "Creating DNS A/AAAA record for ${name}.${DOMAIN}..."
-    if ! /tux2lab/named-manage/dnsbinder.sh -c "$name"; then
-        print_error "Failed to create DNS record for ${name}.${DOMAIN}"
+    print_info "Creating DNS A/AAAA record for ${fqdn}..."
+    if ! /tux2lab/named-manage/dnsbinder.sh -c "$shortname"; then
+        print_error "Failed to create DNS record for ${fqdn}"
         return 1
     fi
 }
 
 fn_delete_dns_record() {
-    local name="$1"
-    print_task "Deleting DNS record for ${name}.${DOMAIN}..."
-    if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${name}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
+    local fqdn="$1"
+    local shortname
+    shortname=$(fn_to_shortname "$fqdn")
+    print_task "Deleting DNS record for ${fqdn}..."
+    if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | grep -q '^[0-9]'; then
         print_task_skip
         return 0
     fi
 
-    if /tux2lab/named-manage/dnsbinder.sh -dy "$name" &>/dev/null; then
+    if /tux2lab/named-manage/dnsbinder.sh -dy "$shortname" &>/dev/null; then
         print_task_done
     else
         print_task_fail
-        print_error "Failed to delete DNS record for ${name}.${DOMAIN}"
+        print_error "Failed to delete DNS record for ${fqdn}"
         return 1
     fi
 }
 
 fn_resolve_ip() {
-    local name="$1"
-    local fqdn="${name}.${DOMAIN}"
+    local fqdn="$1"
     local ipv4="" ipv6=""
     local retries=10
 
@@ -439,7 +454,7 @@ fn_generate_nginx_config() {
     local upstream_servers=""
     IFS=',' read -ra backend_list <<< "$backends_csv"
     for backend in "${backend_list[@]}"; do
-        upstream_servers="${upstream_servers}    server ${backend}.${DOMAIN}:${target_port} max_fails=3 fail_timeout=30s;\n"
+        upstream_servers="${upstream_servers}    server ${backend}:${target_port} max_fails=3 fail_timeout=30s;\n"
     done
 
     print_task "Generating nginx stream config ${config_file}..."
@@ -547,14 +562,14 @@ fn_create() {
     fi
 
     # Strip domain suffix if user provides FQDNs
-    name=$(fn_strip_domain "$name")
+    name=$(fn_to_fqdn "$name")
 
     # Strip domain from each backend
     if [[ -n "$backends" ]]; then
         local stripped_backends=()
         IFS=',' read -ra raw_backends <<< "$backends"
         for b in "${raw_backends[@]}"; do
-            stripped_backends+=("$(fn_strip_domain "$b")")
+            stripped_backends+=("$(fn_to_fqdn "$b")")
         done
         backends=$(IFS=','; echo "${stripped_backends[*]}")
     fi
@@ -574,17 +589,16 @@ fn_create() {
 
     # Check if LB already exists
     if fn_lb_exists "$name"; then
-        print_error "Load balancer '${name}.${DOMAIN}' already exists."
+        print_error "Load balancer '${name}' already exists."
         exit 1
     fi
 
     fn_acquire_lock
 
-    print_info "Creating load balancer: ${name}.${DOMAIN}"
-    local backends_fqdn="${backends//,/.${DOMAIN},}.${DOMAIN}"
+    print_info "Creating load balancer: ${name}"
     print_notify "  Listen     : ${port}"
     print_notify "  Target     : ${target_port}"
-    print_notify "  Backends   : ${backends_fqdn}"
+    print_notify "  Backends   : ${backends}"
     print_notify "  Algorithm  : ${algorithm}"
     print_notify "  Interface  : ${MGMT_INTERFACE}"
 
@@ -594,7 +608,7 @@ fn_create() {
     fi
 
     # Step 2: Resolve IP addresses
-    print_task "Resolving IP addresses for ${name}.${DOMAIN}..."
+    print_task "Resolving IP addresses for ${name}..."
     local ip_pair
     if ! ip_pair=$(fn_resolve_ip "$name"); then
         print_task_fail
@@ -660,8 +674,8 @@ fn_create() {
     # Step 8: Reload nginx
     fn_reload_nginx
 
-    print_success "Load balancer '${name}.${DOMAIN}' created successfully!"
-    print_notify "  Endpoint : ${name}.${DOMAIN}:${port}"
+    print_success "Load balancer '${name}' created successfully!"
+    print_notify "  Endpoint : ${name}:${port}"
     print_notify "  IPv4     : ${ipv4}:${port}"
     print_notify "  IPv6     : [${ipv6}]:${port}"
 }
@@ -680,7 +694,7 @@ fn_delete() {
     done
 
     # Strip domain suffix if FQDN provided
-    [[ -n "$name" ]] && name=$(fn_strip_domain "$name")
+    [[ -n "$name" ]] && name=$(fn_to_fqdn "$name")
 
     # Interactive: select from list if no name given
     if [[ -z "$name" ]]; then
@@ -714,7 +728,7 @@ fn_delete() {
 
     # Validate LB exists
     if ! fn_lb_exists "$name"; then
-        print_error "Load balancer '${name}.${DOMAIN}' does not exist."
+        print_error "Load balancer '${name}' does not exist."
         exit 1
     fi
 
@@ -729,7 +743,7 @@ fn_delete() {
 
     # Confirmation
     if ! $yes_flag; then
-        print_warning "About to delete load balancer '${name}.${DOMAIN}' (${ipv4}:${port})"
+        print_warning "About to delete load balancer '${name}' (${ipv4}:${port})"
         local confirm
         while :; do
             read -rp "Please confirm deletion (y/n): " confirm
@@ -743,7 +757,7 @@ fn_delete() {
 
     fn_acquire_lock
 
-    print_info "Deleting load balancer: ${name}.${DOMAIN}"
+    print_info "Deleting load balancer: ${name}"
 
     # Step 1: Remove nginx config
     fn_remove_nginx_config "$name"
@@ -765,7 +779,7 @@ fn_delete() {
     # Step 6: Reload nginx
     fn_reload_nginx
 
-    print_success "Load balancer '${name}.${DOMAIN}' deleted successfully!"
+    print_success "Load balancer '${name}' deleted successfully!"
 }
 
 # ====== SUBCOMMAND: UPDATE ======
@@ -786,17 +800,17 @@ fn_update() {
     done
 
     # Strip domain suffix if FQDN provided
-    [[ -n "$name" ]] && name=$(fn_strip_domain "$name")
+    [[ -n "$name" ]] && name=$(fn_to_fqdn "$name")
     [[ -n "$add_backends" ]] && {
         local _stripped=()
         IFS=',' read -ra _raw <<< "$add_backends"
-        for _b in "${_raw[@]}"; do _stripped+=("$(fn_strip_domain "$_b")"); done
+        for _b in "${_raw[@]}"; do _stripped+=("$(fn_to_fqdn "$_b")"); done
         add_backends=$(IFS=','; echo "${_stripped[*]}")
     }
     [[ -n "$remove_backends" ]] && {
         local _stripped=()
         IFS=',' read -ra _raw <<< "$remove_backends"
-        for _b in "${_raw[@]}"; do _stripped+=("$(fn_strip_domain "$_b")"); done
+        for _b in "${_raw[@]}"; do _stripped+=("$(fn_to_fqdn "$_b")"); done
         remove_backends=$(IFS=','; echo "${_stripped[*]}")
     }
 
@@ -850,7 +864,7 @@ fn_update() {
 
     # Validate LB exists
     if ! fn_lb_exists "$name"; then
-        print_error "Load balancer '${name}.${DOMAIN}' does not exist."
+        print_error "Load balancer '${name}' does not exist."
         exit 1
     fi
 
@@ -894,7 +908,7 @@ fn_update() {
                 fi
             done
             if $already_exists; then
-                print_warning "Backend '${new_backend}.${DOMAIN}' already exists, skipping."
+                print_warning "Backend '${new_backend}' already exists, skipping."
             else
                 updated_backends="${updated_backends},${new_backend}"
             fi
@@ -929,7 +943,7 @@ fn_update() {
 
     fn_acquire_lock
 
-    print_info "Updating load balancer: ${name}.${DOMAIN}"
+    print_info "Updating load balancer: ${name}"
 
     # Regenerate nginx config
     fn_generate_nginx_config "$name" "$updated_port" "$updated_target_port" "$updated_algorithm" \
@@ -959,7 +973,7 @@ fn_update() {
     # Reload nginx
     fn_reload_nginx
 
-    print_success "Load balancer '${name}.${DOMAIN}' updated successfully!"
+    print_success "Load balancer '${name}' updated successfully!"
 }
 
 # ====== SUBCOMMAND: LIST ======
@@ -977,7 +991,7 @@ fn_list() {
     while IFS= read -r lb_name; do
         local lb_json
         lb_json=$(fn_get_lb "$lb_name")
-        names+=("${lb_name}.${DOMAIN}")
+        names+=("${lb_name}")
         ipv4s+=("$(echo "$lb_json" | jq -r '.ipv4')")
         ipv6s+=("$(echo "$lb_json" | jq -r '.ipv6')")
         ports+=("$(echo "$lb_json" | jq -r '.port')")
@@ -1021,7 +1035,7 @@ fn_status() {
     done
 
     # Strip domain suffix if FQDN provided
-    [[ -n "$name" ]] && name=$(fn_strip_domain "$name")
+    [[ -n "$name" ]] && name=$(fn_to_fqdn "$name")
 
     local count
     count=$(fn_get_lb_count)
@@ -1035,7 +1049,7 @@ fn_status() {
     local lb_names=()
     if [[ -n "$name" ]]; then
         if ! fn_lb_exists "$name"; then
-            print_error "Load balancer '${name}.${DOMAIN}' does not exist."
+            print_error "Load balancer '${name}' does not exist."
             exit 1
         fi
         lb_names+=("$name")
@@ -1056,11 +1070,11 @@ fn_status() {
         port=$(echo "$lb_json" | jq -r '.port')
         interface=$(echo "$lb_json" | jq -r '.interface')
 
-        print_info "Load Balancer: ${lb_name}.${DOMAIN} (${ipv4}:${port})"
+        print_info "Load Balancer: ${lb_name} (${ipv4}:${port})"
 
         # Check 1: DNS record
-        print_task "DNS record (${lb_name}.${DOMAIN})..."
-        if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${lb_name}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
+        print_task "DNS record (${lb_name})..."
+        if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${lb_name}" 2>/dev/null | grep -q '^[0-9]'; then
             print_task_done
             total_pass=$((total_pass + 1))
         else
@@ -1128,8 +1142,8 @@ fn_status() {
 
         while IFS= read -r backend; do
             if command -v nc &>/dev/null; then
-                print_task "Backend ${backend}.${DOMAIN}:${target_port}..."
-                if nc -z -w 2 "${backend}.${DOMAIN}" "$target_port" &>/dev/null; then
+                print_task "Backend ${backend}:${target_port}..."
+                if nc -z -w 2 "${backend}" "$target_port" &>/dev/null; then
                     print_task_done
                     total_pass=$((total_pass + 1))
                 else
