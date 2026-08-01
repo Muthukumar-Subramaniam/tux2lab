@@ -89,25 +89,4 @@ if ! ip link show labbr0 &>/dev/null; then
 fi
 
 # ====== INVOKE LBMANAGER ======
-exit_code=0
-
-if $lab_infra_server_mode_is_host; then
-    sudo /tux2lab/lb-manage/lbmanager.sh "$@" || exit_code=$?
-else
-    # SSH connection options
-    ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
-    ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
-
-    # Verify SSH connectivity before proceeding
-    if ! ssh "${ssh_opts[@]}" -o ConnectTimeout=5 "$ssh_target" true &>/dev/null; then
-        print_error "Cannot reach lab infra server via SSH."
-        print_info "Ensure the infra server is running: tux2lab health"
-        exit 1
-    fi
-
-    # Forward args safely
-    args_escaped=$(printf '%q ' "$@")
-    ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/lb-manage/lbmanager.sh ${args_escaped% }" || exit_code=$?
-fi
-
-exit $exit_code
+sudo /tux2lab/lb-manage/lbmanager.sh "$@"
