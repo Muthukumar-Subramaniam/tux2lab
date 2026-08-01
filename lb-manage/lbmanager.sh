@@ -159,7 +159,8 @@ fn_validate_backends() {
         fi
         if ! getent hosts "${backend}.${DOMAIN}" &>/dev/null; then
             print_task "Creating DNS record for backend ${backend}..."
-            if /tux2lab/named-manage/dnsbinder.sh -cy "$backend" &>/dev/null; then
+            echo ""
+            if /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
                 print_task_done
             else
                 print_task_fail
@@ -285,7 +286,8 @@ fn_create_dns_record() {
     fi
 
     print_task "Creating DNS A/AAAA record for ${name}.${DOMAIN}..."
-    if /tux2lab/named-manage/dnsbinder.sh -c "$name" &>/dev/null; then
+    echo ""
+    if /tux2lab/named-manage/dnsbinder.sh -c "$name"; then
         print_task_done
     else
         print_task_fail
