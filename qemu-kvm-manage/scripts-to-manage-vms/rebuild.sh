@@ -299,7 +299,14 @@ if command -v resolvectl &>/dev/null; then
 fi
 print_task_done
 
-# ====== STEP 12: Ensure boot service is enabled ======
+# ====== STEP 12: Restore load balancer IPs ======
+if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
+    print_task "Restoring load balancer IPs..."
+    /tux2lab/lb-manage/lbmanager.sh restore 2>/dev/null || true
+    print_task_done
+fi
+
+# ====== STEP 13: Ensure boot service is enabled ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh
 fi
