@@ -90,32 +90,39 @@ trap 'fn_cleanup; exit 130' INT TERM HUP QUIT
 
 # ====== VALIDATION FUNCTIONS ======
 
-# Ensure name is always FQDN internally
+# Normalize user input to FQDN, validate hostname format
 fn_to_fqdn() {
     local input="$1"
-    if [[ -n "$DOMAIN" ]] && [[ "$input" == *".${DOMAIN}" ]]; then
-        echo "$input"
-    else
-        echo "${input}.${DOMAIN}"
+    if [[ -z "$input" ]]; then
+        print_error "Hostname cannot be empty."
+        return 1
     fi
-}
 
-fn_validate_name() {
-    local name="$1"
-    # Extract hostname part (before first dot) for validation
-    local hostname="${name%%.*}"
-    if [[ -z "$hostname" ]]; then
-        print_error "Load balancer name cannot be empty."
+    local hostname
+    if [[ "$input" == *".${DOMAIN}" ]]; then
+        hostname="${input%.${DOMAIN}}"
+        if [[ "$hostname" == *.* ]]; then
+            print_error "Invalid hostname format. Expected: hostname.${DOMAIN}"
+            return 1
+        fi
+    elif [[ "$input" == *.* ]]; then
+        print_error "Invalid domain. Expected domain: ${DOMAIN}"
         return 1
+    else
+        hostname="$input"
     fi
+
     if [[ ! "$hostname" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
-        print_error "Invalid name '${hostname}'. Must be lowercase alphanumeric with hyphens, cannot start or end with a hyphen."
+        print_error "Invalid hostname '${hostname}'. Use only lowercase letters, numbers, and hyphens."
         return 1
     fi
+
     if [[ ${#hostname} -gt 63 ]]; then
-        print_error "Name '${hostname}' exceeds 63 characters."
+        print_error "Hostname '${hostname}' exceeds 63 characters."
         return 1
     fi
+
+    echo "${hostname}.${DOMAIN}"
 }
 
 fn_validate_port() {
@@ -561,7 +568,6 @@ fn_create() {
     fi
 
     # Validate all inputs
-    fn_validate_name "$name"
     fn_validate_port "$port" "Listen port"
     fn_validate_port "$target_port" "Target port"
     fn_validate_algorithm "$algorithm"
