@@ -273,6 +273,8 @@ fn_update_lb_in_registry() {
 }
 
 # ====== DNS FUNCTIONS ======
+source /tux2lab/shared-functions/flush-dns-cache.sh
+
 fn_create_dns_record() {
     local fqdn="$1"
 
@@ -676,6 +678,8 @@ fn_create() {
     # Step 9: Reload nginx
     fn_reload_nginx
 
+    flush_dns_cache
+
     print_success "Load balancer '${name}' created successfully!"
     print_notify "  Endpoint : ${name}:${port}"
     print_notify "  IPv4     : ${ipv4}:${port}"
@@ -785,6 +789,8 @@ fn_delete() {
 
     # Step 7: Reload nginx
     fn_reload_nginx
+
+    flush_dns_cache
 
     print_success "Load balancer '${name}' deleted successfully!"
 }
