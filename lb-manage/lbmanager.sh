@@ -160,12 +160,8 @@ fn_validate_backends() {
             return 1
         fi
         if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}.${DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
-            print_task "Creating DNS record for backend ${backend}..."
-            echo ""
-            if /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
-                print_task_done
-            else
-                print_task_fail
+            print_info "Creating DNS record for backend ${backend}..."
+            if ! /tux2lab/named-manage/dnsbinder.sh -c "$backend"; then
                 print_error "Failed to create DNS record for backend '${backend}'."
                 return 1
             fi
@@ -287,12 +283,8 @@ fn_create_dns_record() {
         fi
     fi
 
-    print_task "Creating DNS A/AAAA record for ${name}.${DOMAIN}..."
-    echo ""
-    if /tux2lab/named-manage/dnsbinder.sh -c "$name"; then
-        print_task_done
-    else
-        print_task_fail
+    print_info "Creating DNS A/AAAA record for ${name}.${DOMAIN}..."
+    if ! /tux2lab/named-manage/dnsbinder.sh -c "$name"; then
         print_error "Failed to create DNS record for ${name}"
         return 1
     fi
