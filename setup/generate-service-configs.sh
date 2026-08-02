@@ -195,17 +195,8 @@ EOF
 generate_kea_dhcp6() {
     print_task "Generating kea-dhcp6 config..."
 
-    # Calculate IPv6 DHCP pool (maps IPv4 octets into hex for the last 99 IPs)
-    IFS='.' read -r oct1 oct2 oct3 <<< "${IPV4_LAST24}"
-    local hex_oct12
-    hex_oct12=$(printf '%02x%02x' "$oct1" "$oct2")
-    local hex_00oct3
-    hex_00oct3=$(printf '00%02x' "$oct3")
-    local oct3_hex
-    oct3_hex=$(printf '%02x' "$oct3")
-
-    local pool_start="${IPV6_PREFIX_BASE}:${hex_oct12}:${hex_00oct3}:${hex_oct12}:${oct3_hex}9c"
-    local pool_end="${IPV6_PREFIX_BASE}:${hex_oct12}:${hex_00oct3}:${hex_oct12}:${oct3_hex}fe"
+    local pool_start="${IPV6_PREFIX_BASE}::f001"
+    local pool_end="${IPV6_PREFIX_BASE}::f063"
 
     cat > "${DATA_DIR}/kea/kea-dhcp6.conf" <<EOF
 {

@@ -1621,17 +1621,17 @@ fn_create_host_record() {
 
     # Add AAAA record if IPv6 is configured
     if [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${dnsbinder_ipv6_gateway}" ]]; then
-        # Convert IPv4 to IPv6 by embedding IPv4 octets into the last two groups
+        # Calculate offset from network base, derive IPv6 as prefix::offset
+        local network_base="${dnsbinder_network_cidr%/*}"
         IFS=. read -r oct1 oct2 oct3 oct4 <<< "$v_current_ip_of_host_record"
+        IFS=. read -r net1 net2 net3 net4 <<< "$network_base"
+        local offset=$(( (oct1-net1)*16777216 + (oct2-net2)*65536 + (oct3-net3)*256 + (oct4-net4) ))
+        local offset_hex=$(printf "%x" $offset)
         
-        # Expand gateway to full form and extract the first 4 groups (/64 prefix)
+        # Expand gateway to full form and extract the /64 prefix
         ipv6_prefix_base=$(python3 -c "import ipaddress; print(str(ipaddress.IPv6Address('${dnsbinder_ipv6_gateway}').exploded).rsplit(':',4)[0])")
         
-        # Embed IPv4 in the last 2 groups: prefix:0:0:oct1oct2:oct3oct4
-        group7=$(printf "%02x%02x" $oct1 $oct2)
-        group8=$(printf "%02x%02x" $oct3 $oct4)
-        
-        v_ipv6_address_for_host="${ipv6_prefix_base}:0:0:${group7}:${group8}"
+        v_ipv6_address_for_host="${ipv6_prefix_base}::${offset_hex}"
         
         v_add_ipv6_host_record=$(echo "${v_host_record_adjusted_space} IN AAAA ${v_ipv6_address_for_host}")
         
