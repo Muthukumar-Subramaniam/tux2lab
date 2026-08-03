@@ -363,6 +363,100 @@ fn_reconfigure_named() {
     print_success "named.conf regenerated from template. Zone files untouched."
 }
 
+fn_update_record_ttl() {
+    local hostname="${1}"
+    local new_ttl="${2}"
+
+    # Validate TTL is numeric
+    if ! [[ "$new_ttl" =~ ^[0-9]+$ ]]; then
+        print_error "TTL must be a positive integer (seconds)."
+        return 1
+    fi
+
+    # Strip domain if FQDN provided
+    hostname="${hostname%.${v_domain_name}}"
+
+    # Check record exists
+    if ! grep -q "^${hostname} " "${v_fw_zone}"; then
+        print_error "No record found for '${hostname}.${v_domain_name}'."
+        return 1
+    fi
+
+    local escaped_host=$(printf '%s' "$hostname" | sed 's/[.[\*^$/]/\\&/g')
+
+    # Update A record TTL
+    if grep -q "^${hostname} .*IN A " "${v_fw_zone}"; then
+        sed -i "s/^\(${escaped_host}\s\+\)\([0-9]\+\s\+\)\?IN A /\1${new_ttl} IN A /" "${v_fw_zone}"
+        print_task "Updated TTL for A record of ${hostname}.${v_domain_name}..."
+        print_task_done
+    fi
+
+    # Update AAAA record TTL
+    if grep -q "^${hostname} .*IN AAAA" "${v_fw_zone}"; then
+        sed -i "s/^\(${escaped_host}\s\+\)\([0-9]\+\s\+\)\?IN AAAA /\1${new_ttl} IN AAAA /" "${v_fw_zone}"
+        print_task "Updated TTL for AAAA record of ${hostname}.${v_domain_name}..."
+        print_task_done
+    fi
+
+    # Update CNAME record TTL
+    if grep -q "^${hostname} .*IN CNAME" "${v_fw_zone}"; then
+        sed -i "s/^\(${escaped_host}\s\+\)\([0-9]\+\s\+\)\?IN CNAME /\1${new_ttl} IN CNAME /" "${v_fw_zone}"
+        print_task "Updated TTL for CNAME record of ${hostname}.${v_domain_name}..."
+        print_task_done
+    fi
+
+    # Update PTR records
+    local ipv4
+    ipv4=$(awk -v host="^${hostname} " '$0 ~ host && /IN A / {print $NF}' "${v_fw_zone}")
+    if [[ -n "$ipv4" ]]; then
+        local host_octet="${ipv4##*.}"
+        local ptr_zone
+        ptr_zone=$(find "${var_zone_dir}" -name "*-reverse.db" ! -name "*ipv6*" -exec grep -l "^${host_octet} .*IN PTR.*${hostname}" {} \; 2>/dev/null | head -1)
+        if [[ -n "$ptr_zone" ]]; then
+            sed -i "s/^\(${host_octet}\s\+\)\([0-9]\+\s\+\)\?IN PTR /\1${new_ttl} IN PTR /" "$ptr_zone"
+            print_task "Updated TTL for PTR record..."
+            print_task_done
+        fi
+    fi
+
+    # Update IPv6 PTR record
+    local ipv6
+    ipv6=$(awk -v host="^${hostname} " '$0 ~ host && /IN AAAA/ {print $NF}' "${v_fw_zone}")
+    if [[ -n "$ipv6" ]]; then
+        local ipv6_zone="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
+        if [[ -f "$ipv6_zone" ]]; then
+            local nibbles
+            nibbles=$(python3 -c "
+import ipaddress
+addr = ipaddress.IPv6Address('${ipv6}')
+host_int = int(addr) & ((1 << 64) - 1)
+host_hex = format(host_int, '016x')
+print('.'.join(reversed(host_hex)))
+")
+            if grep -q "^${nibbles} " "$ipv6_zone"; then
+                local escaped_nib=$(printf '%s' "$nibbles" | sed 's/[.[\*^$/]/\\&/g')
+                sed -i "s/^\(${escaped_nib}\s\+\)\([0-9]\+\s\+\)\?IN PTR /\1${new_ttl} IN PTR /" "$ipv6_zone"
+                print_task "Updated TTL for IPv6 PTR record..."
+                print_task_done
+            fi
+        fi
+    fi
+
+    # Set v_ptr_zone for serial update (needed by fn_update_serial_number_of_zones)
+    if [[ -n "$ipv4" ]]; then
+        IFS=. read -r _o1 _o2 _o3 _o4 <<< "$ipv4"
+        v_ptr_zone="${var_zone_dir}/${_o1}.${_o2}.${_o3}.${v_domain_name}-reverse.db"
+        fn_update_serial_number_of_zones
+    else
+        fn_update_serial_number_of_zones "forward-zone-only"
+    fi
+
+    print_task "Reloading DNS..."
+    sudo podman exec tux2lab-engine rndc reload &>/dev/null && print_task_done || print_task_fail
+
+    print_success "TTL updated to ${new_ttl} seconds for ${hostname}.${v_domain_name}"
+}
+
 fn_configure_named_dns_server() {
 
     # Get the directory where dnsbinder script is located (resolve symlinks)
@@ -915,12 +1009,12 @@ fn_reload_named_dns_service() {
         
         if ${query_success}; then
             print_task_done
-            print_success "Successfully created cname record ${v_input_cname}.${v_domain_name}"
+            local display_cname_ttl="${record_ttl:-3600 (default)}"
+            print_info "FYI : ${v_input_cname}.${v_domain_name}\n             ├── CNAME for: $(dig @"${dnsbinder_server_ipv4_address}" +short CNAME ${v_input_cname}.${v_domain_name} 2>/dev/null | sed 's/\.$//' || true)\n             └── TTL      : ${display_cname_ttl} seconds"
+            print_success "Created CNAME record ${v_input_cname}.${v_domain_name}"
         else
             print_task_fail
         fi
-
-        print_info "FYI : ${v_input_cname}.${v_domain_name} is an alias for $(dig @"${dnsbinder_server_ipv4_address}" +short CNAME ${v_input_cname}.${v_domain_name} 2>/dev/null | sed 's/\.$//' || true)"
 
         return
     fi
@@ -1011,17 +1105,6 @@ fn_reload_named_dns_service() {
         fi
 
         # Print success messages after validation
-        if [[  "${v_action_requested}" == "create" ]]
-        then
-            print_success "Successfully created host record ${v_host_record}.${v_domain_name}"
-        elif [[ "${v_action_requested}" == "delete" ]]
-        then
-            print_success "Successfully deleted host record ${v_host_record}.${v_domain_name}"
-        elif [[ "${v_action_requested}" == "rename" ]]
-        then
-            print_success "Successfully renamed host ${v_host_record}.${v_domain_name} to ${v_rename_record}.${v_domain_name}"
-        fi
-
         if  [[ "${v_action_requested}" == "rename" ]]
         then
             if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
@@ -1030,11 +1113,23 @@ fn_reload_named_dns_service() {
                 print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_rename_record}.${v_domain_name} | head -1 || true)"
             fi
         else
+            local display_ttl="${record_ttl:-3600 (default)}"
             if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
-                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)\n             └── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1 || true)"
+                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)\n             ├── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1 || true)\n             └── TTL : ${display_ttl} seconds"
             else
-                print_info "FYI : ${v_host_record}.${v_domain_name}\n             └── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1 || true)"
+                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1 || true)\n             └── TTL : ${display_ttl} seconds"
             fi
+        fi
+
+        if [[  "${v_action_requested}" == "create" ]]
+        then
+            print_success "Created host record ${v_host_record}.${v_domain_name}"
+        elif [[ "${v_action_requested}" == "delete" ]]
+        then
+            print_success "Deleted host record ${v_host_record}.${v_domain_name}"
+        elif [[ "${v_action_requested}" == "rename" ]]
+        then
+            print_success "Renamed host ${v_host_record}.${v_domain_name} to ${v_rename_record}.${v_domain_name}"
         fi
     fi
 }
@@ -1580,7 +1675,9 @@ fn_create_host_record() {
 
     v_host_record_adjusted_space=$(printf "%-*s" 63 "${v_host_record}")
 
-    v_add_host_record=$(echo "${v_host_record_adjusted_space} IN A ${v_current_ip_of_host_record}")
+    local ttl_field=""
+    [[ -n "${record_ttl}" ]] && ttl_field="${record_ttl} "
+    v_add_host_record=$(echo "${v_host_record_adjusted_space} ${ttl_field}IN A ${v_current_ip_of_host_record}")
 
     if [[ "${v_previous_ip}" == ';PTR-Records' ]]
     then
@@ -1633,7 +1730,7 @@ fn_create_host_record() {
         
         v_ipv6_address_for_host="${ipv6_prefix_base}::${offset_hex}"
         
-        v_add_ipv6_host_record=$(echo "${v_host_record_adjusted_space} IN AAAA ${v_ipv6_address_for_host}")
+        v_add_ipv6_host_record=$(echo "${v_host_record_adjusted_space} ${ttl_field}IN AAAA ${v_ipv6_address_for_host}")
         
         # Find correct insertion point based on numeric IPv6 address order
         v_insert_after=$(python3 -c "
@@ -1656,7 +1753,7 @@ for line in lines:
     if ';CNAME-Records' in line:
         break
     if in_aaaa_section and 'IN AAAA' in line:
-        match = re.search(r'(\S+)\s+IN AAAA\s+([0-9a-f:]+)', line)
+        match = re.search(r'(\S+)\s+(?:\d+\s+)?IN AAAA\s+([0-9a-f:]+)', line)
         if match:
             hostname = match.group(1)
             addr = ipaddress.IPv6Address(match.group(2))
@@ -1689,7 +1786,7 @@ print(insert_after)
 
     v_space_adjusted_host_part_of_current_ip=$(printf "%-*s" 3 "${v_host_part_of_current_ip}")
 
-    v_add_ptr_record=$(echo "${v_space_adjusted_host_part_of_current_ip} IN PTR ${v_host_record}.${v_domain_name}.")
+    v_add_ptr_record=$(echo "${v_space_adjusted_host_part_of_current_ip} ${ttl_field}IN PTR ${v_host_record}.${v_domain_name}.")
 
     if [[ "${v_previous_ip}" == ';PTR-Records' ]]
     then
@@ -1720,7 +1817,7 @@ print(ptr)
 ")
         
         if [[ -n "${v_ipv6_ptr}" ]]; then
-            v_add_ipv6_ptr_record="${v_ipv6_ptr} IN PTR ${v_host_record}.${v_domain_name}."
+            v_add_ipv6_ptr_record="${v_ipv6_ptr} ${ttl_field}IN PTR ${v_host_record}.${v_domain_name}."
             
             # Find correct insertion point based on lexicographic nibble order
             v_insert_after=$(python3 -c "
@@ -1744,7 +1841,7 @@ for line in lines:
         in_ptr_section = True
         continue
     if in_ptr_section and 'IN PTR' in line:
-        match = re.search(r'^([0-9a-f.]+)\s+IN PTR', line)
+        match = re.search(r'^([0-9a-f.]+)\s+(?:\d+\s+)?IN PTR', line)
         if match:
             ptr_records.append(match.group(1))
 
@@ -2589,7 +2686,9 @@ fn_create_cname_record() {
 
     v_cname_adjusted_space=$(printf "%-*s" 63 "${v_input_cname}")
 
-    v_cname_record="${v_cname_adjusted_space} IN CNAME ${v_input_hostname}.${v_domain_name}."
+    local cname_ttl_field=""
+    [[ -n "${record_ttl}" ]] && cname_ttl_field="${record_ttl} "
+    v_cname_record="${v_cname_adjusted_space} ${cname_ttl_field}IN CNAME ${v_input_hostname}.${v_domain_name}."
 
     sed -i "/^;CNAME-Records/a \\${v_cname_record}" "${v_fw_zone}"
 
@@ -2776,6 +2875,8 @@ Use one of the following Options :
                                  Usage: dnsbinder --setup <domain>
                                  Example: dnsbinder --setup tux2lab.internal
     --reconfigure                Regenerate named.conf from template (preserves zone files)
+    --update-ttl <host> <sec>    Update TTL for an existing host record (A + AAAA + PTR)
+    --ttl <seconds>              Set TTL when creating a record (use with -c, -ci, -cc)
     -h,    --help                To print this usage info 
 
 Note: All host record operations automatically create/manage both IPv4 (A) and IPv6 (AAAA) records
@@ -2786,9 +2887,10 @@ Run dnsbinder utility without any arguments to get menu driven actions."
 
 if [[ -n "${1}" ]]
 then
-    # Check for standalone --yes / -y flag and --inline flag (can appear anywhere after first arg)
+    # Check for standalone --yes / -y flag, --inline flag, and --ttl flag
     auto_confirm=""
     inline_mode=false
+    record_ttl=""
     args=("$@")
     for i in "${!args[@]}"; do
         if [[ "${args[$i]}" == "--yes" || "${args[$i]}" == "-y" ]] && [[ $i -gt 0 ]]; then
@@ -2797,6 +2899,10 @@ then
         elif [[ "${args[$i]}" == "--inline" ]] && [[ $i -gt 0 ]]; then
             inline_mode=true
             unset 'args[$i]'
+        elif [[ "${args[$i]}" == "--ttl" ]] && [[ -n "${args[$((i+1))]:-}" ]]; then
+            record_ttl="${args[$((i+1))]}"
+            unset 'args[$i]'
+            unset 'args[$((i+1))]'
         fi
     done
     set -- "${args[@]}"
@@ -2832,7 +2938,11 @@ then
         _rc=0
         for _item in "${_items[@]}"; do
             [[ -z "${_item}" ]] && continue
-            "$0" "${_flag}" "${_item}" || _rc=1
+            if [[ -n "${record_ttl}" ]]; then
+                "$0" "${_flag}" "${_item}" --ttl "${record_ttl}" || _rc=1
+            else
+                "$0" "${_flag}" "${_item}" || _rc=1
+            fi
         done
         exit ${_rc}
     fi
@@ -2959,6 +3069,15 @@ then
             ;;
         --reconfigure)
             fn_reconfigure_named
+            exit
+            ;;
+        --update-ttl)
+            fn_check_existence_of_domain
+            if [[ -z "${2:-}" || -z "${3:-}" ]]; then
+                print_error "Usage: dnsbinder --update-ttl <hostname> <ttl_seconds>"
+                exit 1
+            fi
+            fn_update_record_ttl "${2}" "${3}"
             exit
             ;;
         -q|--query)
