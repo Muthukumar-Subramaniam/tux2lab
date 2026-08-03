@@ -112,6 +112,29 @@ if [[ "$DISTRO_ID" == "rhel" ]] && command -v subscription-manager &>/dev/null; 
     fi
 fi
 
+# 7. IPv6 default route sync
+ipv6_route_flag=$(curl -fsSL "${LAB_CONFIG_URL}/ipv6-route-active" 2>/dev/null) || true
+ipv6_gw=$(grep -oP 'IPV6_GATEWAY="\K[^"]+' /etc/tux2lab-sync.conf 2>/dev/null || true)
+if [[ -z "$ipv6_gw" ]]; then
+    ipv6_gw=$(awk -F= '/^IPV6_GATEWAY=/{gsub(/"/,"",$2); print $2}' /etc/tux2lab-sync.conf 2>/dev/null || true)
+fi
+if [[ -n "$ipv6_gw" ]]; then
+    # Only manage route if eth0 has a non-link-local IPv6 address
+    has_global_ipv6=false
+    ip -6 addr show dev eth0 scope global 2>/dev/null | grep -q "inet6" && has_global_ipv6=true
+
+    has_route=false
+    ip -6 route show default via "$ipv6_gw" &>/dev/null && has_route=true
+
+    if $has_global_ipv6 && [[ "$ipv6_route_flag" == "enabled" ]] && ! $has_route; then
+        ip -6 route add default via "$ipv6_gw" 2>/dev/null || true
+        log_change "IPv6 default route added via ${ipv6_gw}"
+    elif [[ "$ipv6_route_flag" != "enabled" ]] && $has_route; then
+        ip -6 route del default via "$ipv6_gw" 2>/dev/null || true
+        log_change "IPv6 default route removed"
+    fi
+fi
+
 # Status output (only when run interactively or invoked directly, not by timer)
 if [[ "$changed" == "false" ]]; then
     if [[ -t 1 ]]; then

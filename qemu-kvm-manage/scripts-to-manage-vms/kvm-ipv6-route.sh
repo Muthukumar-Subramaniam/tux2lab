@@ -91,57 +91,22 @@ fn_vm_is_ssh_ready() {
     return $?
 }
 
-fn_enable_ipv6_route() {
+fn_trigger_sync_on_vm() {
     local vm_name="$1"
     
     if ! fn_vm_is_ssh_ready "$vm_name"; then
-        print_warning "VM $vm_name: SSH not ready, skipping"
+        print_warning "VM $vm_name: SSH not ready, will sync on next cycle"
         return 1
     fi
     
-    # Check if route already exists
-    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        'sudo ip -6 route show default' 2>/dev/null)
-    
-    if [[ "$route_check" =~ "default" ]]; then
-        print_info "VM $vm_name: IPv6 default route already exists"
-        return 0
-    fi
-    
-    # Add default route
     if ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        "sudo ip -6 route add default via ${IPV6_GATEWAY}" &>/dev/null; then
-        print_success "VM $vm_name: IPv6 default route added"
+        'sudo /usr/local/bin/tux2lab-sync' &>/dev/null; then
+        print_success "VM $vm_name: sync triggered"
         return 0
     else
-        print_error "VM $vm_name: Failed to add IPv6 default route"
+        print_warning "VM $vm_name: sync failed, will retry on next cycle"
         return 1
     fi
-}
-
-fn_disable_ipv6_route() {
-    local vm_name="$1"
-    
-    if ! fn_vm_is_ssh_ready "$vm_name"; then
-        print_warning "VM $vm_name: SSH not ready, skipping"
-        return 1
-    fi
-    
-    # Check if route exists before attempting removal
-    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        'sudo ip -6 route show default' 2>/dev/null)
-    
-    if [[ ! "$route_check" =~ "default" ]]; then
-        print_info "VM $vm_name: IPv6 default route already disabled"
-        return 2
-    fi
-    
-    # Remove default route
-    ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        'sudo ip -6 route del default 2>/dev/null' &>/dev/null || true
-    
-    print_success "VM $vm_name: IPv6 default route removed"
-    return 0
 }
 
 fn_check_vm_ipv6_route() {
@@ -257,11 +222,14 @@ fn_enable_all() {
     fi
     
     for vm in $vms; do
-        fn_enable_ipv6_route "$vm"
+        fn_trigger_sync_on_vm "$vm"
     done
     
     echo ""
     print_success "IPv6 default route configuration complete."
+
+    # Set flag so VMs pick up route via tux2lab-sync
+    echo "enabled" > /tux2lab-data/lab-config/ipv6-route-active
 }
 
 fn_disable_all() {
@@ -273,23 +241,19 @@ fn_disable_all() {
     if [[ -z "$vms" ]]; then
         print_warning "No running VMs found"
     else
-        local removed=0
         for vm in $vms; do
-            fn_disable_ipv6_route "$vm"
-            local rc=$?
-            [[ $rc -eq 0 ]] && ((++removed))
+            fn_trigger_sync_on_vm "$vm"
         done
         
         echo ""
-        if [[ $removed -gt 0 ]]; then
-            print_success "IPv6 default route removal complete."
-        else
-            print_info "No IPv6 default routes were active"
-        fi
+        print_success "IPv6 default route removal complete."
     fi
 
     # Clean up host-level forwarding and NAT rules
     fn_disable_host_ipv6_forwarding
+
+    # Remove flag so VMs remove route via tux2lab-sync
+    rm -f /tux2lab-data/lab-config/ipv6-route-active
 }
 
 fn_auto_configure() {

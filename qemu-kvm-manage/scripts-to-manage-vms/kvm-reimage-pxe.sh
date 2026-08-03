@@ -20,8 +20,12 @@ SUPPORTS_FORCE="yes"
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
 SUPPORTS_STACK="yes"
+SUPPORTS_MIN_RESOURCES="pxe"
 STACK_MODE="dual"
 STACK_MODE_EXPLICIT=false
+VM_CPUS="2"
+VM_MEMORY="2048"
+VM_DISK_SIZE="30"
 
 # Function to show help
 fn_show_help() {
@@ -36,6 +40,9 @@ Options:
   --ipv4-only          Reimage as IPv4-only VM
   --ipv6-only          Reimage as IPv6-only VM (temp IPv4 for PXE boot)
   --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
+  --cpu <n>             Number of vCPUs (default: 2)
+  --memory <MiB>       RAM in MiB (default: 2048)
+  --root-disk-size <GiB>  Root disk size in GiB (default: 30)
   -f, --force          Skip confirmation prompt
   -h, --help           Show this help message
 

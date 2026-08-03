@@ -146,6 +146,65 @@ parse_vm_command_args() {
                 STACK_MODE_EXPLICIT=true
                 shift
                 ;;
+            --cpu)
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                    print_error "--cpu requires a number."
+                    exit 1
+                fi
+                if ! [[ "$2" =~ ^[1-9][0-9]*$ ]] || (( ($2 & ($2 - 1)) != 0 )); then
+                    print_error "--cpu must be a power of 2 (1, 2, 4, 8, 16...). Got: '$2'"
+                    exit 1
+                fi
+                local _host_cpus; _host_cpus=$(nproc)
+                if (( $2 > _host_cpus )); then
+                    print_error "--cpu cannot exceed host CPU count (${_host_cpus}). Got: '$2'"
+                    exit 1
+                fi
+                local _min_cpu=1
+                [[ "${SUPPORTS_MIN_RESOURCES:-}" == "pxe" ]] && _min_cpu=2
+                if (( $2 < _min_cpu )); then
+                    print_error "--cpu must be at least ${_min_cpu} for this operation. Got: '$2'"
+                    exit 1
+                fi
+                VM_CPUS="$2"
+                shift 2
+                ;;
+            --memory)
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                    print_error "--memory requires a value in GiB (power of 2)."
+                    exit 1
+                fi
+                if ! [[ "$2" =~ ^[1-9][0-9]*$ ]] || (( ($2 & ($2 - 1)) != 0 )); then
+                    print_error "--memory must be a power of 2 in GiB (1, 2, 4, 8, 16...). Got: '$2'"
+                    exit 1
+                fi
+                local _host_mem_kib; _host_mem_kib=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+                local _host_mem_gib=$(( _host_mem_kib / 1024 / 1024 ))
+                if (( $2 >= _host_mem_gib )); then
+                    print_error "--memory must be less than host memory (${_host_mem_gib} GiB). Got: '$2'"
+                    exit 1
+                fi
+                local _min_mem=1
+                [[ "${SUPPORTS_MIN_RESOURCES:-}" == "pxe" ]] && _min_mem=2
+                if (( $2 < _min_mem )); then
+                    print_error "--memory must be at least ${_min_mem} GiB for this operation. Got: '$2'"
+                    exit 1
+                fi
+                VM_MEMORY="$2"
+                shift 2
+                ;;
+            --root-disk-size)
+                if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                    print_error "--root-disk-size requires a value in GiB (multiple of 5)."
+                    exit 1
+                fi
+                if ! [[ "$2" =~ ^[1-9][0-9]*$ ]] || (( $2 < 30 || $2 > 500 || $2 % 5 != 0 )); then
+                    print_error "--root-disk-size must be 30-500 GiB (minimum 30 GiB, multiple of 5). Got: '$2'"
+                    exit 1
+                fi
+                VM_DISK_SIZE="$2"
+                shift 2
+                ;;
             -*)
                 print_error "No such option: $1"
                 fn_show_help

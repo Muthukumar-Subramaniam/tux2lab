@@ -175,6 +175,7 @@ cat > /etc/tux2lab-sync.conf << EOF
 LAB_SERVER="get_lab_infra_server_hostname"
 ADMIN_USER="get_mgmt_super_user"
 DISTRO_ID="get_os_distribution"
+IPV6_GATEWAY="get_ipv6_gateway"
 EOF
 chmod 644 /etc/tux2lab-sync.conf
 

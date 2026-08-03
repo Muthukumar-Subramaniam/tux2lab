@@ -154,7 +154,13 @@ if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
     sudo /tux2lab/lb-manage/lbmanager.sh restore || true
 fi
 
-# ====== STEP 11: Health check ======
+# ====== STEP 11: Restore IPv6 forwarding if previously enabled ======
+if [[ -f /tux2lab-data/lab-config/ipv6-route-active ]]; then
+    print_task "Restoring IPv6 forwarding..."
+    /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/kvm-ipv6-route.sh auto &>/dev/null && print_task_done || print_task_skip
+fi
+
+# ====== STEP 12: Health check ======
 if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh ]]; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/health.sh || true
 fi

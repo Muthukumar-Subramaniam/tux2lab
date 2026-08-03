@@ -1,15 +1,19 @@
-# Set default values if not provided
+# Set default values if not provided (memory in GiB, converted to MiB for virt-install)
 DISK_PATH="${DISK_PATH:-/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2}"
 NVRAM_PATH="${NVRAM_PATH:-/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}_VARS.fd}"
+VM_CPUS="${VM_CPUS:-2}"
+VM_MEMORY="${VM_MEMORY:-2}"
+VM_DISK_SIZE="${VM_DISK_SIZE:-30}"
+VM_MEMORY_MIB=$(( VM_MEMORY * 1024 ))
 
 VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 
 if ! virt_install_error=$(sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MANAGER_DIR}/virt-install" \
   --name "${qemu_kvm_hostname}" \
   --features acpi=on,apic=on \
-  --memory 2048 \
-  --vcpus 2 \
-  --disk "path=${DISK_PATH},size=30,bus=virtio,boot.order=1" \
+  --memory "${VM_MEMORY_MIB}" \
+  --vcpus "${VM_CPUS}" \
+  --disk "path=${DISK_PATH},size=${VM_DISK_SIZE},bus=virtio,boot.order=1" \
   --os-variant "${OS_VARIANT:-almalinux9}" \
   --network "network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2" \
   --graphics none \
