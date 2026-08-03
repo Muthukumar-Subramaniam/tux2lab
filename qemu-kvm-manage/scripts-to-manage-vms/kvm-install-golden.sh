@@ -15,6 +15,9 @@ VERSION_TYPE=""
 HOSTNAMES=()
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
+SUPPORTS_STACK="yes"
+STACK_MODE="dual"
+STACK_MODE_EXPLICIT=false
 
 # Function to show help
 fn_show_help() {
@@ -25,6 +28,9 @@ Options:
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
   -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
+  --ipv4-only          Create IPv4-only VM (no AAAA record, no IPv6 config)
+  --ipv6-only          Create IPv6-only VM (AAAA only; golden-boot handles the rest)
+  --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
   -h, --help           Show this help message
 
 Examples:
@@ -216,6 +222,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
     ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
+    if [[ "${STACK_MODE_EXPLICIT}" == "true" ]] || [[ "${STACK_MODE}" != "dual" ]]; then
+        [[ "${STACK_MODE}" == "dual" ]] && ksmanager_opts="${ksmanager_opts} --dual-stack" || ksmanager_opts="${ksmanager_opts} --${STACK_MODE}-only"
+    fi
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
         fn_release_vm_hostname_lock
@@ -241,10 +250,12 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Update /etc/hosts
+    # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
     print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
-    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+    _etc_hosts_ipv4="${IPV4_ADDRESS}"
+    [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
+    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
         print_task_fail
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")

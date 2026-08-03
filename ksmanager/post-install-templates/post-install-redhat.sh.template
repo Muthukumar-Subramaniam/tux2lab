@@ -40,27 +40,59 @@ mkdir -p /root/system-connections/orig-during-install
 # Remove all installer-generated connections
 /bin/rm -rf /etc/NetworkManager/system-connections/*
 
-/bin/cat << 'NMEOF' > /etc/NetworkManager/system-connections/eth0.nmconnection
+/bin/cat > /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
 [connection]
 id=eth0
 type=ethernet
 interface-name=eth0
 autoconnect=true
 
+[ethernet]
+NMEOF
+
+if [[ "get_stack_mode" != "ipv6" ]]; then
+    /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
 [ipv4]
 method=manual
 address1=get_ipv4_address/get_ipv4_prefix,get_ipv4_gateway
 dns=get_ipv4_nameserver;
 dns-search=get_ipv4_domain;
+NMEOF
+else
+    /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv4]
+method=disabled
+NMEOF
+fi
+
+if [[ "get_stack_mode" == "ipv6" ]] && [[ -n "get_ipv6_address" ]]; then
+    /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv6]
+method=manual
+address1=get_ipv6_address/get_ipv6_prefix,get_ipv6_gateway
+dns=get_ipv6_nameserver;
+dns-search=get_ipv4_domain;
+NMEOF
+elif [[ "get_stack_mode" != "ipv4" ]] && [[ -n "get_ipv6_address" ]]; then
+    /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
 
 [ipv6]
 method=manual
 address1=get_ipv6_address/get_ipv6_prefix
 dns=get_ipv6_nameserver;
 dns-search=get_ipv4_domain;
-
-[ethernet]
 NMEOF
+else
+    /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv6]
+method=disabled
+NMEOF
+fi
+
 /bin/chmod 0600 /etc/NetworkManager/system-connections/eth0.nmconnection
 
 ######################################################################

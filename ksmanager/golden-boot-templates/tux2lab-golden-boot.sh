@@ -119,18 +119,30 @@ fi
 log "Loading network configuration"
 source "/root/network-config-$get_mac_address_path"
 
-# Validate required IPv4 variables
-if [ -z "$HOST_NAME" ] || [ -z "$IPv4_ADDRESS" ] || [ -z "$IPv4_CIDR" ] || [ -z "$IPv4_GATEWAY" ] || [ -z "$IPv4_DNS_SERVER" ] || [ -z "$IPv4_DNS_DOMAIN" ]; then
-	error_exit "Required network configuration variables are missing"
+# Validate minimum required variables
+if [ -z "$HOST_NAME" ] || [ -z "$IPv4_DNS_DOMAIN" ]; then
+	error_exit "Required network configuration variables are missing (HOST_NAME, IPv4_DNS_DOMAIN)"
 fi
 
-# Check if IPv6 is configured
+# Determine stack mode
+IPV4_ENABLED=false
+IPV6_ENABLED=false
+if [ -n "$IPv4_ADDRESS" ] && [ -n "$IPv4_CIDR" ] && [ -n "$IPv4_GATEWAY" ] && [ -n "$IPv4_DNS_SERVER" ]; then
+	IPV4_ENABLED=true
+fi
 if [ -n "$IPv6_ADDRESS" ] && [ -n "$IPv6_PREFIX" ]; then
-	log "IPv6 configuration detected: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
 	IPV6_ENABLED=true
-else
-	log "IPv6 not configured, using IPv4 only"
-	IPV6_ENABLED=false
+fi
+
+if [ "$IPV4_ENABLED" = false ] && [ "$IPV6_ENABLED" = false ]; then
+	error_exit "No IPv4 or IPv6 configuration found — at least one is required"
+fi
+
+if [ "$IPV4_ENABLED" = true ]; then
+	log "IPv4 configuration detected: ${IPv4_ADDRESS}/${IPv4_CIDR}"
+fi
+if [ "$IPV6_ENABLED" = true ]; then
+	log "IPv6 configuration detected: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
 fi
 
 log "Setting hostname to: ${HOST_NAME}"
@@ -261,15 +273,15 @@ case "${DISTRO_FAMILY}" in
 	redhat)
 		log "Configuring network using NetworkManager"
 		log "Creating new NetworkManager connection for eth0"
-		log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
-		log "  IPv4 Gateway: ${IPv4_GATEWAY}"
+		if [ "$IPV4_ENABLED" = true ]; then
+			log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
+			log "  IPv4 Gateway: ${IPv4_GATEWAY}"
+		fi
 		if [ "$IPV6_ENABLED" = true ]; then
 			log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
 		fi
-		log "  DNS: ${IPv4_DNS_SERVER},${IPv6_DNS_SERVER}"
-		log "  Search domain: ${IPv4_DNS_DOMAIN}"
 		
-		if [ "$IPV6_ENABLED" = true ]; then
+		if [ "$IPV4_ENABLED" = true ] && [ "$IPV6_ENABLED" = true ]; then
 			if ! nmcli connection add type ethernet ifname eth0 con-name eth0 \
 			  ipv4.addresses "${IPv4_ADDRESS}"/"${IPv4_CIDR}" \
 			  ipv4.gateway "${IPv4_GATEWAY}" \
@@ -283,7 +295,7 @@ case "${DISTRO_FAMILY}" in
 			  connection.autoconnect yes > /dev/null 2>&1; then
 				error_exit "Failed to create NetworkManager connection for eth0"
 			fi
-		else
+		elif [ "$IPV4_ENABLED" = true ]; then
 			if ! nmcli connection add type ethernet ifname eth0 con-name eth0 \
 			  ipv4.addresses "${IPv4_ADDRESS}"/"${IPv4_CIDR}" \
 			  ipv4.gateway "${IPv4_GATEWAY}" \
@@ -291,6 +303,17 @@ case "${DISTRO_FAMILY}" in
 			  ipv4.dns-search "${IPv4_DNS_DOMAIN}" \
 			  ipv4.method manual \
 			  ipv6.method disabled \
+			  connection.autoconnect yes > /dev/null 2>&1; then
+				error_exit "Failed to create NetworkManager connection for eth0"
+			fi
+		else
+			if ! nmcli connection add type ethernet ifname eth0 con-name eth0 \
+			  ipv4.method disabled \
+			  ipv6.addresses "${IPv6_ADDRESS}"/"${IPv6_PREFIX}" \
+			  ipv6.gateway "${IPv6_GATEWAY}" \
+			  ipv6.dns "${IPv6_DNS_SERVER}" \
+			  ipv6.dns-search "${IPv4_DNS_DOMAIN}" \
+			  ipv6.method manual \
 			  connection.autoconnect yes > /dev/null 2>&1; then
 				error_exit "Failed to create NetworkManager connection for eth0"
 			fi
@@ -309,16 +332,8 @@ case "${DISTRO_FAMILY}" in
 		if command -v netplan &>/dev/null; then
 			# Ubuntu: uses netplan
 			log "Configuring network using netplan"
-			log "Creating netplan configuration for eth0"
-			log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
-			log "  IPv4 Gateway: ${IPv4_GATEWAY}"
-			if [ "$IPV6_ENABLED" = true ]; then
-				log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
-			fi
-			log "  DNS: ${IPv4_DNS_SERVER},${IPv6_DNS_SERVER}"
-			log "  Search domain: ${IPv4_DNS_DOMAIN}"
 			
-			if [ "$IPV6_ENABLED" = true ]; then
+			if [ "$IPV4_ENABLED" = true ] && [ "$IPV6_ENABLED" = true ]; then
 				cat << EOF > /etc/netplan/eth0.yaml
 network:
     version: 2
@@ -338,7 +353,7 @@ network:
               addresses: [${IPv4_DNS_SERVER}, ${IPv6_DNS_SERVER}]
               search: [${IPv4_DNS_DOMAIN}]
 EOF
-			else
+			elif [ "$IPV4_ENABLED" = true ]; then
 				cat << EOF > /etc/netplan/eth0.yaml
 network:
     version: 2
@@ -354,7 +369,25 @@ network:
                 via: ${IPv4_GATEWAY}
                 on-link: true
             nameservers:
-              addresses: [${IPv4_DNS_SERVER}, ${IPv6_DNS_SERVER}]
+              addresses: [${IPv4_DNS_SERVER}]
+              search: [${IPv4_DNS_DOMAIN}]
+EOF
+			else
+				cat << EOF > /etc/netplan/eth0.yaml
+network:
+    version: 2
+    ethernets:
+        eth0:
+            dhcp4: false
+            dhcp6: false
+            accept-ra: false
+            addresses:
+              - ${IPv6_ADDRESS}/${IPv6_PREFIX}
+            routes:
+              - to: default
+                via: ${IPv6_GATEWAY}
+            nameservers:
+              addresses: [${IPv6_DNS_SERVER}]
               search: [${IPv4_DNS_DOMAIN}]
 EOF
 			fi
@@ -369,16 +402,8 @@ EOF
 		else
 			# Debian: uses /etc/network/interfaces
 			log "Configuring network using /etc/network/interfaces"
-			log "Creating interfaces configuration for eth0"
-			log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
-			log "  IPv4 Gateway: ${IPv4_GATEWAY}"
-			if [ "$IPV6_ENABLED" = true ]; then
-				log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
-			fi
-			log "  DNS: ${IPv4_DNS_SERVER}"
-			log "  Search domain: ${IPv4_DNS_DOMAIN}"
 			
-			if [ "$IPV6_ENABLED" = true ]; then
+			if [ "$IPV4_ENABLED" = true ] && [ "$IPV6_ENABLED" = true ]; then
 				cat << EOF > /etc/network/interfaces
 auto lo
 iface lo inet loopback
@@ -393,7 +418,7 @@ iface eth0 inet static
 iface eth0 inet6 static
     address ${IPv6_ADDRESS}/${IPv6_PREFIX}
 EOF
-			else
+			elif [ "$IPV4_ENABLED" = true ]; then
 				cat << EOF > /etc/network/interfaces
 auto lo
 iface lo inet loopback
@@ -403,6 +428,18 @@ iface eth0 inet static
     address ${IPv4_ADDRESS}/${IPv4_CIDR}
     gateway ${IPv4_GATEWAY}
     dns-nameservers ${IPv4_DNS_SERVER}
+    dns-search ${IPv4_DNS_DOMAIN}
+EOF
+			else
+				cat << EOF > /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet6 static
+    address ${IPv6_ADDRESS}/${IPv6_PREFIX}
+    gateway ${IPv6_GATEWAY}
+    dns-nameservers ${IPv6_DNS_SERVER}
     dns-search ${IPv4_DNS_DOMAIN}
 EOF
 			fi
@@ -418,26 +455,33 @@ EOF
 	
 	opensuse)
 		log "Configuring network for OpenSUSE"
-		log "Creating network configuration for eth0"
-		log "  IPv4: ${IPv4_ADDRESS}/${IPv4_CIDR}"
-		log "  IPv4 Gateway: ${IPv4_GATEWAY}"
-		if [ "$IPV6_ENABLED" = true ]; then
-			log "  IPv6: ${IPv6_ADDRESS}/${IPv6_PREFIX}"
-		fi
-		log "  DNS: ${IPv4_DNS_SERVER}"
 		
-		log "Using NetworkManager"
-		nmcli connection add type ethernet con-name eth0 ifname eth0 \
-			ipv4.method manual \
-			ipv4.addresses "${IPv4_ADDRESS}/${IPv4_CIDR}" \
-			ipv4.gateway "${IPv4_GATEWAY}" \
-			ipv4.dns "${IPv4_DNS_SERVER}" \
-			connection.autoconnect yes
-		if [ "$IPV6_ENABLED" = true ]; then
-			nmcli connection modify eth0 \
+		if [ "$IPV4_ENABLED" = true ] && [ "$IPV6_ENABLED" = true ]; then
+			nmcli connection add type ethernet con-name eth0 ifname eth0 \
+				ipv4.method manual \
+				ipv4.addresses "${IPv4_ADDRESS}/${IPv4_CIDR}" \
+				ipv4.gateway "${IPv4_GATEWAY}" \
+				ipv4.dns "${IPv4_DNS_SERVER}" \
 				ipv6.method manual \
 				ipv6.addresses "${IPv6_ADDRESS}/${IPv6_PREFIX}" \
-				ipv6.dns "${IPv6_DNS_SERVER}"
+				ipv6.dns "${IPv6_DNS_SERVER}" \
+				connection.autoconnect yes
+		elif [ "$IPV4_ENABLED" = true ]; then
+			nmcli connection add type ethernet con-name eth0 ifname eth0 \
+				ipv4.method manual \
+				ipv4.addresses "${IPv4_ADDRESS}/${IPv4_CIDR}" \
+				ipv4.gateway "${IPv4_GATEWAY}" \
+				ipv4.dns "${IPv4_DNS_SERVER}" \
+				ipv6.method disabled \
+				connection.autoconnect yes
+		else
+			nmcli connection add type ethernet con-name eth0 ifname eth0 \
+				ipv4.method disabled \
+				ipv6.method manual \
+				ipv6.addresses "${IPv6_ADDRESS}/${IPv6_PREFIX}" \
+				ipv6.gateway "${IPv6_GATEWAY}" \
+				ipv6.dns "${IPv6_DNS_SERVER}" \
+				connection.autoconnect yes
 		fi
 		log "Activating NetworkManager connection"
 		if ! nmcli connection up eth0; then
@@ -449,15 +493,25 @@ esac
 log "Waiting for network to become ready..."
 timeout=10
 counter=0
-while ! ip addr show eth0 | grep -q "inet ${IPv4_ADDRESS}" && [ $counter -lt $timeout ]; do
-	sleep 0.5
-	counter=$((counter + 1))
-done
-
-if ! ip addr show eth0 | grep -q "inet ${IPv4_ADDRESS}"; then
-	error_exit "Network interface did not receive IP address"
+if [ "$IPV4_ENABLED" = true ]; then
+    while ! ip addr show eth0 | grep -q "inet ${IPv4_ADDRESS}" && [ $counter -lt $timeout ]; do
+        sleep 0.5
+        counter=$((counter + 1))
+    done
+    if ! ip addr show eth0 | grep -q "inet ${IPv4_ADDRESS}"; then
+        error_exit "Network interface did not receive IPv4 address"
+    fi
+    log "Network interface configured with IPv4 ${IPv4_ADDRESS}/${IPv4_CIDR}"
+else
+    while ! ip addr show eth0 | grep -q "inet6 ${IPv6_ADDRESS}" && [ $counter -lt $timeout ]; do
+        sleep 0.5
+        counter=$((counter + 1))
+    done
+    if ! ip addr show eth0 | grep -q "inet6 ${IPv6_ADDRESS}"; then
+        error_exit "Network interface did not receive IPv6 address"
+    fi
+    log "Network interface configured with IPv6 ${IPv6_ADDRESS}/${IPv6_PREFIX}"
 fi
-log "Network interface configured with IP ${IPv4_ADDRESS}/${IPv4_CIDR}"
 
 log "Verifying network connectivity to lab infrastructure server..."
 # Wait for DNS resolution to become available after network restart

@@ -65,12 +65,16 @@ run_ksmanager() {
         OS_DISTRO=$(printf '%s' "$provision_json" | jq -r '.os_distribution // empty')
         VERSION_TYPE=$(printf '%s' "$provision_json" | jq -r '.version // empty')
         EXTRACTED_HOSTNAME=$(printf '%s' "$provision_json" | jq -r '.hostname // empty')
+        STACK_MODE=$(printf '%s' "$provision_json" | jq -r '.stack_mode // "dual"')
+        PXE_BOOTSTRAP_HOSTNAME=$(printf '%s' "$provision_json" | jq -r '.pxe_bootstrap_hostname // empty')
     else
         IPV4_ADDRESS=""
         IPV6_ADDRESS=""
         OS_DISTRO=""
         VERSION_TYPE=""
         EXTRACTED_HOSTNAME="${EXTRACTED_HOSTNAME:-}"
+        STACK_MODE="dual"
+        PXE_BOOTSTRAP_HOSTNAME=""
     fi
 
     # Validate extracted values based on operation mode
@@ -81,12 +85,12 @@ run_ksmanager() {
             return 1
         fi
     else
-        if [[ -z "${IPV4_ADDRESS}" ]]; then
+        if [[ "${STACK_MODE}" != "ipv6" ]] && [[ -z "${IPV4_ADDRESS}" ]]; then
             print_error "Failed to extract IPv4 address from ksmanager output."
             print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
             return 1
         fi
-        if [[ -z "${IPV6_ADDRESS}" ]]; then
+        if [[ "${STACK_MODE}" != "ipv4" ]] && [[ -z "${IPV6_ADDRESS}" ]]; then
             print_error "Failed to extract IPv6 address from ksmanager output."
             print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
             return 1

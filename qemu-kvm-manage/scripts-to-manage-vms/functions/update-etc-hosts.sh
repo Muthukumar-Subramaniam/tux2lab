@@ -82,8 +82,12 @@ add_etc_hosts_entry() {
     local ipv4_address="$2"
     local ipv6_address="$3"
 
-    if [[ -z "$hostname" || -z "$ipv4_address" || -z "$ipv6_address" ]]; then
-        print_error "add_etc_hosts_entry requires hostname, IPv4, and IPv6."
+    if [[ -z "$hostname" ]]; then
+        print_error "add_etc_hosts_entry requires hostname."
+        return 1
+    fi
+    if [[ -z "$ipv4_address" && -z "$ipv6_address" ]]; then
+        print_error "add_etc_hosts_entry requires at least one IP address."
         return 1
     fi
 
@@ -92,8 +96,8 @@ add_etc_hosts_entry() {
     local escaped_hostname="${hostname//./\\.}"
     sed -i "/[[:space:]]${escaped_hostname}$/d" "${ETC_HOSTS_STATE}" 2>/dev/null || true
 
-    printf '%s\t%s\n' "${ipv4_address}" "${hostname}" >> "${ETC_HOSTS_STATE}"
-    printf '%s\t%s\n' "${ipv6_address}" "${hostname}" >> "${ETC_HOSTS_STATE}"
+    [[ -n "$ipv4_address" ]] && printf '%s\t%s\n' "${ipv4_address}" "${hostname}" >> "${ETC_HOSTS_STATE}"
+    [[ -n "$ipv6_address" ]] && printf '%s\t%s\n' "${ipv6_address}" "${hostname}" >> "${ETC_HOSTS_STATE}"
 
     sync_etc_hosts
 }

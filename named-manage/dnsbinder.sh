@@ -149,41 +149,46 @@ fn_ipv6_to_nibbles() {
     echo "$host_hex" | rev | sed 's/./&./g; s/\.$//'
 }
 
-# Find AAAA sorted insertion point by IPv6 offset
+# Find AAAA sorted insertion point by IPv6 offset (single awk pass, no subshells)
 fn_find_aaaa_insert_after() {
     local new_offset="$1" zone_file="$2"
-    local insert_after=";AAAA-Records (IPv6)"
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        local hn addr existing_offset
-        hn=$(echo "$line" | awk '{print $1}')
-        addr=$(echo "$line" | awk '{print $NF}')
-        existing_offset=$(fn_ipv6_host_offset "$addr")
-        if [[ $existing_offset -lt $new_offset ]]; then
-            insert_after="$hn"
-        else
-            break
-        fi
-    done < <(sed -n '/;AAAA-Records (IPv6)/,/;CNAME-Records/{//!p}' "$zone_file" | grep 'IN AAAA')
-    echo "$insert_after"
+    awk -v new_off="$new_offset" '
+        function hex2dec(h,    i,c,d) {
+            d=0; h=tolower(h)
+            for (i=1; i<=length(h); i++) { c=substr(h,i,1); d=d*16+index("0123456789abcdef",c)-1 }
+            return d
+        }
+        BEGIN { result=";AAAA-Records (IPv6)"; in_section=0 }
+        /;AAAA-Records \(IPv6\)/ { in_section=1; next }
+        /;CNAME-Records/ { in_section=0 }
+        in_section && /IN AAAA/ {
+            addr=$NF
+            # Extract host offset from address
+            if (index(addr,"::")) {
+                split(addr, ab, "::")
+                hex_part=ab[2]; gsub(/:/, "", hex_part)
+            } else {
+                n=split(addr, g, ":"); hex_part=g[5] g[6] g[7] g[8]
+            }
+            offset=hex2dec(hex_part)
+            if (offset < new_off) result=$1
+        }
+        END { print result }
+    ' "$zone_file"
 }
 
-# Find IPv6 PTR sorted insertion point by nibble string comparison
+# Find IPv6 PTR sorted insertion point by nibble string comparison (single awk pass)
 fn_find_ptr_insert_after() {
     local new_ptr="$1" zone_file="$2"
-    local insert_after=";IPv6 PTR-Records"
-    if [[ ! -f "$zone_file" ]]; then echo "$insert_after"; return; fi
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        local existing_ptr
-        existing_ptr=$(echo "$line" | awk '{print $1}')
-        if [[ "$existing_ptr" < "$new_ptr" ]]; then
-            insert_after="$existing_ptr"
-        else
-            break
-        fi
-    done < <(sed -n '/;IPv6 PTR-Records/,$p' "$zone_file" | grep 'IN PTR')
-    echo "$insert_after"
+    if [[ ! -f "$zone_file" ]]; then echo ";IPv6 PTR-Records"; return; fi
+    awk -v new_ptr="$new_ptr" '
+        BEGIN { result=";IPv6 PTR-Records"; in_section=0 }
+        /;IPv6 PTR-Records/ { in_section=1; next }
+        in_section && /IN PTR/ {
+            if ($1 < new_ptr) result=$1
+        }
+        END { print result }
+    ' "$zone_file"
 }
 
 # Check if IPv4 address belongs to a CIDR network
@@ -616,14 +621,20 @@ fn_create_ipv6_only_record() {
 
     local next_offset=1023
     local existing_offsets
-    existing_offsets=$(
-        grep 'IN AAAA' "${v_fw_zone}" | while read -r line; do
-            local addr offset
-            addr=$(echo "$line" | awk '{print $NF}')
-            offset=$(fn_ipv6_host_offset "$addr")
-            [[ $offset -ge 1023 ]] && echo "$offset"
-        done | sort -n
-    )
+    existing_offsets=$(awk '
+        function hex2dec(h,    i,c,d) {
+            d=0; h=tolower(h)
+            for (i=1; i<=length(h); i++) { c=substr(h,i,1); d=d*16+index("0123456789abcdef",c)-1 }
+            return d
+        }
+        /IN AAAA/ {
+            addr=$NF
+            if (index(addr,"::")) { split(addr,ab,"::"); hex_part=ab[2]; gsub(/:/,"",hex_part) }
+            else { n=split(addr,g,":"); hex_part=g[5] g[6] g[7] g[8] }
+            offset=hex2dec(hex_part)
+            if (offset >= 1023) print offset
+        }
+    ' "${v_fw_zone}" | sort -n)
 
     if [[ -n "$existing_offsets" ]]; then
         local max_offset

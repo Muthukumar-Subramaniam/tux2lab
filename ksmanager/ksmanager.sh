@@ -32,6 +32,9 @@ OPTIONS:
     --distro <name>         Specify distribution (e.g., alma, rocky, ubuntu)
     --version <ver>         Specify version (e.g., 10, 24.04)
     --mac <address>         Specify MAC address for DHCP reservation
+    --ipv4-only             Create IPv4-only VM (no AAAA record, no IPv6 config)
+    --ipv6-only             Create IPv6-only VM (AAAA only; temp IPv4 for PXE boot)
+    --dual-stack             Force dual-stack (override auto-detected single-stack)
     -h, --help              Show this help message"
     exit 0
 fi
@@ -303,6 +306,52 @@ fn_wait_for_dns_a_record() {
     return 1
 }
 
+fn_wait_for_dns_aaaa_record() {
+    local hostname="$1"
+    local max_retries="${2:-10}"
+    local sleep_seconds=0.5
+    local retry_count=0
+
+    while [[ ${retry_count} -lt ${max_retries} ]]; do
+        if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${hostname}" | grep -q ':'; then
+            return 0
+        fi
+        sleep "${sleep_seconds}"
+        ((retry_count++))
+    done
+
+    return 1
+}
+
+# Determine dnsbinder flag based on stack_mode
+fn_get_dnsbinder_create_flag() {
+    case "${stack_mode}" in
+        ipv4) echo "-c4" ;;
+        ipv6) echo "-c6" ;;
+        *)    echo "-c" ;;
+    esac
+}
+
+# Wait for DNS record based on stack_mode
+fn_wait_for_dns_record() {
+    local hostname="$1"
+    local retries="${2:-10}"
+    if [[ "${stack_mode}" == "ipv6" ]]; then
+        fn_wait_for_dns_aaaa_record "${hostname}" "${retries}"
+    else
+        fn_wait_for_dns_a_record "${hostname}" "${retries}"
+    fi
+}
+
+# Check if DNS record already exists based on stack_mode
+# Check if ANY DNS record exists for this hostname (A, AAAA, or CNAME)
+fn_dns_record_exists() {
+    local hostname="$1"
+    dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${hostname}" | grep -q '^[0-9]' && return 0
+    dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${hostname}" | grep -q ':' && return 0
+    return 1
+}
+
 fn_check_and_create_host_record() {
     while :
     do
@@ -353,17 +402,31 @@ fn_check_and_create_host_record() {
     kickstart_short_hostname="${kickstart_hostname%%.*}"
 
     print_info "Checking DNS record for \"${kickstart_hostname}\"..."
-    if ! fn_wait_for_dns_a_record "${kickstart_hostname}" 2
+    if ! fn_dns_record_exists "${kickstart_hostname}"
     then
         print_info "No DNS record found for \"${kickstart_hostname}\"."
+        local _dnsbinder_flag
+        _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
         
         if $invoked_with_qemu_kvm; then
-            sudo "${dnsbinder_script}" -c "${kickstart_hostname}"
+            sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
 
-            if ! fn_wait_for_dns_a_record "${kickstart_hostname}"; then
+            if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
                 print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
                 exit 1
             fi
+
+            # For --ipv6-only PXE: create temp IPv4 record for PXE boot
+            if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image; then
+                pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+                print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
+                sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
+                if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                    print_error "Failed to create temporary PXE bootstrap record."
+                    exit 1
+                fi
+            fi
+
             flush_dns_cache
         else
             while :
@@ -372,9 +435,9 @@ fn_check_and_create_host_record() {
 
                 if [[ "${v_confirmation}" == "y" ]]
                 then
-                    sudo "${dnsbinder_script}" -c "${kickstart_hostname}"
+                    sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
 
-                    if ! fn_wait_for_dns_a_record "${kickstart_hostname}"; then
+                    if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
                         print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
                         exit 1
                     fi
@@ -397,6 +460,58 @@ fn_check_and_create_host_record() {
         local ipv6=$(dig @"${dnsbinder_server_ipv4_address}" +short AAAA "${kickstart_hostname}" | head -1)
         [[ -n "${ipv4}" ]] && print_info "${kickstart_hostname} has address ${ipv4}"
         [[ -n "${ipv6}" ]] && print_info "${kickstart_hostname} has IPv6 address ${ipv6}"
+
+        # If stack mode was explicitly changed, recreate DNS to match
+        if $stack_mode_explicit; then
+            local needs_recreate=false
+            case "${stack_mode}" in
+                ipv4) [[ -n "${ipv6}" ]] && needs_recreate=true ;;
+                ipv6) [[ -n "${ipv4}" ]] && needs_recreate=true ;;
+                dual) [[ -z "${ipv4}" || -z "${ipv6}" ]] && needs_recreate=true ;;
+            esac
+            if $needs_recreate; then
+                print_info "Stack mode changed to '${stack_mode}' — recreating DNS record..."
+                sudo "${dnsbinder_script}" -dy "${kickstart_hostname}"
+                # Clean up stale PXE bootstrap record from previous ipv6-only PXE install
+                _old_bootstrap="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+                if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${_old_bootstrap}" | grep -q '^[0-9]'; then
+                    sudo "${dnsbinder_script}" -dy "${_old_bootstrap}"
+                    print_info "Removed stale PXE bootstrap record ${_old_bootstrap}"
+                fi
+                local _dnsbinder_flag
+                _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
+                sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
+                if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
+                    print_error "Failed to recreate DNS record for \"${kickstart_hostname}\"."
+                    exit 1
+                fi
+                # For --ipv6-only PXE: create temp IPv4 record
+                if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image; then
+                    pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+                    print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
+                    sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
+                    if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                        print_error "Failed to create temporary PXE bootstrap record."
+                        exit 1
+                    fi
+                fi
+                flush_dns_cache
+            fi
+        fi
+
+        # For --ipv6-only PXE: ensure bootstrap record exists (even without recreation)
+        if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image && [[ -z "${pxe_bootstrap_hostname:-}" ]]; then
+            pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+            if ! dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${pxe_bootstrap_hostname}" | grep -q '^[0-9]'; then
+                print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
+                sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
+                if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                    print_error "Failed to create temporary PXE bootstrap record."
+                    exit 1
+                fi
+                flush_dns_cache
+            fi
+        fi
     fi
 }
 
@@ -624,11 +739,16 @@ if $remove_host_requested; then
         fi
         
         kea_dhcp4_reservations_json=""
-        while read -r kea_hostname kea_hw_address kea_ip_address kea_ipv6_address; do
+        while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+            kea_v4=""
+            for _f in $kea_remaining_fields; do
+                [[ "$_f" == *.* ]] && kea_v4="$_f" && break
+            done
+            [[ -z "$kea_v4" ]] && continue
             kea_dhcp4_reservations_json+="{
               \"hostname\": \"$kea_hostname\",
               \"hw-address\": \"$kea_hw_address\",
-              \"ip-address\": \"$kea_ip_address\"
+              \"ip-address\": \"$kea_v4\"
             },"
         done < "$kea_cache_snapshot"
         
@@ -654,12 +774,16 @@ EOF
         fi
         
         kea_dhcp6_reservations_json=""
-        while read -r kea_hostname kea_hw_address kea_ip_address kea_ipv6_address; do
-            if [[ -n "$kea_ipv6_address" ]]; then
+        while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+            kea_v6=""
+            for _f in $kea_remaining_fields; do
+                [[ "$_f" == *:* ]] && kea_v6="$_f" && break
+            done
+            if [[ -n "$kea_v6" ]]; then
                 kea_dhcp6_reservations_json+="{
                   \"hostname\": \"$kea_hostname\",
                   \"hw-address\": \"$kea_hw_address\",
-                  \"ip-addresses\": [ \"${kea_ipv6_address}\" ]
+                  \"ip-addresses\": [ \"${kea_v6}\" ]
                 },"
             fi
         done < "$kea_cache_snapshot"
@@ -705,8 +829,9 @@ EOF
         print_info "Removed KEA DHCP reservations (IPv4 and IPv6)"
     fi
     
-    # 6. Remove DNS record
-    if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${cleanup_hostname}" | grep -q '^[0-9]'; then
+    # 6. Remove DNS record (check both A and AAAA for stack-aware deletion)
+    if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${cleanup_hostname}" | grep -q '^[0-9]' || \
+       dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${cleanup_hostname}" | grep -q ':'; then
         sudo "${dnsbinder_script}" -dy "${cleanup_hostname}"
         
         # Verify deletion with retry mechanism (max 1 second)
@@ -733,6 +858,15 @@ EOF
         print_info "No DNS record found"
     fi
     
+    # Also remove any -ipv4 PXE bootstrap record (created for --ipv6-only VMs)
+    _cleanup_short="${cleanup_hostname%%.*}"
+    _cleanup_domain="${cleanup_hostname#*.}"
+    _bootstrap_hostname="${_cleanup_short}-ipv4.${_cleanup_domain}"
+    if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${_bootstrap_hostname}" | grep -q '^[0-9]'; then
+        sudo "${dnsbinder_script}" -dy "${_bootstrap_hostname}"
+        print_info "Removed PXE bootstrap record ${_bootstrap_hostname}"
+    fi
+    
     fn_release_host_lock
     print_success "Host '${cleanup_hostname}' has been removed from all ksmanager databases."
     exit 0
@@ -755,10 +889,12 @@ for input_argument in "$@"; do
     fi
 done
 
-# Parse --distro, --version, and --mac flags
+# Parse --distro, --version, --mac, and --ipv4-only/--ipv6-only flags
 distro_from_flag=""
 version_from_flag=""
 mac_from_flag=""
+stack_mode="dual"
+stack_mode_explicit=false
 prev_arg=""
 for arg in "$@"; do
     if [[ "$prev_arg" == "--distro" ]]; then
@@ -770,8 +906,45 @@ for arg in "$@"; do
     if [[ "$prev_arg" == "--mac" ]]; then
         mac_from_flag="$arg"
     fi
+    if [[ "$arg" == "--ipv4-only" ]]; then
+        if $stack_mode_explicit; then
+            print_error "Cannot combine --ipv4-only, --ipv6-only, and --dual-stack. Use only one."
+            exit 1
+        fi
+        stack_mode="ipv4"
+        stack_mode_explicit=true
+    fi
+    if [[ "$arg" == "--ipv6-only" ]]; then
+        if $stack_mode_explicit; then
+            print_error "Cannot combine --ipv4-only, --ipv6-only, and --dual-stack. Use only one."
+            exit 1
+        fi
+        stack_mode="ipv6"
+        stack_mode_explicit=true
+    fi
+    if [[ "$arg" == "--dual-stack" ]]; then
+        if $stack_mode_explicit; then
+            print_error "Cannot combine --ipv4-only, --ipv6-only, and --dual-stack. Use only one."
+            exit 1
+        fi
+        stack_mode="dual"
+        stack_mode_explicit=true
+    fi
     prev_arg="$arg"
 done
+
+# Auto-detect stack_mode from hosts.json if not explicitly set
+if ! $stack_mode_explicit && [[ -f "$hosts_json_file" ]]; then
+    local_hostname="${1:-}"
+    [[ -n "$local_hostname" ]] && local_hostname="${local_hostname%.${ipv4_domain}}"
+    [[ -n "$local_hostname" && "$local_hostname" != *"."* ]] && local_hostname="${local_hostname}.${ipv4_domain}"
+    if [[ -n "$local_hostname" ]]; then
+        stored_stack=$(jq -r --arg h "$local_hostname" '.[] | select(.hostname == $h) | .stack_mode // "dual"' "$hosts_json_file" 2>/dev/null | head -1)
+        if [[ -n "$stored_stack" && "$stored_stack" != "null" ]]; then
+            stack_mode="$stored_stack"
+        fi
+    fi
+fi
 
 # Version will be set after distro selection (from flag or interactive menu)
 version="${version_from_flag}"
@@ -950,11 +1123,19 @@ fn_select_os_distro
 
 if $golden_image_creation_not_requested; then
     fn_check_and_create_host_record "${1}"
-    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
-    
-    # Query DNS for IPv6 address (if dual-stack configured)
-    if [[ -n "${ipv6_gateway}" ]]; then
+
+    # Extract IPs based on stack_mode
+    if [[ "${stack_mode}" != "ipv6" ]]; then
+        ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    fi
+    if [[ "${stack_mode}" != "ipv4" ]] && [[ -n "${ipv6_gateway}" ]]; then
         ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    fi
+
+    # For --ipv6-only PXE: get temp IPv4 from bootstrap record
+    if [[ "${stack_mode}" == "ipv6" ]] && [[ -n "${pxe_bootstrap_hostname:-}" ]]; then
+        pxe_bootstrap_ipv4=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${pxe_bootstrap_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+        ipv4_address="${pxe_bootstrap_ipv4}"
     fi
 fi
 
@@ -986,9 +1167,24 @@ fn_cache_the_mac() {
         exit 1
     fi
 
+    # Build cache line: hostname mac [ipv4] [ipv6]
+    # PXE ipv6-only: needs temp IPv4 for DHCP during install + IPv6 for permanent
+    # Golden ipv6-only: only IPv6 (no PXE involved)
+    local cache_fields="${kickstart_hostname} ${mac_address_of_host}"
+    if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image && [[ -n "${ipv4_address}" ]]; then
+        cache_fields+=" ${ipv4_address} ${ipv6_address}"
+    elif [[ "${stack_mode}" == "ipv6" ]]; then
+        cache_fields+=" ${ipv6_address}"
+    elif [[ "${stack_mode}" == "ipv4" ]]; then
+        cache_fields+=" ${ipv4_address}"
+    else
+        cache_fields+=" ${ipv4_address}"
+        [[ -n "${ipv6_address}" ]] && cache_fields+=" ${ipv6_address}"
+    fi
+
     touch "${mac_cache_file}"
     if awk -v host="${kickstart_hostname}" '$1 != host' "${mac_cache_file}" > "${temp_cache_file}" && \
-       printf '%s %s %s %s\n' "${kickstart_hostname}" "${mac_address_of_host}" "${ipv4_address}" "${ipv6_address}" >> "${temp_cache_file}" && \
+       printf '%s\n' "${cache_fields}" >> "${temp_cache_file}" && \
        mv "${temp_cache_file}" "${mac_cache_file}"; then
         fn_release_mac_cache_lock
         print_task_done
@@ -1362,16 +1558,12 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_ipv4_nfsserver" "${ipv4_nfsserver}"
         fn_replace_token_in_file "${working_file}" "get_ipv4_domain" "${ipv4_domain}"
         
-        # IPv6 replacements (if configured)
-        if [[ -n "${ipv6_address}" ]]; then
-            fn_replace_token_in_file "${working_file}" "get_ipv6_address" "${ipv6_address}"
-            fn_replace_token_in_file "${working_file}" "get_ipv6_gateway" "${ipv6_gateway}"
-            fn_replace_token_in_file "${working_file}" "get_ipv6_prefix" "${ipv6_prefix}"
-        fi
+        # IPv6 replacements (always replace — empty values for ipv4-only VMs)
+        fn_replace_token_in_file "${working_file}" "get_ipv6_address" "${ipv6_address}"
+        fn_replace_token_in_file "${working_file}" "get_ipv6_gateway" "${ipv6_gateway:-}"
+        fn_replace_token_in_file "${working_file}" "get_ipv6_prefix" "${ipv6_prefix:-}"
         # Always replace IPv6 nameserver if configured
-        if [[ -n "${ipv6_nameserver}" ]]; then
-            fn_replace_token_in_file "${working_file}" "get_ipv6_nameserver" "${ipv6_nameserver}"
-        fi
+        fn_replace_token_in_file "${working_file}" "get_ipv6_nameserver" "${ipv6_nameserver:-}"
         fn_replace_token_in_file "${working_file}" "get_hostname" "${kickstart_short_hostname}"
 
         # Debian preseed workaround: the directive name 'netcfg/get_hostname' contains
@@ -1396,12 +1588,26 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_debian_codename" "${debian_codename:-}"
         fn_replace_token_in_file "${working_file}" "get_subnets_to_allow_ssh_pub_access" "${subnets_to_allow_ssh_pub_access}"
 
+        fn_replace_token_in_file "${working_file}" "get_stack_mode" "${stack_mode}"
+
         awk -v val="$shadow_password_super_mgmt_user" '
         {
                 gsub(/get_shadow_password_super_mgmt_user/, val)
         }
         1
         ' "${working_file}" > "${working_file}"_tmp_ksmanager && mv "${working_file}"_tmp_ksmanager "${working_file}"
+
+        # Strip artifacts from empty IPv6/IPv4 tokens in install configs
+        if [[ -z "${ipv6_address}" ]]; then
+            # YAML: remove "- /" lines (Ubuntu eth0.yaml)
+            sed -i '/^\s*-\s*\/\s*$/d' "${working_file}"
+            # JSON: remove "/"  entries (openSUSE profile.json)
+            sed -i 's|,\s*"/"||g; s|"/",\s*||g; s|"/"||g' "${working_file}"
+            # JSON: remove empty gateway6 line
+            sed -i '/"gateway6":\s*""/d' "${working_file}"
+            # Netplan: remove empty IPv6 nameserver from address list
+            sed -i 's|,\s*]|]|g' "${working_file}"
+        fi
     }
 
     if [[ -d "${input_dir_or_file}" ]]
@@ -1448,6 +1654,13 @@ fi
 if $invoked_with_golden_image; then
     print_task "Setting environment variables in network config..."
     fn_set_environment "${ksmanager_hub_dir}"/golden-boot-mac-configs/network-config-"${ipxe_cfg_mac_address}"
+    # Strip irrelevant fields based on stack mode
+    _net_cfg="${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac_address}"
+    if [[ "${stack_mode}" == "ipv4" ]]; then
+        sed -i '/^IPv6_/d' "${_net_cfg}"
+    elif [[ "${stack_mode}" == "ipv6" ]]; then
+        sed -i '/^IPv4_ADDRESS=/d; /^IPv4_CIDR=/d; /^IPv4_GATEWAY=/d; /^IPv4_DNS_SERVER=/d' "${_net_cfg}"
+    fi
     print_task_done
 fi
 
@@ -1485,15 +1698,6 @@ fn_update_kea_dhcp_reservations() {
         exit 1
     fi
 
-    current_ip_with_mac=$(awk -v host="${kickstart_hostname}" '$1 == host {print $3; exit}' "${kea_cache_file}")
-    if [[ -n "${current_ip_with_mac}" && "${current_ip_with_mac}" != "${ipv4_address}" ]]; then
-        awk -v host="${kickstart_hostname}" -v new_ip="${ipv4_address}" '
-            $1 == host {$3 = new_ip}
-            {print}
-        ' "${kea_cache_file}" > "${kea_cache_file}.tmp.$$" && mv "${kea_cache_file}.tmp.$$" "${kea_cache_file}"
-        rm -f "${kea_cache_file}.tmp.$$"
-    fi
-
     if [[ -f "${kea_cache_file}" ]]; then
         if ! cp "${kea_cache_file}" "${kea_cache_snapshot}"; then
             fn_release_mac_cache_lock
@@ -1523,12 +1727,18 @@ fn_update_kea_dhcp_reservations() {
 
   # Build JSON array of DHCPv4 reservations from cache file
   local kea_dhcp4_reservations_json=""
-  while read -r kea_hostname kea_hw_address kea_ip_address kea_ipv6_address; do
-    kea_dhcp4_reservations_json+="{
-      \"hostname\": \"$kea_hostname\",
-      \"hw-address\": \"$kea_hw_address\",
-      \"ip-address\": \"$kea_ip_address\"
-    },"
+  while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+    local kea_v4=""
+    for _f in $kea_remaining_fields; do
+      [[ "$_f" == *.* ]] && kea_v4="$_f" && break
+    done
+    if [[ -n "$kea_v4" ]]; then
+      kea_dhcp4_reservations_json+="{
+        \"hostname\": \"$kea_hostname\",
+        \"hw-address\": \"$kea_hw_address\",
+        \"ip-address\": \"$kea_v4\"
+      },"
+    fi
     done < "$kea_cache_snapshot"
 
   kea_dhcp4_reservations_json="[${kea_dhcp4_reservations_json%,}]"
@@ -1559,12 +1769,18 @@ EOF
 
   # Build JSON array of DHCPv6 reservations from cache file
   local kea_dhcp6_reservations_json=""
-  while read -r kea_hostname kea_hw_address kea_ip_address kea_ipv6_address; do
-    kea_dhcp6_reservations_json+="{
-      \"hostname\": \"$kea_hostname\",
-      \"hw-address\": \"$kea_hw_address\",
-      \"ip-addresses\": [ \"${kea_ipv6_address}\" ]
-    },"
+  while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+    local kea_v6=""
+    for _f in $kea_remaining_fields; do
+      [[ "$_f" == *:* ]] && kea_v6="$_f" && break
+    done
+    if [[ -n "$kea_v6" ]]; then
+      kea_dhcp6_reservations_json+="{
+        \"hostname\": \"$kea_hostname\",
+        \"hw-address\": \"$kea_hw_address\",
+        \"ip-addresses\": [ \"${kea_v6}\" ]
+      },"
+    fi
     done < "$kea_cache_snapshot"
 
   kea_dhcp6_reservations_json="[${kea_dhcp6_reservations_json%,}]"
@@ -1671,21 +1887,34 @@ if curl -s -o /dev/null http://127.0.0.1:8000/ 2>/dev/null; then
     fn_update_kea_dhcp_reservations
 fi
 
-echo -e "Configuration Summary:
+_summary="Configuration Summary:
   ${MAKE_IT_CYAN}✓ Hostname         :${RESET_COLOR} ${kickstart_hostname}
   ${MAKE_IT_CYAN}✓ MAC Address      :${RESET_COLOR} ${mac_address_of_host}
+  ${MAKE_IT_CYAN}✓ Stack Mode       :${RESET_COLOR} ${stack_mode}"
+
+if [[ "${stack_mode}" != "ipv6" ]]; then
+    _summary+="
   ${MAKE_IT_CYAN}✓ IPv4 Address     :${RESET_COLOR} ${ipv4_address}
   ${MAKE_IT_CYAN}✓ IPv4 Netmask     :${RESET_COLOR} ${ipv4_netmask}
   ${MAKE_IT_CYAN}✓ IPv4 Gateway     :${RESET_COLOR} ${ipv4_gateway}
   ${MAKE_IT_CYAN}✓ IPv4 Network     :${RESET_COLOR} ${ipv4_network_cidr}
-  ${MAKE_IT_CYAN}✓ IPv4 DNS         :${RESET_COLOR} ${ipv4_nameserver}
+  ${MAKE_IT_CYAN}✓ IPv4 DNS         :${RESET_COLOR} ${ipv4_nameserver}"
+fi
+
+if [[ "${stack_mode}" != "ipv4" ]] && [[ -n "${ipv6_address}" ]]; then
+    _summary+="
   ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${ipv6_address}
   ${MAKE_IT_CYAN}✓ IPv6 Prefix      :${RESET_COLOR} ${ipv6_prefix}
   ${MAKE_IT_CYAN}✓ IPv6 Gateway     :${RESET_COLOR} ${ipv6_gateway}
-  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}
+  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}"
+fi
+
+_summary+="
   ${MAKE_IT_CYAN}✓ Domain           :${RESET_COLOR} ${ipv4_domain}
   ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${lab_infra_server_hostname}
   ${MAKE_IT_CYAN}✓ Requested OS     :${RESET_COLOR} ${os_name_and_version}"
+
+echo -e "$_summary"
 
 # Determine provision method from invocation flags
 provision_method="pxe"
@@ -1695,7 +1924,7 @@ elif $invoked_with_golden_image; then
     provision_method="golden-image"
 fi
 
-# Build JSON record with all 20 fields
+# Build JSON record — only include fields relevant to the stack mode
 provision_json=$(jq -n \
     --arg hostname "$kickstart_hostname" \
     --arg mac_address "$mac_address_of_host" \
@@ -1703,18 +1932,9 @@ provision_json=$(jq -n \
     --arg os_distribution "${os_distribution:-}" \
     --arg version "${version:-}" \
     --arg provision_method "$provision_method" \
+    --arg stack_mode "$stack_mode" \
     --arg disk_type "${disk_type_for_the_vm:-}" \
-    --arg ipv4_address "$ipv4_address" \
-    --arg ipv4_prefix "$ipv4_prefix" \
-    --arg ipv4_netmask "$ipv4_netmask" \
-    --arg ipv4_gateway "$ipv4_gateway" \
-    --arg ipv4_nameserver "$ipv4_nameserver" \
-    --arg ipv4_network_cidr "$ipv4_network_cidr" \
     --arg ipv4_domain "$ipv4_domain" \
-    --arg ipv6_address "$ipv6_address" \
-    --arg ipv6_prefix "$ipv6_prefix" \
-    --arg ipv6_gateway "$ipv6_gateway" \
-    --arg ipv6_nameserver "$ipv6_nameserver" \
     --arg lab_infra_server "$lab_infra_server_hostname" \
     --arg provisioned_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     '{
@@ -1724,21 +1944,36 @@ provision_json=$(jq -n \
         os_distribution: $os_distribution,
         version: $version,
         provision_method: $provision_method,
+        stack_mode: $stack_mode,
         disk_type: $disk_type,
-        ipv4_address: $ipv4_address,
-        ipv4_prefix: $ipv4_prefix,
-        ipv4_netmask: $ipv4_netmask,
-        ipv4_gateway: $ipv4_gateway,
-        ipv4_nameserver: $ipv4_nameserver,
-        ipv4_network_cidr: $ipv4_network_cidr,
-        ipv4_domain: $ipv4_domain,
-        ipv6_address: $ipv6_address,
-        ipv6_prefix: $ipv6_prefix,
-        ipv6_gateway: $ipv6_gateway,
-        ipv6_nameserver: $ipv6_nameserver,
+        domain: $ipv4_domain,
         lab_infra_server: $lab_infra_server,
         provisioned_at: $provisioned_at
     }')
+
+if [[ "${stack_mode}" != "ipv6" ]]; then
+    provision_json=$(echo "$provision_json" | jq \
+        --arg ipv4_address "$ipv4_address" \
+        --arg ipv4_prefix "$ipv4_prefix" \
+        --arg ipv4_netmask "$ipv4_netmask" \
+        --arg ipv4_gateway "$ipv4_gateway" \
+        --arg ipv4_nameserver "$ipv4_nameserver" \
+        --arg ipv4_network_cidr "$ipv4_network_cidr" \
+        '. + {ipv4_address: $ipv4_address, ipv4_prefix: $ipv4_prefix, ipv4_netmask: $ipv4_netmask, ipv4_gateway: $ipv4_gateway, ipv4_nameserver: $ipv4_nameserver, ipv4_network_cidr: $ipv4_network_cidr}')
+fi
+
+if [[ "${stack_mode}" != "ipv4" ]]; then
+    provision_json=$(echo "$provision_json" | jq \
+        --arg ipv6_address "$ipv6_address" \
+        --arg ipv6_prefix "$ipv6_prefix" \
+        --arg ipv6_gateway "$ipv6_gateway" \
+        --arg ipv6_nameserver "$ipv6_nameserver" \
+        '. + {ipv6_address: $ipv6_address, ipv6_prefix: $ipv6_prefix, ipv6_gateway: $ipv6_gateway, ipv6_nameserver: $ipv6_nameserver}')
+fi
+
+if [[ -n "${pxe_bootstrap_hostname:-}" ]]; then
+    provision_json=$(echo "$provision_json" | jq --arg p "${pxe_bootstrap_hostname}" '. + {pxe_bootstrap_hostname: $p}')
+fi
 
 # Write per-host provision-result.json sidecar
 # Ensure the kickstart directory exists (golden-image path skips fn_create_host_kickstart_dir)

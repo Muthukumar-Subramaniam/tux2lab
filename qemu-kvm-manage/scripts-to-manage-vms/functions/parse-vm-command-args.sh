@@ -23,6 +23,7 @@ parse_vm_command_args() {
     local supports_force="${SUPPORTS_FORCE:-no}"
     local supports_distro="${SUPPORTS_DISTRO:-no}"
     local supports_version="${SUPPORTS_VERSION:-no}"
+    local supports_stack="${SUPPORTS_STACK:-no}"
     
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -114,6 +115,36 @@ parse_vm_command_args() {
                 fi
                 IFS=',' read -ra HOSTNAMES <<< "$2"
                 shift 2
+                ;;
+            --ipv4-only)
+                if [[ "$supports_stack" != "yes" ]]; then
+                    print_error "No such option: $1"
+                    fn_show_help
+                    exit 1
+                fi
+                STACK_MODE="ipv4"
+                STACK_MODE_EXPLICIT=true
+                shift
+                ;;
+            --ipv6-only)
+                if [[ "$supports_stack" != "yes" ]]; then
+                    print_error "No such option: $1"
+                    fn_show_help
+                    exit 1
+                fi
+                STACK_MODE="ipv6"
+                STACK_MODE_EXPLICIT=true
+                shift
+                ;;
+            --dual-stack)
+                if [[ "$supports_stack" != "yes" ]]; then
+                    print_error "No such option: $1"
+                    fn_show_help
+                    exit 1
+                fi
+                STACK_MODE="dual"
+                STACK_MODE_EXPLICIT=true
+                shift
                 ;;
             -*)
                 print_error "No such option: $1"

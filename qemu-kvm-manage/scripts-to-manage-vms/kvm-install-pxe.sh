@@ -15,6 +15,9 @@ VERSION_TYPE=""
 HOSTNAMES=()
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
+SUPPORTS_STACK="yes"
+STACK_MODE="dual"
+STACK_MODE_EXPLICIT=false
 
 # Function to show help
 fn_show_help() {
@@ -25,6 +28,9 @@ Options:
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
   -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
+  --ipv4-only          Create IPv4-only VM (no AAAA record, no IPv6 config)
+  --ipv6-only          Create IPv6-only VM (AAAA only; temp IPv4 for PXE boot)
+  --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
   -h, --help           Show this help message
 
 Examples:
@@ -33,7 +39,7 @@ Examples:
   tux2lab vm install-pxe -H vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
   tux2lab vm install-pxe -H vm1 -d almalinux -v 9            # Install with AlmaLinux 9
   tux2lab vm install-pxe -H vm1,vm2,vm3                      # Install multiple VMs
-  tux2lab vm install-pxe -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04  # Install multiple with Ubuntu 26.04
+  tux2lab vm install-pxe -H vm1 -d almalinux -v 10 --ipv4-only  # IPv4-only VM
 "
 }
 
@@ -100,6 +106,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
     ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC} --distro $CMDLINE_OS_DISTRO --version $CMDLINE_VERSION_TYPE"
+    if [[ "${STACK_MODE_EXPLICIT}" == "true" ]] || [[ "${STACK_MODE}" != "dual" ]]; then
+        [[ "${STACK_MODE}" == "dual" ]] && ksmanager_opts="${ksmanager_opts} --dual-stack" || ksmanager_opts="${ksmanager_opts} --${STACK_MODE}-only"
+    fi
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
         fn_release_vm_hostname_lock
@@ -115,10 +124,12 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Update /etc/hosts
+    # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
     print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
-    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+    _etc_hosts_ipv4="${IPV4_ADDRESS}"
+    [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
+    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
         print_task_fail
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
@@ -136,6 +147,12 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
+
+    # Clean up temp PXE bootstrap record for --ipv6-only
+    if [[ -n "${PXE_BOOTSTRAP_HOSTNAME:-}" ]]; then
+        print_task "Removing temporary PXE bootstrap record '${PXE_BOOTSTRAP_HOSTNAME}'..."
+        sudo /tux2lab/named-manage/dnsbinder.sh -dy "${PXE_BOOTSTRAP_HOSTNAME}" &>/dev/null && print_task_done || print_task_fail
+    fi
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
