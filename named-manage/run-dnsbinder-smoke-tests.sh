@@ -98,6 +98,14 @@ if [[ "${UID}" -ne 0 ]]; then
     exit 1
 fi
 
+if [[ "${1:-}" != "--wipe-zone-files" ]]; then
+    echo "WARNING: This test suite WIPES all DNS zone files and recreates them from scratch."
+    echo "Usage: $0 --wipe-zone-files"
+    echo ""
+    echo "Only run this on a lab where wiping DNS is acceptable."
+    exit 1
+fi
+
 # Read domain from lab_environment.json for --setup test
 SETUP_DOMAIN=$(jq -r '.lab.domain' /tux2lab-data/lab-config/lab_environment.json 2>/dev/null || true)
 if [[ -z "$SETUP_DOMAIN" || "$SETUP_DOMAIN" == "null" ]]; then
