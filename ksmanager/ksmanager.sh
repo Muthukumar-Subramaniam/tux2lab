@@ -1370,11 +1370,12 @@ if ! $invoked_with_golden_image; then
             exit 1
         fi
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
-        if ! rsync -a -q --delete "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
+        if ! rsync -a -q --delete --exclude='eth0-*.yaml' "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
             print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
             fn_release_host_lock
             exit 1
         fi
+        rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks/eth0-${stack_mode}.yaml" "${host_kickstart_dir}/${os_distribution}-${version}-ks/eth0.yaml"
     elif [[ "${os_distribution}" == "debian" ]]; then
         if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/debian-${version}-preseed.cfg" "${host_kickstart_dir}"/; then
             print_error "Failed to copy preseed template for debian-${version}"
