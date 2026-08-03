@@ -10,64 +10,10 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
-# ====== HELP ======
+# Let dnsbinder handle --help directly (no resolvectl needed for help)
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    print_cyan "Domain   : ${lab_infra_domain_name}
-IPv4 Net : ${lab_infra_server_ipv4_subnet}
-IPv6 Net : ${lab_infra_server_ipv6_ula_subnet}
-
-USAGE:
-    tux2lab dns [options] [arguments]
-
-DESCRIPTION:
-    Manage DNS records for the lab infrastructure via dnsbinder.
-    Run without arguments for an interactive menu.
-
-OPTIONS (passed to dnsbinder):
-    -c,    --create              Create a host record (dual-stack: A + AAAA)
-    -d,    --delete              Delete a host record (removes A + AAAA)
-    -dy                          Delete without confirmation
-    -r,    --rename              Rename an existing host record
-    -ry                          Rename without confirmation
-    -cf,   --create-from-file    Create multiple host records from a file
-    -cfy                         Create multiple host records without confirmation
-    -cif,  --create-with-ip-file Create host records with specific IPs from a file
-    -cify                        Create with specific IPs without confirmation
-    -df,   --delete-from-file    Delete multiple host records from a file
-    -dfy                         Delete multiple host records without confirmation
-    -ci,   --create-with-ip      Create a host record with specific IPv4 (auto-generates IPv6)
-    -cc,   --create-cname        Create a CNAME/Alias record
-    -dc,   --delete-cname        Delete a CNAME/Alias record
-    -dcy                         Delete CNAME without confirmation
-    -q,    --query               Lookup any record and display all its relevant records
-    -y,    --yes                 Append to any command to skip confirmation prompts
-    --inline                     Suppress TUI (no screen clear/cursor control) for bulk operations
-    --setup                      Configure DNS domain and server (admin/internal)"
+    sudo /tux2lab/named-manage/dnsbinder.sh --help
     exit 0
-fi
-
-# ====== VALIDATE OPTION ======
-if [[ $# -gt 0 ]]; then
-    valid_options=(-c --create -d --delete -dy -r --rename -ry
-                   -cf --create-from-file -cfy
-                   -cif --create-with-ip-file -cify
-                   -df --delete-from-file -dfy
-                   -ci --create-with-ip -cc --create-cname
-                   -dc --delete-cname -dcy
-                   -q --query
-                   --setup -y --yes --inline)
-    option_is_valid=false
-    for opt in "${valid_options[@]}"; do
-        if [[ "$1" == "$opt" ]]; then
-            option_is_valid=true
-            break
-        fi
-    done
-    if ! $option_is_valid; then
-        print_error "Unknown option: $1"
-        echo "Run 'tux2lab dns --help' for usage information."
-        exit 1
-    fi
 fi
 
 # ====== PREREQUISITE: labbr0 must be up ======

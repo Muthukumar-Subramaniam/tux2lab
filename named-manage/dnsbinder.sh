@@ -96,6 +96,128 @@ trap 'fn_release_all_locks; trap - QUIT; kill -s QUIT $$' QUIT
 
 #--- End of File Locking Mechanism ---#
 
+#--- IPv6 Helper Functions (pure bash, no python) ---#
+
+# Expand an IPv6 address to full 8-group colon-hex form
+fn_expand_ipv6() {
+    local addr="$1"
+    local left="" right="" zeros="" i
+    if [[ "$addr" == *"::"* ]]; then
+        left="${addr%%::*}"; right="${addr#*::}"
+        local lc=0 rc=0
+        [[ -n "$left" ]] && lc=$(( $(echo "$left" | tr -cd ':' | wc -c) + 1 ))
+        [[ -n "$right" ]] && rc=$(( $(echo "$right" | tr -cd ':' | wc -c) + 1 ))
+        local missing=$(( 8 - lc - rc ))
+        for ((i=0; i<missing; i++)); do
+            [[ -n "$zeros" ]] && zeros="${zeros}:"
+            zeros="${zeros}0000"
+        done
+        [[ -n "$left" && -n "$zeros" ]] && addr="${left}:${zeros}" || addr="${left}${zeros}"
+        [[ -n "$right" ]] && addr="${addr}:${right}"
+    fi
+    local result=""
+    IFS=':' read -ra groups <<< "$addr"
+    for g in "${groups[@]}"; do
+        [[ -n "$result" ]] && result="${result}:"
+        result="${result}$(printf "%04x" "0x${g}")"
+    done
+    echo "$result"
+}
+
+# Extract /64 prefix (first 4 groups) from an IPv6 address
+fn_ipv6_prefix() {
+    local expanded
+    expanded=$(fn_expand_ipv6 "$1")
+    IFS=':' read -ra g <<< "$expanded"
+    echo "${g[0]}:${g[1]}:${g[2]}:${g[3]}"
+}
+
+# Get the host-part offset (last 64 bits) as a decimal integer
+fn_ipv6_host_offset() {
+    local expanded
+    expanded=$(fn_expand_ipv6 "$1")
+    IFS=':' read -ra g <<< "$expanded"
+    printf "%d" "0x${g[4]}${g[5]}${g[6]}${g[7]}"
+}
+
+# Convert IPv6 address to nibble-reversed PTR format (host part only, for /64 zones)
+fn_ipv6_to_nibbles() {
+    local expanded
+    expanded=$(fn_expand_ipv6 "$1")
+    IFS=':' read -ra g <<< "$expanded"
+    local host_hex="${g[4]}${g[5]}${g[6]}${g[7]}"
+    echo "$host_hex" | rev | sed 's/./&./g; s/\.$//'
+}
+
+# Find AAAA sorted insertion point by IPv6 offset
+fn_find_aaaa_insert_after() {
+    local new_offset="$1" zone_file="$2"
+    local insert_after=";AAAA-Records (IPv6)"
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local hn addr existing_offset
+        hn=$(echo "$line" | awk '{print $1}')
+        addr=$(echo "$line" | awk '{print $NF}')
+        existing_offset=$(fn_ipv6_host_offset "$addr")
+        if [[ $existing_offset -lt $new_offset ]]; then
+            insert_after="$hn"
+        else
+            break
+        fi
+    done < <(sed -n '/;AAAA-Records (IPv6)/,/;CNAME-Records/{//!p}' "$zone_file" | grep 'IN AAAA')
+    echo "$insert_after"
+}
+
+# Find IPv6 PTR sorted insertion point by nibble string comparison
+fn_find_ptr_insert_after() {
+    local new_ptr="$1" zone_file="$2"
+    local insert_after=";IPv6 PTR-Records"
+    if [[ ! -f "$zone_file" ]]; then echo "$insert_after"; return; fi
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local existing_ptr
+        existing_ptr=$(echo "$line" | awk '{print $1}')
+        if [[ "$existing_ptr" < "$new_ptr" ]]; then
+            insert_after="$existing_ptr"
+        else
+            break
+        fi
+    done < <(sed -n '/;IPv6 PTR-Records/,$p' "$zone_file" | grep 'IN PTR')
+    echo "$insert_after"
+}
+
+# Check if IPv4 address belongs to a CIDR network
+fn_ipv4_in_network() {
+    local ip="$1" cidr="$2"
+    local network_base="${cidr%/*}" mask="${cidr#*/}"
+    IFS=. read -r a1 a2 a3 a4 <<< "$ip"
+    IFS=. read -r n1 n2 n3 n4 <<< "$network_base"
+    local ip_dec=$(( (a1 << 24) + (a2 << 16) + (a3 << 8) + a4 ))
+    local net_dec=$(( (n1 << 24) + (n2 << 16) + (n3 << 8) + n4 ))
+    local range_size=$(( 32 - mask ))
+    local net_start=$(( net_dec & (0xFFFFFFFF << range_size) ))
+    local net_end=$(( net_start | ((1 << range_size) - 1) ))
+    if (( ip_dec >= net_start && ip_dec <= net_end )); then echo "True"; else echo "False"; fi
+}
+
+# Check if IPv6 address belongs to a network (works for /16-aligned prefix lengths)
+fn_ipv6_in_network() {
+    local ip="$1" cidr="$2"
+    local network_base="${cidr%/*}" mask="${cidr#*/}"
+    local ip_exp net_exp
+    ip_exp=$(fn_expand_ipv6 "$ip")
+    net_exp=$(fn_expand_ipv6 "$network_base")
+    local groups_to_compare=$(( mask / 16 ))
+    IFS=':' read -ra ig <<< "$ip_exp"
+    IFS=':' read -ra ng <<< "$net_exp"
+    for ((i=0; i<groups_to_compare; i++)); do
+        [[ "${ig[$i]}" != "${ng[$i]}" ]] && { echo "False"; return; }
+    done
+    echo "True"
+}
+
+#--- End of IPv6 Helper Functions ---#
+
 fn_check_existence_of_domain() {
     if [[ -z "${v_domain_name}" ]]
     then
@@ -364,8 +486,16 @@ fn_reconfigure_named() {
 }
 
 fn_update_record_ttl() {
-    local hostname="${1}"
-    local new_ttl="${2}"
+    local hostname="${1:-}"
+    local new_ttl="${2:-}"
+    v_if_autorun_false=true
+
+    if [[ -z "$hostname" ]]; then
+        read -rp "Enter hostname to update TTL for: " hostname
+    fi
+    if [[ -z "$new_ttl" ]]; then
+        read -rp "Enter new TTL value (seconds): " new_ttl
+    fi
 
     # Validate TTL is numeric
     if ! [[ "$new_ttl" =~ ^[0-9]+$ ]]; then
@@ -426,13 +556,7 @@ fn_update_record_ttl() {
         local ipv6_zone="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
         if [[ -f "$ipv6_zone" ]]; then
             local nibbles
-            nibbles=$(python3 -c "
-import ipaddress
-addr = ipaddress.IPv6Address('${ipv6}')
-host_int = int(addr) & ((1 << 64) - 1)
-host_hex = format(host_int, '016x')
-print('.'.join(reversed(host_hex)))
-")
+            nibbles=$(fn_ipv6_to_nibbles "$ipv6")
             if grep -q "^${nibbles} " "$ipv6_zone"; then
                 local escaped_nib=$(printf '%s' "$nibbles" | sed 's/[.[\*^$/]/\\&/g')
                 sed -i "s/^\(${escaped_nib}\s\+\)\([0-9]\+\s\+\)\?IN PTR /\1${new_ttl} IN PTR /" "$ipv6_zone"
@@ -448,13 +572,208 @@ print('.'.join(reversed(host_hex)))
         v_ptr_zone="${var_zone_dir}/${_o1}.${_o2}.${_o3}.${v_domain_name}-reverse.db"
         fn_update_serial_number_of_zones
     else
-        fn_update_serial_number_of_zones "forward-zone-only"
+        fn_update_serial_number_of_zones
     fi
 
     print_task "Reloading DNS..."
     sudo podman exec tux2lab-engine rndc reload &>/dev/null && print_task_done || print_task_fail
 
     print_success "TTL updated to ${new_ttl} seconds for ${hostname}.${v_domain_name}"
+}
+
+fn_create_ipv6_only_record() {
+    local hostname="${1:-}"
+    local auto_mode="${2:-}"
+
+    if [[ -z "$hostname" && "$auto_mode" != "Automated-Execution" ]]; then
+        read -rp "Enter hostname for IPv6-only record: " hostname
+    fi
+
+    if [[ -z "$hostname" ]]; then
+        print_error "Hostname is required."
+        return 1
+    fi
+
+    # Strip domain if FQDN provided
+    hostname="${hostname%.${v_domain_name}}"
+
+    if [[ "$auto_mode" != "Automated-Execution" ]]; then
+        if ! fn_acquire_zone_lock; then return 1; fi
+    fi
+
+    # Check if record already exists
+    if grep -q "^${hostname} " "${v_fw_zone}"; then
+        if [[ "$auto_mode" != "Automated-Execution" ]]; then
+            print_error "Record '${hostname}.${v_domain_name}' already exists."
+            fn_release_zone_lock
+        fi
+        return 8
+    fi
+
+    # Find next available IPv6 offset >= 1023 (0x3ff)
+    local ipv6_prefix_base
+    ipv6_prefix_base=$(fn_ipv6_prefix "${dnsbinder_ipv6_gateway}")
+
+    local next_offset=1023
+    local existing_offsets
+    existing_offsets=$(
+        grep 'IN AAAA' "${v_fw_zone}" | while read -r line; do
+            local addr offset
+            addr=$(echo "$line" | awk '{print $NF}')
+            offset=$(fn_ipv6_host_offset "$addr")
+            [[ $offset -ge 1023 ]] && echo "$offset"
+        done | sort -n
+    )
+
+    if [[ -n "$existing_offsets" ]]; then
+        local max_offset
+        max_offset=$(echo "$existing_offsets" | tail -1)
+        next_offset=$((max_offset + 1))
+        # Guard against bash 63-bit integer overflow
+        if [[ $next_offset -lt 0 ]]; then
+            if [[ "$auto_mode" != "Automated-Execution" ]]; then
+                print_error "IPv6-only address space exhausted!"
+                fn_release_zone_lock
+            fi
+            return 255
+        fi
+        [[ $next_offset -lt 1023 ]] && next_offset=1023
+    fi
+
+    local offset_hex=$(printf "%x" $next_offset)
+    local v_ipv6_address="${ipv6_prefix_base}::${offset_hex}"
+
+    if [[ "$auto_mode" != "Automated-Execution" ]]; then
+        print_task "Creating IPv6-only host record ${hostname}.${v_domain_name}..."
+    fi
+
+    # AAAA record
+    local v_host_record_adjusted_space=$(printf "%-*s" 63 "${hostname}")
+    local ttl_field=""
+    [[ -n "${record_ttl}" ]] && ttl_field="${record_ttl} "
+    local v_add_ipv6_record="${v_host_record_adjusted_space} ${ttl_field}IN AAAA ${v_ipv6_address}"
+
+    # Find insertion point
+    local v_insert_after
+    v_insert_after=$(fn_find_aaaa_insert_after "$next_offset" "${v_fw_zone}")
+
+    if [[ "${v_insert_after}" == ";AAAA-Records (IPv6)" ]]; then
+        sed -i "/^;AAAA-Records (IPv6)/a \\${v_add_ipv6_record}" "${v_fw_zone}"
+    else
+        sed -i "/^${v_insert_after} .*IN AAAA/a \\${v_add_ipv6_record}" "${v_fw_zone}"
+    fi
+
+    # IPv6 PTR record
+    local v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
+    local v_ipv6_ptr
+    v_ipv6_ptr=$(fn_ipv6_to_nibbles "${v_ipv6_address}")
+
+    if [[ -n "${v_ipv6_ptr}" ]] && [[ -f "${v_ipv6_zone_file}" ]]; then
+        local v_add_ipv6_ptr="${v_ipv6_ptr} ${ttl_field}IN PTR ${hostname}.${v_domain_name}."
+
+        local v_ptr_insert_after
+        v_ptr_insert_after=$(fn_find_ptr_insert_after "${v_ipv6_ptr}" "${v_ipv6_zone_file}")
+
+        if [[ "${v_ptr_insert_after}" == ";IPv6 PTR-Records" ]]; then
+            sed -i "/^;IPv6 PTR-Records/a \\${v_add_ipv6_ptr}" "${v_ipv6_zone_file}"
+        else
+            local escaped_ptr=$(printf '%s' "$v_ptr_insert_after" | sed 's/[.[\*^$/]/\\&/g')
+            sed -i "/^${escaped_ptr} .*IN PTR/a \\${v_add_ipv6_ptr}" "${v_ipv6_zone_file}"
+        fi
+    fi
+
+    if [[ "$auto_mode" != "Automated-Execution" ]]; then
+        print_task_done
+        fn_update_serial_number_of_zones
+        # Reload and validate
+        print_task "Reloading DNS..."
+        sudo podman exec tux2lab-engine rndc reload &>/dev/null && print_task_done || print_task_fail
+
+        # Validate forward lookup
+        print_task "Validating forward look up..."
+        local retry_count=0 query_success=false
+        while [[ ${retry_count} -lt 10 ]]; do
+            if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA ${hostname}.${v_domain_name} | grep -q ':'; then
+                query_success=true
+                break
+            fi
+            sleep 0.5
+            ((retry_count++))
+        done
+        ${query_success} && print_task_done || print_task_fail
+
+        # Validate reverse lookup
+        print_task "Validating reverse look up..."
+        if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 -x "${v_ipv6_address}" | grep -q '.'; then
+            print_task_done
+        else
+            print_task_fail
+        fi
+
+        # FYI output
+        local display_ttl="${record_ttl:-3600 (default)}"
+        print_info "FYI : ${hostname}.${v_domain_name}\n             ├── IPv6: ${v_ipv6_address}\n             └── TTL : ${display_ttl} seconds"
+        print_success "Created IPv6-only host record ${hostname}.${v_domain_name}"
+
+        fn_release_zone_lock
+    fi
+
+    return 0
+}
+
+fn_delete_ipv6_only_record() {
+    local hostname="${1}"
+    local auto_flag="${2:-}"
+
+    hostname="${hostname%.${v_domain_name}}"
+
+    local is_automated=false
+    [[ "${auto_flag}" == "Automated-Execution" ]] && is_automated=true
+
+    if ! $is_automated; then
+        if ! fn_acquire_zone_lock; then return 1; fi
+    fi
+
+    if ! grep -q "^${hostname} .*IN AAAA" "${v_fw_zone}"; then
+        $is_automated || print_error "No AAAA record found for '${hostname}.${v_domain_name}'."
+        $is_automated || fn_release_zone_lock
+        return 8
+    fi
+
+    local ipv6_addr
+    ipv6_addr=$(awk -v host="^${hostname} " '$0 ~ host && /IN AAAA/ {print $NF}' "${v_fw_zone}")
+
+    if ! $is_automated; then
+        print_info "Match found for host record ${hostname}.${v_domain_name}\n             └── IPv6: ${ipv6_addr}"
+
+        if [[ "$auto_flag" != "-y" ]]; then
+            local confirm
+            read -rp "Please confirm deletion of records (y/n) : " confirm
+            if [[ "$confirm" != "y" ]]; then
+                print_warning "Cancelled without any changes!"
+                fn_release_zone_lock
+                return 0
+            fi
+        fi
+
+        print_task "Deleting IPv6-only host record ${hostname}.${v_domain_name}..."
+    fi
+
+    sed -i "/^${hostname} .*IN AAAA/d" "${v_fw_zone}"
+
+    local v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
+    if [[ -f "${v_ipv6_zone_file}" ]]; then
+        sed -i "/IN PTR ${hostname}\.${v_domain_name}\./d" "${v_ipv6_zone_file}"
+    fi
+
+    if ! $is_automated; then
+        print_task_done
+        fn_update_serial_number_of_zones
+        print_task "Reloading DNS..."
+        sudo podman exec tux2lab-engine rndc reload &>/dev/null && print_task_done || print_task_fail
+        print_success "Deleted IPv6-only host record ${hostname}.${v_domain_name}"
+        fn_release_zone_lock
+    fi
 }
 
 fn_configure_named_dns_server() {
@@ -740,17 +1059,7 @@ EOF
         
         # Add PTR record for DNS server's IPv6 address
         # Convert IPv6 address to full expanded form, then extract host part and reverse it
-        v_ipv6_ptr=$(python3 -c "
-import ipaddress
-addr = ipaddress.IPv6Address('${v_ipv6_address}')
-# Get the last 64 bits (host portion for /64)
-host_int = int(addr) & ((1 << 64) - 1)
-# Convert to 16 hex nibbles
-host_hex = format(host_int, '016x')
-# Reverse nibbles with dots
-ptr = '.'.join(reversed(host_hex))
-print(ptr)
-")
+        v_ipv6_ptr=$(fn_ipv6_to_nibbles "${v_ipv6_address}")
         
         if [[ -n "${v_ipv6_ptr}" ]]; then
             echo -e "${v_ipv6_ptr} IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_ipv6_zone_file}" > /dev/null
@@ -930,13 +1239,15 @@ fn_update_serial_number_of_zones() {
 
     if [[ "${1}" != "forward-zone-only" ]]
     then
-        # PTR zone
-        v_current_serial_ptr_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_ptr_zone}")
-        local new_serial_ptr=$(date +%s)
-        if [[ $new_serial_ptr -le $v_current_serial_ptr_zone ]]; then
-            new_serial_ptr=$(( v_current_serial_ptr_zone + 1 ))
+        # PTR zone (skip if not set — e.g., IPv6-only records)
+        if [[ -n "${v_ptr_zone:-}" ]] && [[ -f "${v_ptr_zone}" ]]; then
+            v_current_serial_ptr_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_ptr_zone}")
+            local new_serial_ptr=$(date +%s)
+            if [[ $new_serial_ptr -le $v_current_serial_ptr_zone ]]; then
+                new_serial_ptr=$(( v_current_serial_ptr_zone + 1 ))
+            fi
+            sed -i "/;Serial/s/${v_current_serial_ptr_zone}/${new_serial_ptr}/g" "${v_ptr_zone}"
         fi
-        sed -i "/;Serial/s/${v_current_serial_ptr_zone}/${new_serial_ptr}/g" "${v_ptr_zone}"
         
         # Update IPv6 reverse zone if it exists
         if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
@@ -964,7 +1275,7 @@ fn_reload_named_dns_service() {
         cname_record_true="false"
     fi
 
-    print_task "Reloading the DNS service (named)..."
+    print_task "Reloading DNS..."
 
     sudo podman exec tux2lab-engine rndc reload &>/dev/null
 
@@ -1040,7 +1351,7 @@ fn_reload_named_dns_service() {
             done
             
             # Also validate AAAA record if IPv6 is configured
-            if ${query_success} && [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
+            if ${query_success} && [[ "${record_stack}" != "ipv4" ]] && [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
                 retry_count=0
                 query_success=false
                 while [[ ${retry_count} -lt ${max_retries} ]]; do
@@ -1063,7 +1374,7 @@ fn_reload_named_dns_service() {
             done
             
             # Also validate AAAA record if IPv6 is configured
-            if ${query_success} && [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
+            if ${query_success} && [[ "${record_stack}" != "ipv4" ]] && [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
                 retry_count=0
                 query_success=false
                 while [[ ${retry_count} -lt ${max_retries} ]]; do
@@ -1114,16 +1425,25 @@ fn_reload_named_dns_service() {
             fi
         else
             local display_ttl="${record_ttl:-3600 (default)}"
-            if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
-                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)\n             ├── IPv6: $(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1 || true)\n             └── TTL : ${display_ttl} seconds"
-            else
-                print_info "FYI : ${v_host_record}.${v_domain_name}\n             ├── IPv4: $(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1 || true)\n             └── TTL : ${display_ttl} seconds"
+            local _ipv4_val=$(dig @"${dnsbinder_server_ipv4_address}" +short A ${v_host_record}.${v_domain_name} | head -1)
+            local _ipv6_val=$(dig @"${dnsbinder_server_ipv4_address}" +short AAAA ${v_host_record}.${v_domain_name} | head -1 || true)
+            local _fyi="FYI : ${v_host_record}.${v_domain_name}"
+            if [[ -n "$_ipv4_val" ]] && [[ -n "$_ipv6_val" ]]; then
+                _fyi+="\n             ├── IPv4: ${_ipv4_val}\n             ├── IPv6: ${_ipv6_val}"
+            elif [[ -n "$_ipv4_val" ]]; then
+                _fyi+="\n             ├── IPv4: ${_ipv4_val}"
+            elif [[ -n "$_ipv6_val" ]]; then
+                _fyi+="\n             ├── IPv6: ${_ipv6_val}"
             fi
+            _fyi+="\n             └── TTL : ${display_ttl} seconds"
+            print_info "$_fyi"
         fi
 
         if [[  "${v_action_requested}" == "create" ]]
         then
-            print_success "Created host record ${v_host_record}.${v_domain_name}"
+            local _success_label="host"
+            [[ "${record_stack}" == "ipv4" ]] && _success_label="IPv4-only host"
+            print_success "Created ${_success_label} record ${v_host_record}.${v_domain_name}"
         elif [[ "${v_action_requested}" == "delete" ]]
         then
             print_success "Deleted host record ${v_host_record}.${v_domain_name}"
@@ -1179,7 +1499,7 @@ fn_query_record() {
 
         # Verify the address belongs to the configured IPv4 network
         local in_network
-        in_network=$(python3 -c "import ipaddress; print(ipaddress.ip_address('${ipv4}') in ipaddress.ip_network('${dnsbinder_network_cidr}', strict=False))" 2>/dev/null || true)
+        in_network=$(fn_ipv4_in_network "${ipv4}" "${dnsbinder_network_cidr}")
         if [[ "${in_network}" != "True" ]]; then
             print_error "IPv4 address ${ipv4} is not in the configured network ${dnsbinder_network_cidr}"
             return 1
@@ -1222,6 +1542,12 @@ fn_query_record() {
                     echo "  CNAME : ${alias}.${v_domain_name}"
                 done <<< "${cname_aliases}"
             fi
+            local ptr_ttl
+            ptr_ttl=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN (A |AAAA )/ {
+                for (i=1; i<=NF; i++) { if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1); else print "3600 (default)"; break } }
+                exit
+            }' "${v_fw_zone}")
+            echo "  TTL   : ${ptr_ttl} seconds"
             echo ""
         fi
 
@@ -1237,7 +1563,7 @@ fn_query_record() {
 
         # Expand IPv6 to full form and convert to nibble format for zone lookup
         local expanded_ipv6
-        expanded_ipv6=$(python3 -c "import ipaddress; print(ipaddress.ip_address('${ipv6}').exploded)" 2>/dev/null || true)
+        expanded_ipv6=$(fn_expand_ipv6 "${ipv6}")
 
         if [[ -z "${expanded_ipv6}" ]]; then
             print_error "Invalid IPv6 address: ${ipv6}"
@@ -1246,7 +1572,7 @@ fn_query_record() {
 
         # Verify the address belongs to our configured IPv6 network
         local in_network
-        in_network=$(python3 -c "import ipaddress; print(ipaddress.ip_address('${ipv6}') in ipaddress.ip_network('${dnsbinder_ipv6_ula_subnet}', strict=False))" 2>/dev/null || true)
+        in_network=$(fn_ipv6_in_network "${ipv6}" "${dnsbinder_ipv6_ula_subnet}")
 
         if [[ "${in_network}" != "True" ]]; then
             print_error "IPv6 address ${ipv6} is not in the configured network ${dnsbinder_ipv6_ula_subnet}"
@@ -1297,6 +1623,12 @@ fn_query_record() {
                     echo "  CNAME : ${alias}.${v_domain_name}"
                 done <<< "${cname_aliases}"
             fi
+            local ptr_ttl
+            ptr_ttl=$(awk -v host="^${resolved_host} " '$0 ~ host && /IN (A |AAAA )/ {
+                for (i=1; i<=NF; i++) { if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1); else print "3600 (default)"; break } }
+                exit
+            }' "${v_fw_zone}")
+            echo "  TTL   : ${ptr_ttl} seconds"
             echo ""
         fi
 
@@ -1325,9 +1657,15 @@ fn_query_record() {
             echo ""
             print_info "Query: ${hostname}.${v_domain_name}"
 
+            # Extract TTL (field before IN; if absent, use zone default)
+            local record_ttl_display
+            record_ttl_display=$(awk -v host="^${hostname} " '$0 ~ host && /IN (A |AAAA |CNAME )/ {
+                for (i=1; i<=NF; i++) { if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1); else print "3600 (default)"; break } }
+                exit
+            }' "${v_fw_zone}")
+
             if [[ -n "${cname_target}" ]]; then
                 echo "  CNAME of : ${cname_target}"
-                # Resolve the target host's records
                 local resolved_host="${cname_target%.${v_domain_name}.}"
                 resolved_host="${resolved_host%.}"
                 local target_a
@@ -1353,6 +1691,7 @@ fn_query_record() {
                     done <<< "${cname_aliases}"
                 fi
             fi
+            echo "  TTL   : ${record_ttl_display} seconds"
             echo ""
         fi
     fi
@@ -1452,27 +1791,23 @@ fn_get_ipv4_address() {
             if ! ${v_if_autorun_false:-true}; then
                 return 7
             fi
-            read -p "Provide the required IPv4 Address ( within ${dnsbinder_network} ) : " ipv4_provided
+            read -rp "Provide the required IPv4 Address ( within ${dnsbinder_network} ) : " ipv4_provided
+            if [[ -z "${ipv4_provided}" ]]; then
+                print_error "IPv4 address is required."
+                return 7
+            fi
         fi
 
         if ! fn_validate_ipv4_address "${ipv4_provided}"; then
-            print_error "Invalid input provided for IPv4 Address ! "
-            if ! ${v_if_autorun_false:-true}; then
-                return 7
-            fi
-            ipv4_provided=""
-            continue
+            ${v_if_autorun_false:-true} && print_error "Invalid input provided for IPv4 Address ! "
+            return 7
         fi
 
         if fn_check_whether_ip_in_range "${ipv4_provided}" "${dnsbinder_network}"; then
             break
         else
-            print_error "Provided IPv4 address doesn't reside within the network ${dnsbinder_network} ! "
-            if ! ${v_if_autorun_false:-true}; then
-                return 7
-            fi
-            ipv4_provided=""
-            continue
+            ${v_if_autorun_false:-true} && print_error "Provided IPv4 address doesn't reside within the network ${dnsbinder_network} ! "
+            return 7
         fi
     done
 }
@@ -1669,7 +2004,9 @@ fn_create_host_record() {
     done
 
 
-    ${v_if_autorun_false} && print_task "Creating host record ${v_host_record}.${v_domain_name}..."
+    local _create_label="host"
+    [[ "${record_stack}" == "ipv4" ]] && _create_label="IPv4-only host"
+    ${v_if_autorun_false} && print_task "Creating ${_create_label} record ${v_host_record}.${v_domain_name}..."
 
     ############### A Record Creation Section ############################
 
@@ -1716,8 +2053,8 @@ fn_create_host_record() {
 
     ############### AAAA Record Creation Section (IPv6 dual-stack) ############################
 
-    # Add AAAA record if IPv6 is configured
-    if [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${dnsbinder_ipv6_gateway}" ]]; then
+    # Add AAAA record if IPv6 is configured (skip for IPv4-only)
+    if [[ "${record_stack}" != "ipv4" ]] && [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${dnsbinder_ipv6_gateway}" ]]; then
         # Calculate offset from network base, derive IPv6 as prefix::offset
         local network_base="${dnsbinder_network_cidr%/*}"
         IFS=. read -r oct1 oct2 oct3 oct4 <<< "$v_current_ip_of_host_record"
@@ -1726,49 +2063,13 @@ fn_create_host_record() {
         local offset_hex=$(printf "%x" $offset)
         
         # Expand gateway to full form and extract the /64 prefix
-        ipv6_prefix_base=$(python3 -c "import ipaddress; print(str(ipaddress.IPv6Address('${dnsbinder_ipv6_gateway}').exploded).rsplit(':',4)[0])")
+        ipv6_prefix_base=$(fn_ipv6_prefix "${dnsbinder_ipv6_gateway}")
         
         v_ipv6_address_for_host="${ipv6_prefix_base}::${offset_hex}"
         
         v_add_ipv6_host_record=$(echo "${v_host_record_adjusted_space} ${ttl_field}IN AAAA ${v_ipv6_address_for_host}")
         
-        # Find correct insertion point based on numeric IPv6 address order
-        v_insert_after=$(python3 -c "
-import ipaddress
-import re
-
-new_addr = ipaddress.IPv6Address('${v_ipv6_address_for_host}')
-
-# Read all AAAA records from the zone file
-with open('${v_fw_zone}', 'r') as f:
-    lines = f.readlines()
-
-# Extract AAAA records between the AAAA-Records header and CNAME-Records
-in_aaaa_section = False
-aaaa_records = []
-for line in lines:
-    if ';AAAA-Records (IPv6)' in line:
-        in_aaaa_section = True
-        continue
-    if ';CNAME-Records' in line:
-        break
-    if in_aaaa_section and 'IN AAAA' in line:
-        match = re.search(r'(\S+)\s+(?:\d+\s+)?IN AAAA\s+([0-9a-f:]+)', line)
-        if match:
-            hostname = match.group(1)
-            addr = ipaddress.IPv6Address(match.group(2))
-            aaaa_records.append((hostname, addr))
-
-# Find the last record with address less than the new one
-insert_after = ';AAAA-Records (IPv6)'
-for hostname, addr in aaaa_records:
-    if addr < new_addr:
-        insert_after = hostname
-    else:
-        break
-
-print(insert_after)
-")
+        v_insert_after=$(fn_find_aaaa_insert_after "$offset" "${v_fw_zone}")
         
         # Insert at the correct position
         if [[ "${v_insert_after}" == ";AAAA-Records (IPv6)" ]]; then
@@ -1799,62 +2100,18 @@ print(insert_after)
 
     ################## IPv6 PTR Record Create Section ###################################
 
-    # Add IPv6 PTR record if dual-stack is configured
-    if [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${v_ipv6_address_for_host}" ]]; then
+    # Add IPv6 PTR record (skip for IPv4-only)
+    if [[ "${record_stack}" != "ipv4" ]] && [[ -n "${dnsbinder_ipv6_ula_subnet}" && ! -z "${v_ipv6_address_for_host}" ]]; then
         v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
         
         # Convert IPv6 address to PTR format (16 nibbles reversed)
-        v_ipv6_ptr=$(python3 -c "
-import ipaddress
-addr = ipaddress.IPv6Address('${v_ipv6_address_for_host}')
-# Get the last 64 bits (host portion for /64)
-host_int = int(addr) & ((1 << 64) - 1)
-# Convert to 16 hex nibbles
-host_hex = format(host_int, '016x')
-# Reverse nibbles with dots
-ptr = '.'.join(reversed(host_hex))
-print(ptr)
-")
+        v_ipv6_ptr=$(fn_ipv6_to_nibbles "${v_ipv6_address_for_host}")
         
         if [[ -n "${v_ipv6_ptr}" ]]; then
             v_add_ipv6_ptr_record="${v_ipv6_ptr} ${ttl_field}IN PTR ${v_host_record}.${v_domain_name}."
             
             # Find correct insertion point based on lexicographic nibble order
-            v_insert_after=$(python3 -c "
-import re
-
-new_ptr = '${v_ipv6_ptr}'
-
-# Read all PTR records from the IPv6 reverse zone file
-try:
-    with open('${v_ipv6_zone_file}', 'r') as f:
-        lines = f.readlines()
-except:
-    print(';IPv6 PTR-Records')
-    exit()
-
-# Extract PTR records after the IPv6 PTR-Records header
-in_ptr_section = False
-ptr_records = []
-for line in lines:
-    if ';IPv6 PTR-Records' in line:
-        in_ptr_section = True
-        continue
-    if in_ptr_section and 'IN PTR' in line:
-        match = re.search(r'^([0-9a-f.]+)\s+(?:\d+\s+)?IN PTR', line)
-        if match:
-            ptr_records.append(match.group(1))
-
-# Find the last record with PTR less than the new one (lexicographic = numeric for reversed nibbles)
-insert_after = ';IPv6 PTR-Records'
-for ptr in ptr_records:
-    if ptr < new_ptr:
-        insert_after = ptr
-    else:
-        break
-
-print(insert_after)
-")
+            v_insert_after=$(fn_find_ptr_insert_after "${v_ipv6_ptr}" "${v_ipv6_zone_file}")
             
             # Insert at the correct position
             if [[ "${v_insert_after}" == ";IPv6 PTR-Records" ]]; then
@@ -1872,14 +2129,11 @@ print(insert_after)
 
     ${v_if_autorun_false} && print_task_done
 
-    fn_update_serial_number_of_zones
-
-    if ${v_if_autorun_false}
-    then
+    if ${v_if_autorun_false}; then
+        fn_update_serial_number_of_zones
         fn_reload_named_dns_service
+        fn_release_zone_lock
     fi
-
-    ${v_if_autorun_false} && fn_release_zone_lock
 }
 
 
@@ -1941,14 +2195,12 @@ fn_delete_host_record() {
 
             ${v_if_autorun_false} && print_task_done
 
-            fn_update_serial_number_of_zones
-
             if ${v_if_autorun_false}
             then
+                fn_update_serial_number_of_zones
                 fn_reload_named_dns_service
+                fn_release_zone_lock
             fi
-
-            ${v_if_autorun_false} && fn_release_zone_lock
             break
 
         elif [[ ${v_confirmation} == "n" ]]
@@ -1986,13 +2238,32 @@ fn_rename_host_record() {
         return ${v_exit_status_fn_get_host_record}
     fi
 
-    v_host_record_exist=$(grep "^${v_host_record} .*IN A " "${v_fw_zone}")
-    v_current_ip_of_host_record=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+    # Detect record type
+    local _is_cname=false _is_ipv6_only=false
+    if grep -q "^${v_host_record} .*IN CNAME" "${v_fw_zone}" 2>/dev/null; then
+        _is_cname=true
+    elif ! grep -q "^${v_host_record} .*IN A " "${v_fw_zone}" 2>/dev/null && grep -q "^${v_host_record} .*IN AAAA" "${v_fw_zone}" 2>/dev/null; then
+        _is_ipv6_only=true
+    fi
 
-    fn_set_ptr_zone
-
-    v_host_record_rename=$(printf "%-*s" 63 "${v_rename_record}")
-    v_host_record_rename="${v_host_record_rename} IN A ${v_current_ip_of_host_record}"
+    if $_is_cname; then
+        local _cname_target
+        _cname_target=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN CNAME/ {print $NF}' "${v_fw_zone}")
+        print_info "Match found: ${v_host_record}.${v_domain_name} is a CNAME for ${_cname_target}"
+    elif $_is_ipv6_only; then
+        local _v6_addr
+        _v6_addr=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN AAAA/ {print $NF}' "${v_fw_zone}")
+        print_info "Match found for IPv6-only record ${v_host_record}.${v_domain_name}\n             └── IPv6: ${_v6_addr}"
+    else
+        v_current_ip_of_host_record=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
+        local _v6_show
+        _v6_show=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN AAAA/ {print $NF}' "${v_fw_zone}")
+        if [[ -n "${_v6_show}" ]]; then
+            print_info "Match found for host record ${v_host_record}.${v_domain_name}\n             ├── IPv4: ${v_current_ip_of_host_record}\n             └── IPv6: ${_v6_show}"
+        else
+            print_info "Match found with IP ${v_current_ip_of_host_record} for host record ${v_host_record}.${v_domain_name}"
+        fi
+    fi
 
     v_input_rename_confirmation="${3}"
     
@@ -2009,28 +2280,97 @@ fn_rename_host_record() {
         then
             print_task "Renaming host record ${v_host_record}.${v_domain_name} to ${v_rename_record}.${v_domain_name}..."
 
-            v_host_record_exist_escaped=$(printf '%s' "${v_host_record_exist}" | sed 's/[.[\*^$()+?{|\\]/\\&/g')
-            v_host_record_rename_escaped=$(printf '%s' "${v_host_record_rename}" | sed 's/[&/\\]/\\&/g')
-            sed -i "s/${v_host_record_exist_escaped}/${v_host_record_rename_escaped}/g" "${v_fw_zone}"
-            sed -i "s/${v_host_record}\.${v_domain_name}\./${v_rename_record}.${v_domain_name}./g" "${v_ptr_zone}"
-            
-            # Also rename AAAA record if it exists (IPv6 dual-stack)
-            v_rename_record_adjusted_space=$(printf "%-*s" 63 "${v_rename_record}")
-            sed -i "s/^${v_host_record} \(.*IN AAAA\)/${v_rename_record_adjusted_space} \1/g" "${v_fw_zone}"
-            
-            # Also rename IPv6 PTR record if it exists
-            v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
-            if [[ -f "${v_ipv6_zone_file}" ]]; then
-                sed -i "s/IN PTR ${v_host_record}\.${v_domain_name}\./IN PTR ${v_rename_record}.${v_domain_name}./g" "${v_ipv6_zone_file}"
+            local v_rename_adjusted
+            v_rename_adjusted=$(printf "%-*s" 63 "${v_rename_record}")
+
+            if $_is_cname; then
+                local _cname_target _cname_ttl _cname_ttl_field=""
+                _cname_target=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN CNAME/ {print $NF}' "${v_fw_zone}")
+                _cname_ttl=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN CNAME/ {
+                    for (i=1; i<=NF; i++) if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1) }
+                }' "${v_fw_zone}")
+                [[ -n "${_cname_ttl}" ]] && _cname_ttl_field="${_cname_ttl} "
+                sed -i "/^${v_host_record} .*IN CNAME/c\\${v_rename_adjusted} ${_cname_ttl_field}IN CNAME ${_cname_target}" "${v_fw_zone}"
+
+            elif $_is_ipv6_only; then
+                local _v6_addr _v6_ttl _v6_ttl_field=""
+                _v6_addr=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN AAAA/ {print $NF}' "${v_fw_zone}")
+                _v6_ttl=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN AAAA/ {
+                    for (i=1; i<=NF; i++) if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1) }
+                }' "${v_fw_zone}")
+                [[ -n "${_v6_ttl}" ]] && _v6_ttl_field="${_v6_ttl} "
+                sed -i "/^${v_host_record} .*IN AAAA/c\\${v_rename_adjusted} ${_v6_ttl_field}IN AAAA ${_v6_addr}" "${v_fw_zone}"
+                v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
+                if [[ -f "${v_ipv6_zone_file}" ]]; then
+                    sed -i "s/IN PTR ${v_host_record}\.${v_domain_name}\./IN PTR ${v_rename_record}.${v_domain_name}./g" "${v_ipv6_zone_file}"
+                fi
+
+            else
+                # Dual-stack or IPv4-only
+                local v_existing_ttl ttl_field=""
+                v_existing_ttl=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN A / {
+                    for (i=1; i<=NF; i++) if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1) }
+                }' "${v_fw_zone}")
+                [[ -n "${v_existing_ttl}" ]] && ttl_field="${v_existing_ttl} "
+
+                # Rename A record
+                local v_old_a_line v_new_a_line
+                v_old_a_line=$(grep "^${v_host_record} .*IN A " "${v_fw_zone}")
+                v_new_a_line="${v_rename_adjusted} ${ttl_field}IN A ${v_current_ip_of_host_record}"
+                local old_esc new_esc
+                old_esc=$(printf '%s' "${v_old_a_line}" | sed 's/[.[\*^$()+?{|\\]/\\&/g')
+                new_esc=$(printf '%s' "${v_new_a_line}" | sed 's/[&/\\]/\\&/g')
+                sed -i "s/${old_esc}/${new_esc}/g" "${v_fw_zone}"
+
+                # Rename IPv4 PTR
+                IFS=. read -r _o1 _o2 _o3 _o4 <<< "$v_current_ip_of_host_record"
+                v_ptr_zone="${var_zone_dir}/${_o1}.${_o2}.${_o3}.${v_domain_name}-reverse.db"
+                if [[ -f "${v_ptr_zone}" ]]; then
+                    sed -i "s/${v_host_record}\.${v_domain_name}\./${v_rename_record}.${v_domain_name}./g" "${v_ptr_zone}"
+                fi
+
+                # Rename AAAA record if it exists
+                local v_cur_aaaa_addr
+                v_cur_aaaa_addr=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN AAAA/ {print $NF}' "${v_fw_zone}")
+                if [[ -n "${v_cur_aaaa_addr}" ]]; then
+                    local v_aaaa_ttl aaaa_ttl_field=""
+                    v_aaaa_ttl=$(awk -v h="^${v_host_record} " '$0 ~ h && /IN AAAA/ {
+                        for (i=1; i<=NF; i++) if ($i == "IN") { if ($(i-1) ~ /^[0-9]+$/ && i > 2) print $(i-1) }
+                    }' "${v_fw_zone}")
+                    [[ -n "${v_aaaa_ttl}" ]] && aaaa_ttl_field="${v_aaaa_ttl} "
+                    sed -i "/^${v_host_record} .*IN AAAA/c\\${v_rename_adjusted} ${aaaa_ttl_field}IN AAAA ${v_cur_aaaa_addr}" "${v_fw_zone}"
+                fi
+
+                # Rename IPv6 PTR if it exists
+                v_ipv6_zone_file="${var_zone_dir}/${v_domain_name}-ipv6-reverse.db"
+                if [[ -f "${v_ipv6_zone_file}" ]]; then
+                    sed -i "s/IN PTR ${v_host_record}\.${v_domain_name}\./IN PTR ${v_rename_record}.${v_domain_name}./g" "${v_ipv6_zone_file}"
+                fi
             fi
 
             print_task_done
             
             fn_update_serial_number_of_zones
 
-            if ${v_if_autorun_false}
-            then
-                fn_reload_named_dns_service
+            print_task "Reloading DNS..."
+            sudo podman exec tux2lab-engine rndc reload &>/dev/null && print_task_done || print_task_fail
+
+            # Validate and show FYI
+            if $_is_cname; then
+                print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── CNAME for: ${_cname_target}"
+                print_success "Renamed CNAME ${v_host_record}.${v_domain_name} to ${v_rename_record}.${v_domain_name}"
+            elif $_is_ipv6_only; then
+                print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── IPv6: ${_v6_addr}"
+                print_success "Renamed IPv6-only host ${v_host_record}.${v_domain_name} to ${v_rename_record}.${v_domain_name}"
+            else
+                local _fyi_v6=""
+                [[ -n "${v_cur_aaaa_addr}" ]] && _fyi_v6="\n             ├── IPv6: ${v_cur_aaaa_addr}"
+                if [[ -n "${_fyi_v6}" ]]; then
+                    print_info "FYI : ${v_rename_record}.${v_domain_name}\n             ├── IPv4: ${v_current_ip_of_host_record}${_fyi_v6}"
+                else
+                    print_info "FYI : ${v_rename_record}.${v_domain_name}\n             └── IPv4: ${v_current_ip_of_host_record}"
+                fi
+                print_success "Renamed host ${v_host_record}.${v_domain_name} to ${v_rename_record}.${v_domain_name}"
             fi
 
             fn_release_zone_lock
@@ -2137,9 +2477,6 @@ fn_handle_multiple_host_record_with_ip() {
     local v_count_ip_exhausted=0
     local v_count_other_failures=0
 
-    local v_pre_execution_serial_fw_zone
-    v_pre_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
-
     local v_host_count=0
 
     # Show initial header once
@@ -2164,15 +2501,9 @@ fn_handle_multiple_host_record_with_ip() {
 
         print_task "Creating host record ${v_host_record}.${v_domain_name} (${v_host_ipv4})..." "nskip"
 
-        local v_serial_fw_zone_pre_execution
-        v_serial_fw_zone_pre_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
-
         specific_ipv4_requested="yes"
         fn_create_host_record "${v_host_record}" "${v_host_ipv4}" "Automated-Execution"
         local var_exit_status=${?}
-
-        local v_serial_fw_zone_post_execution
-        v_serial_fw_zone_post_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
 
         local v_fqdn="${v_host_record}.${v_domain_name}"
 
@@ -2215,7 +2546,7 @@ fn_handle_multiple_host_record_with_ip() {
             ((v_count_failed++))
             ((v_count_ip_exhausted++))
         else
-            if [[ "${v_serial_fw_zone_pre_execution}" -ne "${v_serial_fw_zone_post_execution}" ]]; then
+            if grep -q "^${v_host_record} " "${v_fw_zone}" 2>/dev/null; then
                 print_green "Created          ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
                 print_task_done
                 ((v_count_successfull++))
@@ -2241,11 +2572,10 @@ fn_handle_multiple_host_record_with_ip() {
         clear
     fi
 
-    local v_post_execution_serial_fw_zone
-    v_post_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
-
-    if [[ "${v_pre_execution_serial_fw_zone}" -ne "${v_post_execution_serial_fw_zone}" ]]; then
-        print_task "Reloading the DNS service (named) for the changes to take effect..."
+    if [[ ${v_count_successfull} -gt 0 ]]; then
+        v_if_autorun_false=true
+        fn_update_serial_number_of_zones
+        print_task "Reloading DNS..."
         sudo podman exec tux2lab-engine rndc reload &>/dev/null
         if sudo podman exec tux2lab-engine rndc status &>/dev/null; then
             print_task_done
@@ -2257,7 +2587,11 @@ fn_handle_multiple_host_record_with_ip() {
     fi
 
     print_white "Please find the below details of the records:"
-    if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
+    if [[ "${record_stack}" == "ipv4" ]]; then
+        print_white "Action-Taken     FQDN ( IPv4-Address )"
+    elif [[ "${record_stack}" == "ipv6" ]]; then
+        print_white "Action-Taken     FQDN ( IPv6-Address )"
+    elif [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
         print_white "Action-Taken     FQDN ( IPv4-Address, IPv6-Address )"
     else
         print_white "Action-Taken     FQDN ( IPv4-Address )"
@@ -2302,6 +2636,7 @@ fn_handle_multiple_host_record() {
 
     v_host_list_file="${1}"
     v_action_required="${2}"
+    local _verb="${v_action_required%e}"; v_action_verb="${_verb^}ing"
     local v_auto_confirm="${3:-}"
 
     if ! $inline_mode; then
@@ -2348,7 +2683,7 @@ fn_handle_multiple_host_record() {
     if [[ "${v_auto_confirm}" == "-y" ]]; then
         local v_total_preview
         v_total_preview=$(wc -l < "${v_work_file}")
-        print_info "Auto-confirmed: ${v_action_required^}ing ${v_total_preview} host records..."
+        print_info "Auto-confirmed: ${v_action_verb} ${v_total_preview} host records..."
     else
         while :
         do
@@ -2387,8 +2722,6 @@ fn_handle_multiple_host_record() {
     v_count_ip_exhausted=0
     v_count_other_failures=0
     
-    v_pre_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
-    
     v_total_host_records=$(wc -l < "${v_work_file}")
     
     v_host_count=0
@@ -2398,7 +2731,7 @@ fn_handle_multiple_host_record() {
         clear
         fn_progress_title
     else
-        print_info "${v_action_required^}ing ${v_total_host_records} host records..."
+        print_info "${v_action_verb} ${v_total_host_records} host records..."
     fi
     
     while read -r v_host_record
@@ -2414,22 +2747,46 @@ fn_handle_multiple_host_record() {
         
         ((v_host_count++))
         
-        print_task "${v_action_required^}ing host record ${v_host_record}.${v_domain_name}..." "nskip"
-    
-        v_serial_fw_zone_pre_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
+        local _bulk_label="host"
+        local _delete_type=""
+        if [[ ${v_action_required} == "create" ]]; then
+            [[ "${record_stack}" == "ipv4" ]] && _bulk_label="IPv4-only host"
+            [[ "${record_stack}" == "ipv6" ]] && _bulk_label="IPv6-only host"
+        elif [[ ${v_action_required} == "delete" ]]; then
+            if grep -q "^${v_host_record} .*IN CNAME" "${v_fw_zone}" 2>/dev/null; then
+                _bulk_label="CNAME"
+                _delete_type="cname"
+            elif ! grep -q "^${v_host_record} .*IN A " "${v_fw_zone}" 2>/dev/null && grep -q "^${v_host_record} .*IN AAAA" "${v_fw_zone}" 2>/dev/null; then
+                _bulk_label="IPv6-only host"
+                _delete_type="ipv6"
+            else
+                _delete_type="dual"
+            fi
+        fi
+        print_task "${v_action_verb} ${_bulk_label} record ${v_host_record}.${v_domain_name}..." "nskip"
     
         if [[ ${v_action_required} == "create" ]]
                 then
-            fn_create_host_record "${v_host_record}" "Automated-Execution"
+            if [[ "${record_stack}" == "ipv6" ]]; then
+                fn_create_ipv6_only_record "${v_host_record}" "Automated-Execution"
+            else
+                fn_create_host_record "${v_host_record}" "Automated-Execution"
+            fi
             var_exit_status=${?}
 
         elif [[ ${v_action_required} == "delete" ]]
         then
-            fn_delete_host_record "${v_host_record}" -y "Automated-Execution"
-            var_exit_status=${?}
+            if [[ "${_delete_type}" == "cname" ]]; then
+                sed -i "/^${v_host_record} / {/IN CNAME/d}" "${v_fw_zone}"
+                var_exit_status=0
+            elif [[ "${_delete_type}" == "ipv6" ]]; then
+                fn_delete_ipv6_only_record "${v_host_record}" "Automated-Execution"
+                var_exit_status=${?}
+            else
+                fn_delete_host_record "${v_host_record}" -y "Automated-Execution"
+                var_exit_status=${?}
+            fi
         fi
-    
-        v_serial_fw_zone_post_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
     
             v_fqdn="${v_host_record}.${v_domain_name}"
     
@@ -2439,15 +2796,14 @@ fn_handle_multiple_host_record() {
             v_ip_address=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN A / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
             v_ipv6_address=$(awk -v host="^${v_host_record} " '$0 ~ host && /IN AAAA / {gsub(/[[:space:]]/,"",$NF); print $NF}' "${v_fw_zone}")
     
-            if [[ -z "${v_ip_address}" ]]; then
-                    v_ip_address="N/A"
-                fi
-                
-                # Build address display (dual-stack)
-                if [[ -n "${v_ipv6_address}" ]]; then
+                if [[ -n "${v_ip_address}" ]] && [[ -n "${v_ipv6_address}" ]]; then
                     v_address_display="IPv4: ${v_ip_address}, IPv6: ${v_ipv6_address}"
+                elif [[ -n "${v_ip_address}" ]]; then
+                    v_address_display="IPv4: ${v_ip_address}"
+                elif [[ -n "${v_ipv6_address}" ]]; then
+                    v_address_display="IPv6: ${v_ipv6_address}"
                 else
-                    v_address_display="${v_ip_address}"
+                    v_address_display="N/A"
                 fi
         fi
     
@@ -2494,10 +2850,14 @@ fn_handle_multiple_host_record() {
         ((v_count_failed++))
         ((v_count_ip_exhausted++))
     else
-        v_serial_fw_zone_post_execution=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
+        local _record_exists=false
+        if [[ ${v_action_required} == "create" ]]; then
+            grep -q "^${v_host_record} " "${v_fw_zone}" 2>/dev/null && _record_exists=true
+        elif [[ ${v_action_required} == "delete" ]]; then
+            ! grep -q "^${v_host_record} " "${v_fw_zone}" 2>/dev/null && _record_exists=true
+        fi
 
-        if [[ "${v_serial_fw_zone_pre_execution}" -ne "${v_serial_fw_zone_post_execution}" ]]
-        then
+        if $_record_exists; then
             print_green "${v_action_required^}d          ${v_details_of_host_record}" >> "${v_tmp_file_dnsbinder}"
             print_task_done
         ((v_count_successfull++))
@@ -2523,11 +2883,11 @@ fn_handle_multiple_host_record() {
         clear
     fi
 
-    v_post_execution_serial_fw_zone=$(awk -F';' '/;Serial/{gsub(/[[:space:]]/,"",$1); print $1}' "${v_fw_zone}")
-    
-    if [[ "${v_pre_execution_serial_fw_zone}" -ne "${v_post_execution_serial_fw_zone}" ]]
+    if [[ ${v_count_successfull} -gt 0 ]]
     then
-        print_task "Reloading the DNS service (named) for the changes to take effect..."
+        v_if_autorun_false=true
+        fn_update_serial_number_of_zones
+        print_task "Reloading DNS..."
     
         sudo podman exec tux2lab-engine rndc reload &>/dev/null
     
@@ -2545,7 +2905,11 @@ fn_handle_multiple_host_record() {
 
     if [[ ${v_action_required} == "create" ]]
     then
-        if [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
+        if [[ "${record_stack}" == "ipv4" ]]; then
+            print_white "Action-Taken     FQDN ( IPv4-Address )"
+        elif [[ "${record_stack}" == "ipv6" ]]; then
+            print_white "Action-Taken     FQDN ( IPv6-Address )"
+        elif [[ -n "${dnsbinder_ipv6_ula_subnet}" ]]; then
             print_white "Action-Taken     FQDN ( IPv4-Address, IPv6-Address )"
         else
             print_white "Action-Taken     FQDN ( IPv4-Address )"
@@ -2677,6 +3041,7 @@ fn_get_cname_record() {
 fn_create_cname_record() {
     v_input_cname="${1}"
     v_input_hostname="${2}"
+    v_if_autorun_false=true
     
     if ! fn_acquire_zone_lock; then return 1; fi
 
@@ -2704,6 +3069,7 @@ fn_create_cname_record() {
 fn_delete_cname_record() {
     v_input_cname="${1}"
     v_input_delete_confirmation="${2}"
+    v_if_autorun_false=true
 
     if ! fn_acquire_zone_lock; then return 1; fi
 
@@ -2728,7 +3094,7 @@ fn_delete_cname_record() {
             n|N|"no")
                 print_warning "Aborted ! No changes done! "
                 fn_release_zone_lock
-                exit
+                return 0
                 ;;
             "")
                 print_error "No Input Provided! "
@@ -2772,13 +3138,17 @@ print_notify "##################################################################
 # IPv6 Net: ${v_ipv6_if_present}#
 #----------------------------------------------------------------#
 # 1) Create a DNS host record (dual-stack A + AAAA)              #
-# 2) Delete a DNS host record (removes A + AAAA)                 #
-# 3) Rename an existing DNS host record (updates A + AAAA)       #
-# 4) Create multiple DNS host records provided in a file         #
-# 5) Delete multiple DNS host records provided in a file         #
-# 6) Create DNS host with specific IPv4 (auto-generates IPv6)    #
-# 7) Create a CNAME/Alias record for existing host record        #
-# 8) Delete a CNAME/Alias record for existing host record        #
+# 2) Create an IPv4-only host record (A record only)             #
+# 3) Create an IPv6-only host record (AAAA only, offset 1023+)   #
+# 4) Create a DNS host with specific IPv4 (auto-generates IPv6)  #
+# 5) Create a CNAME/Alias record for existing host record        #
+# 6) Delete a DNS record (auto-detects: host/CNAME/IPv6-only)    #
+# 7) Rename an existing DNS host record                          #
+# 8) Query a DNS record                                          #
+# 9) Update TTL for an existing host record                      #
+#----------------------------------------------------------------#
+# 10) Create multiple DNS host records from a file               #
+# 11) Delete multiple DNS records from a file (auto-detects)     #
 #----------------------------------------------------------------#
 # 0) Configure local dns server and domain (dual-stack)          #
 #----------------------------------------------------------------#
@@ -2799,38 +3169,67 @@ case ${var_function} in
         ;;
     2)
         fn_check_existence_of_domain
-        fn_delete_host_record
+        record_stack="ipv4"
+        fn_create_host_record
         exit
         ;;
     3)
         fn_check_existence_of_domain
-        fn_rename_host_record
+        fn_create_ipv6_only_record ""
         exit
         ;;
     4)
         fn_check_existence_of_domain
-        fn_handle_multiple_host_record "${2}" "create"
+        specific_ipv4_requested="yes"
+        fn_create_host_record
         exit
         ;;
     5)
         fn_check_existence_of_domain
-        fn_handle_multiple_host_record "${2}" "delete"
+        fn_create_cname_record
         exit
         ;;
     6)
         fn_check_existence_of_domain
-        specific_ipv4_requested="yes"
-        fn_create_host_record 
+        echo ""
+        read -rp "Enter hostname to delete: " _menu_del_host
+        if [[ -z "$_menu_del_host" ]]; then
+            print_error "No hostname provided."
+        else
+            _menu_del_host="${_menu_del_host%.${v_domain_name}}"
+            if grep -q "^${_menu_del_host} .*IN CNAME" "${v_fw_zone}" 2>/dev/null; then
+                fn_delete_cname_record "${_menu_del_host}"
+            elif ! grep -q "^${_menu_del_host} .*IN A " "${v_fw_zone}" 2>/dev/null && grep -q "^${_menu_del_host} .*IN AAAA" "${v_fw_zone}" 2>/dev/null; then
+                fn_delete_ipv6_only_record "${_menu_del_host}"
+            else
+                fn_delete_host_record "${_menu_del_host}"
+            fi
+        fi
         exit
         ;;
     7)
         fn_check_existence_of_domain
-        fn_create_cname_record
+        fn_rename_host_record
         exit
         ;;
     8)
         fn_check_existence_of_domain
-        fn_delete_cname_record
+        fn_query_record
+        exit
+        ;;
+    9)
+        fn_check_existence_of_domain
+        fn_update_record_ttl
+        exit
+        ;;
+    10)
+        fn_check_existence_of_domain
+        fn_handle_multiple_host_record "" "create"
+        exit
+        ;;
+    11)
+        fn_check_existence_of_domain
+        fn_handle_multiple_host_record "" "delete"
         exit
         ;;
     q)
@@ -2853,20 +3252,24 @@ IPv6 Net : ${v_ipv6_if_present}
 Usage: dnsbinder [ option ] [ arguments ]
 Use one of the following Options :
     -c,    --create              To create a host record (dual-stack: A + AAAA records)
-    -d,    --delete              To delete a host record (removes both A and AAAA records)
+    -c4                          To create an IPv4-only host record (A record only)
+    -c6                          To create an IPv6-only host record (AAAA record only, offset 1023+)
+    -d,    --delete              To delete a record (auto-detects: host, CNAME, or IPv6-only)
     -dy                          caution ! To do the above without any confirmation
     -r,    --rename              To rename an existing host record (updates A and AAAA records)
     -ry                          caution ! To do the above without any confirmation
     -cf,   --create-from-file    To create multiple host records provided in a file (dual-stack)
     -cfy                         caution ! To do the above without any confirmation
+    -c4f                         To create multiple IPv4-only host records from a file
+    -c4fy                        caution ! To do the above without any confirmation
+    -c6f                         To create multiple IPv6-only host records from a file
+    -c6fy                        caution ! To do the above without any confirmation
     -cif,  --create-with-ip-file To create multiple host records with specific IPs from a file (hostname ipv4)
     -cify                        caution ! To do the above without any confirmation
-    -df,   --delete-from-file    To delete multiple host records provided in a file (dual-stack)
+    -df,   --delete-from-file    To delete multiple records provided in a file (auto-detects type)
     -dfy                         caution ! To do the above without any confirmation
     -ci,   --create-with-ip      To create a host record with specific IPv4 Address (auto-generates IPv6)
     -cc,   --create-cname        To create a CNAME/Alias record for an existing host record
-    -dc,   --delete-cname        To delete a CNAME/Alias record for an existing host record
-    -dcy                         caution ! To do the above without any confirmation
     -q,    --query               Lookup any record and display all its relevant records
     -y,    --yes                 Append to any command to skip confirmation prompts
     --inline                     Suppress TUI (no screen clear/cursor control) for bulk operations
@@ -2885,12 +3288,14 @@ Note: All host record operations automatically create/manage both IPv4 (A) and I
 Run dnsbinder utility without any arguments to get menu driven actions."
 }
 
+auto_confirm=""
+inline_mode=false
+record_ttl=""
+record_stack="dual"
+specific_ipv4_requested=""
+
 if [[ -n "${1}" ]]
 then
-    # Check for standalone --yes / -y flag, --inline flag, and --ttl flag
-    auto_confirm=""
-    inline_mode=false
-    record_ttl=""
     args=("$@")
     for i in "${!args[@]}"; do
         if [[ "${args[$i]}" == "--yes" || "${args[$i]}" == "-y" ]] && [[ $i -gt 0 ]]; then
@@ -2900,6 +3305,10 @@ then
             inline_mode=true
             unset 'args[$i]'
         elif [[ "${args[$i]}" == "--ttl" ]] && [[ -n "${args[$((i+1))]:-}" ]]; then
+            if ! [[ "${args[$((i+1))]}" =~ ^[0-9]+$ ]]; then
+                print_error "TTL must be a positive integer (seconds). Got: '${args[$((i+1))]}'"
+                exit 1
+            fi
             record_ttl="${args[$((i+1))]}"
             unset 'args[$i]'
             unset 'args[$((i+1))]'
@@ -2908,12 +3317,12 @@ then
     set -- "${args[@]}"
 
     # Handle comma-separated records by re-invoking self per item
-    if [[ "${2:-}" == *,* ]] && [[ "${1}" =~ ^(-c|--create|-d|--delete|-dy|-dc|--delete-cname|-dcy|-q|--query)$ ]]; then
+    if [[ "${2:-}" == *,* ]] && [[ "${1}" =~ ^(-c|--create|-c4|-c6|-d|--delete|-dy|-q|--query)$ ]]; then
         IFS=',' read -ra _items <<< "${2}"
         _flag="${1}"
 
         # For delete operations (not already auto-confirmed), prompt once for the batch
-        if [[ "${_flag}" =~ ^(-d|--delete|-dc|--delete-cname)$ ]] && [[ -z "${auto_confirm}" ]]; then
+        if [[ "${_flag}" =~ ^(-d|--delete)$ ]] && [[ -z "${auto_confirm}" ]]; then
             echo ""
             print_info "Records to be deleted:"
             for _item in "${_items[@]}"; do
@@ -2931,9 +3340,8 @@ then
             done
         fi
 
-        # Convert -d → -dy and -dc → -dcy for self-invocations (already confirmed)
+        # Convert -d → -dy for self-invocations (already confirmed)
         [[ "${_flag}" == "-d" || "${_flag}" == "--delete" ]] && _flag="-dy"
-        [[ "${_flag}" == "-dc" || "${_flag}" == "--delete-cname" ]] && _flag="-dcy"
 
         _rc=0
         for _item in "${_items[@]}"; do
@@ -2958,17 +3366,51 @@ then
             fn_create_host_record "${2}"
             exit
             ;;
-        -d|--delete|-dy)
+        -c4)
             fn_check_existence_of_domain
             if [[ -n "${3}" ]];then
+                print_error "Invalid Option! '${1}' option takes only 1 argument as hostname ! "
+                fn_usage_message
+                exit 1
+            fi
+            record_stack="ipv4"
+            fn_create_host_record "${2}"
+            exit
+            ;;
+        -c6)
+            fn_check_existence_of_domain
+            if [[ -n "${3}" ]];then
+                print_error "Invalid Option! '${1}' option takes only 1 argument as hostname ! "
+                fn_usage_message
+                exit 1
+            fi
+            record_stack="ipv6"
+            fn_create_ipv6_only_record "${2}"
+            exit
+            ;;
+        -d|--delete|-dy)
+            fn_check_existence_of_domain
+            if [[ -n "${3}" ]]; then
                 print_error " Invalid Option! ${1} option takes only 1 argument as hostname ! "
                 fn_usage_message
                 exit 1
             fi
-            if [[ "${1}" == "-dy" || -n "$auto_confirm" ]];then
-                fn_delete_host_record "${2}" "-y"
+            _del_host="${2}"
+            _del_host="${_del_host%.${v_domain_name}}"
+            _is_cname=false
+            _is_ipv6_only=false
+            grep -q "^${_del_host} .*IN CNAME" "${v_fw_zone}" 2>/dev/null && _is_cname=true
+            if ! $_is_cname && ! grep -q "^${_del_host} .*IN A " "${v_fw_zone}" 2>/dev/null && grep -q "^${_del_host} .*IN AAAA" "${v_fw_zone}" 2>/dev/null; then
+                _is_ipv6_only=true
+            fi
+            _auto_flag=""
+            [[ "${1}" == "-dy" || -n "$auto_confirm" ]] && _auto_flag="-y"
+            if $_is_cname; then
+                fn_delete_cname_record "${2}" ${_auto_flag}
+            elif $_is_ipv6_only; then
+                fn_delete_ipv6_only_record "${2}" ${_auto_flag}
             else
-                fn_delete_host_record "${2}"
+                fn_delete_host_record "${2}" ${_auto_flag}
             fi
             exit
             ;;
@@ -2994,6 +3436,36 @@ then
                 exit 1
             fi
             if [[ "${1}" == "-cfy" || -n "$auto_confirm" ]]; then
+                fn_handle_multiple_host_record "${2}" "create" "-y"
+            else
+                fn_handle_multiple_host_record "${2}" "create"
+            fi
+            exit
+            ;;
+        -c4f|-c4fy)
+            fn_check_existence_of_domain
+            if [[ -n "${3}" ]];then
+                print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of hostnames ! "
+                fn_usage_message
+                exit 1
+            fi
+            record_stack="ipv4"
+            if [[ "${1}" == "-c4fy" || -n "$auto_confirm" ]]; then
+                fn_handle_multiple_host_record "${2}" "create" "-y"
+            else
+                fn_handle_multiple_host_record "${2}" "create"
+            fi
+            exit
+            ;;
+        -c6f|-c6fy)
+            fn_check_existence_of_domain
+            if [[ -n "${3}" ]];then
+                print_error "Invalid Option! '${1}' option takes only 1 argument as file containing list of hostnames ! "
+                fn_usage_message
+                exit 1
+            fi
+            record_stack="ipv6"
+            if [[ "${1}" == "-c6fy" || -n "$auto_confirm" ]]; then
                 fn_handle_multiple_host_record "${2}" "create" "-y"
             else
                 fn_handle_multiple_host_record "${2}" "create"
@@ -3047,20 +3519,6 @@ then
                 exit 1
             fi
             fn_create_cname_record "${2}" "${3}"
-            exit
-            ;;
-        -dc|--delete-cname|-dcy)
-            fn_check_existence_of_domain 
-            if [[ -n "${3}" ]];then
-                print_error "Invalid Option! ${1} option takes only 1 argument as cname ! "
-                fn_usage_message
-                exit 1
-            fi
-            if [[ "${1}" == "-dcy" || -n "$auto_confirm" ]];then
-                fn_delete_cname_record "${2}" "-y"
-            else
-                fn_delete_cname_record "${2}"
-            fi
             exit
             ;;
         --setup)

@@ -104,7 +104,7 @@ _tux2lab_completions() {
     }
 
     # DNS options
-    local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy -q --query --setup -y --yes --inline -h --help"
+    local dns_options="-c --create -c4 -c6 -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -c4f -c4fy -c6f -c6fy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -q --query --setup --reconfigure --update-ttl --ttl -y --yes --inline -h --help"
 
     # ===== FIRST ARGUMENT (top-level command) =====
     if [[ ${COMP_CWORD} -eq 1 ]]; then
@@ -530,7 +530,7 @@ _tux2lab_completions() {
         # After a file-based operation, complete file paths
         local dns_opt="${COMP_WORDS[2]}"
         case "${dns_opt}" in
-            -cf|--create-from-file|-cfy|-cif|--create-with-ip-file|-cify|-df|--delete-from-file|-dfy)
+            -cf|--create-from-file|-cfy|-c4f|-c4fy|-c6f|-c6fy|-cif|--create-with-ip-file|-cify|-df|--delete-from-file|-dfy)
                 if [[ ${COMP_CWORD} -eq 3 ]]; then
                     compopt -o default
                     COMPREPLY=()
