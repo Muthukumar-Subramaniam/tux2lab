@@ -195,8 +195,8 @@ EOF
 generate_kea_dhcp6() {
     print_task "Generating kea-dhcp6 config..."
 
-    local pool_start="${IPV6_PREFIX_BASE}::f001"
-    local pool_end="${IPV6_PREFIX_BASE}::f063"
+    local pool_start="${IPV6_PREFIX_BASE}::3ff"
+    local pool_end="${IPV6_PREFIX_BASE}::461"
 
     cat > "${DATA_DIR}/kea/kea-dhcp6.conf" <<EOF
 {

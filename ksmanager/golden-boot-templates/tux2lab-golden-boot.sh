@@ -36,6 +36,26 @@ error_exit() {
 	exit 1
 }
 
+wait_for_lab_server() {
+    local label="$1"
+    local max_wait="${2:-60}"
+    local interval="${3:-3}"
+    local waited=0
+    log "${label}"
+    while ! curl -fsSL --max-time 3 "http://get_lab_infra_server_hostname/" >/dev/null 2>&1; do
+        waited=$((waited + interval))
+        if [ $waited -ge $max_wait ]; then
+            error_exit "Cannot reach get_lab_infra_server_hostname (waited ${max_wait}s)"
+        fi
+        sleep "$interval"
+    done
+    if [ $waited -gt 0 ]; then
+        log "Reached get_lab_infra_server_hostname after ${waited}s"
+    else
+        log "Reached get_lab_infra_server_hostname immediately"
+    fi
+}
+
 COMPLETION_MARKER="/root/tux2lab-golden-boot-completed"
 
 if [ -f "$COMPLETION_MARKER" ]; then
@@ -68,26 +88,7 @@ log "Regenerating machine-id"
 rm -f /etc/machine-id /run/machine-id /var/lib/dbus/machine-id
 systemd-machine-id-setup
 
-log "Checking network connectivity to lab infrastructure server..."
-# Wait for network to be fully ready (DHCP may still be in progress on Debian/ifupdown)
-WAIT_SECS=0
-MAX_WAIT=60
-while ! ping -c 1 -W 2 get_lab_infra_server_hostname &>/dev/null; do
-	WAIT_SECS=$((WAIT_SECS + 3))
-	if [ $WAIT_SECS -ge $MAX_WAIT ]; then
-		log "Waited ${MAX_WAIT}s for network connectivity"
-		ping -c 3 get_lab_infra_server_hostname || error_exit "Cannot reach lab infrastructure server"
-	fi
-	log "Waiting for network... (${WAIT_SECS}/${MAX_WAIT}s)"
-	sleep 3
-done
-if [ $WAIT_SECS -gt 0 ]; then
-	log "Network became available after ${WAIT_SECS}s"
-else
-	log "Network available immediately"
-fi
-ping -c 3 get_lab_infra_server_hostname
-log "Network connectivity to lab infrastructure server confirmed"
+wait_for_lab_server "Checking network connectivity to lab infrastructure server" 60 3
 
 log "Creating systemd network configuration directory"
 mkdir -p /etc/systemd/network
@@ -513,23 +514,7 @@ else
     log "Network interface configured with IPv6 ${IPv6_ADDRESS}/${IPv6_PREFIX}"
 fi
 
-log "Verifying network connectivity to lab infrastructure server..."
-# Wait for DNS resolution to become available after network restart
-dns_timeout=10
-dns_counter=0
-while ! getent hosts get_lab_infra_server_hostname >/dev/null 2>&1 && [ $dns_counter -lt $dns_timeout ]; do
-	sleep 1
-	dns_counter=$((dns_counter + 1))
-done
-if [ $dns_counter -gt 0 ]; then
-	log "Waited ${dns_counter}s for DNS resolution to become available"
-else
-	log "DNS resolution available immediately"
-fi
-if ! ping -c 3 get_lab_infra_server_hostname; then
-	error_exit "Cannot reach lab infrastructure server after reconfiguration"
-fi
-log "Network connectivity to lab infrastructure server confirmed with new IP configuration"
+wait_for_lab_server "Verifying network connectivity after reconfiguration" 30 1
 
 log "Creating system installation timestamp in /etc/bigbang"
 date '+%Y-%m-%d %H:%M:%S %Z' > /etc/bigbang

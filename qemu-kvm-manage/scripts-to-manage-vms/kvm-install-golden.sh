@@ -19,7 +19,7 @@ SUPPORTS_STACK="yes"
 STACK_MODE="dual"
 STACK_MODE_EXPLICIT=false
 VM_CPUS="2"
-VM_MEMORY="2048"
+VM_MEMORY="2"
 VM_DISK_SIZE="30"
 
 # Function to show help

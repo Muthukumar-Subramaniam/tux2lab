@@ -124,7 +124,7 @@ if [[ -n "$ipv6_gw" ]]; then
     ip -6 addr show dev eth0 scope global 2>/dev/null | grep -q "inet6" && has_global_ipv6=true
 
     has_route=false
-    ip -6 route show default via "$ipv6_gw" &>/dev/null && has_route=true
+    ip -6 route show default via "$ipv6_gw" 2>/dev/null | grep -q "default" && has_route=true
 
     if $has_global_ipv6 && [[ "$ipv6_route_flag" == "enabled" ]] && ! $has_route; then
         ip -6 route add default via "$ipv6_gw" 2>/dev/null || true

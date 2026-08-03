@@ -163,14 +163,23 @@ print_task_done
 pool_ipv4=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
 pool_domain=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
 pool_last24=$(jq -r '.network.ipv4.last24_subnet' "${LAB_ENV_JSON}")
-if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp-lease156.${pool_domain}" 2>/dev/null | grep -q '^[0-9]'; then
-    print_task "Creating DNS records for DHCP pool (156-254)..."
-    dhcp_lease_file="$(mktemp /tmp/dhcp-lease-records.XXXXXXXXXX)"
-    for octet in $(seq 156 254); do
-        echo "dhcp-lease${octet} ${pool_last24}.${octet}" >> "$dhcp_lease_file"
+if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp4-lease1.${pool_domain}" 2>/dev/null | grep -q '^[0-9]'; then
+    print_task "Creating IPv4 DNS records for DHCPv4 pool..."
+    dhcp4_file="$(mktemp /tmp/dhcp4-lease-records.XXXXXXXXXX)"
+    for i in $(seq 1 99); do
+        echo "dhcp4-lease${i} ${pool_last24}.$(( i + 155 ))" >> "$dhcp4_file"
     done
-    sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --inline "$dhcp_lease_file" &>/dev/null || true
-    rm -f "$dhcp_lease_file"
+    sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --ipv4-only --ttl 86400 --inline "$dhcp4_file" &>/dev/null || true
+    rm -f "$dhcp4_file"
+    print_task_done
+
+    print_task "Creating IPv6 DNS records for DHCPv6 pool..."
+    dhcp6_file="$(mktemp /tmp/dhcp6-lease-records.XXXXXXXXXX)"
+    for i in $(seq 1 99); do
+        echo "dhcp6-lease${i}" >> "$dhcp6_file"
+    done
+    sudo bash /tux2lab/named-manage/dnsbinder.sh -c6fy --ttl 86400 --inline "$dhcp6_file" &>/dev/null || true
+    rm -f "$dhcp6_file"
     print_task_done
 fi
 

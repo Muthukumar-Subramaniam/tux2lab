@@ -1022,28 +1022,28 @@ EOF
 
     v_network_adjusted_space=$(printf "%-*s" 63 "network")
 
-    echo -e "${v_network_adjusted_space} IN A ${v_first_subnet_part}.0" | tee -a  "${v_zone_file_name}" > /dev/null
+    echo -e "${v_network_adjusted_space} 86400 IN A ${v_first_subnet_part}.0" | tee -a  "${v_zone_file_name}" > /dev/null
 
     v_dns_host_short_name_adjusted_space=$(printf "%-*s" 63 "${v_dns_host_short_name}")
     
-    echo -e "${v_dns_host_short_name_adjusted_space} IN A ${v_primary_ip}" | tee -a "${v_zone_file_name}" > /dev/null
+    echo -e "${v_dns_host_short_name_adjusted_space} 86400 IN A ${v_primary_ip}" | tee -a "${v_zone_file_name}" > /dev/null
 
     v_broadcast_adjusted_space=$(printf "%-*s" 63 "broadcast")
 
-    echo -e "${v_broadcast_adjusted_space} IN A ${v_last_subnet_part}.255" | tee -a  "${v_zone_file_name}" > /dev/null
+    echo -e "${v_broadcast_adjusted_space} 86400 IN A ${v_last_subnet_part}.255" | tee -a  "${v_zone_file_name}" > /dev/null
 
     # Add AAAA records for IPv6 (dual-stack)
     if [[ -n "${v_ipv6_address}" ]]; then
         echo -e "\n;AAAA-Records (IPv6)" | tee -a "${v_zone_file_name}" > /dev/null
         
         v_dns_host_short_name_adjusted_space=$(printf "%-*s" 63 "${v_dns_host_short_name}")
-        echo -e "${v_dns_host_short_name_adjusted_space} IN AAAA ${v_ipv6_address}" | tee -a "${v_zone_file_name}" > /dev/null
+        echo -e "${v_dns_host_short_name_adjusted_space} 86400 IN AAAA ${v_ipv6_address}" | tee -a "${v_zone_file_name}" > /dev/null
     fi
 
     # Add CNAME aliases
     echo -e "\n;CNAME-Records" | tee -a "${v_zone_file_name}" > /dev/null
     v_gateway_cname_space=$(printf "%-*s" 63 "gateway")
-    echo -e "${v_gateway_cname_space} IN CNAME ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
+    echo -e "${v_gateway_cname_space} 86400 IN CNAME ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
 
     for v_subnet_part in ${v_splited_subnets}
     do
@@ -1052,13 +1052,13 @@ EOF
         echo -e "\n;PTR-Records" | tee -a "${v_zone_file_name}" > /dev/null
         if [[ "${v_subnet_part}" == "${v_first_subnet_part}" ]]
         then
-            echo -e "0   IN PTR network.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
+            echo -e "0   86400 IN PTR network.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
             v_get_ip_part_primary_ip=$(echo "${v_primary_ip}" | awk -F. '{print $4}')
             v_ip_part_primary_ip_adjusted_space=$(printf "%-*s" 3 "${v_get_ip_part_primary_ip}")
-            echo -e "${v_ip_part_primary_ip_adjusted_space} IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
+            echo -e "${v_ip_part_primary_ip_adjusted_space} 86400 IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
         elif [[ "${v_subnet_part}" == "${v_last_subnet_part}" ]]
         then
-            echo -e "255 IN PTR broadcast.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
+            echo -e "255 86400 IN PTR broadcast.${v_given_domain}." | tee -a "${v_zone_file_name}" > /dev/null
         fi
     done
 
@@ -1068,12 +1068,10 @@ EOF
         fn_update_dns_server_data_to_zone_file "${v_ipv6_zone_file}"
         echo -e "\n;IPv6 PTR-Records" | tee -a "${v_ipv6_zone_file}" > /dev/null
         
-        # Add PTR record for DNS server's IPv6 address
-        # Convert IPv6 address to full expanded form, then extract host part and reverse it
         v_ipv6_ptr=$(fn_ipv6_to_nibbles "${v_ipv6_address}")
         
         if [[ -n "${v_ipv6_ptr}" ]]; then
-            echo -e "${v_ipv6_ptr} IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_ipv6_zone_file}" > /dev/null
+            echo -e "${v_ipv6_ptr} 86400 IN PTR ${v_dns_host_short_name}.${v_given_domain}." | tee -a "${v_ipv6_zone_file}" > /dev/null
         fi
     fi
 
@@ -3323,6 +3321,12 @@ then
             record_ttl="${args[$((i+1))]}"
             unset 'args[$i]'
             unset 'args[$((i+1))]'
+        elif [[ "${args[$i]}" == "--ipv4-only" ]]; then
+            record_stack="ipv4"
+            unset 'args[$i]'
+        elif [[ "${args[$i]}" == "--ipv6-only" ]]; then
+            record_stack="ipv6"
+            unset 'args[$i]'
         fi
     done
     set -- "${args[@]}"
