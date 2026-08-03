@@ -38,11 +38,20 @@ OPTIONS:
     -d <distro>         OS distribution
     -v <version>        OS version
     --console           Attach to serial console during install (PXE only)
+    --ipv4-only         Reimage as IPv4-only VM
+    --ipv6-only         Reimage as IPv6-only VM
+    --dual-stack        Force dual-stack (override auto-detected single-stack)
+    --cpu <n>           vCPUs (power of 2, default: 2)
+    --memory <n>        RAM in GiB (power of 2, default: 2)
+    --root-disk-size <n> Disk in GiB (multiple of 5, default: 30)
+    -f, --force         Skip confirmation prompt
     -h, --help          Show this help message
 
 EXAMPLES:
     tux2lab vm reimage -H vm1
     tux2lab vm reimage -H vm1 -d rocky -v 10
+    tux2lab vm reimage -H vm1 --ipv4-only
+    tux2lab vm reimage -H vm1 --dual-stack --cpu 4 --memory 8
     tux2lab vm reimage --via-pxe -H vm1 -d ubuntu-lts -v 24.04"
             exit 0
             ;;
