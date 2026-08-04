@@ -72,7 +72,7 @@ if [[ "get_stack_mode" == "ipv6" ]] && [[ -n "get_ipv6_address" ]]; then
 
 [ipv6]
 method=manual
-address1=get_ipv6_address/get_ipv6_prefix,get_ipv6_gateway
+address1=get_ipv6_address/get_ipv6_prefix
 dns=get_ipv6_nameserver;
 dns-search=get_ipv4_domain;
 NMEOF

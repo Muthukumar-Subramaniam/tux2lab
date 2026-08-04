@@ -48,7 +48,6 @@
           "get_ipv6_address/get_ipv6_prefix"
         ],
         "gateway4": "get_ipv4_gateway",
-        "gateway6": "get_ipv6_gateway",
         "nameservers": [
           "get_ipv4_nameserver",
           "get_ipv6_nameserver"

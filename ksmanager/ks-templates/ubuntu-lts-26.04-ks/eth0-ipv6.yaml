@@ -7,9 +7,6 @@ network:
             accept-ra: false
             addresses:
               - get_ipv6_address/get_ipv6_prefix
-            routes:
-              - to: default
-                via: get_ipv6_gateway
             nameservers:
               addresses: [get_ipv6_nameserver]
               search: [get_ipv4_domain]

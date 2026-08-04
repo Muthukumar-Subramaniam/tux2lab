@@ -311,7 +311,6 @@ case "${DISTRO_FAMILY}" in
 			if ! nmcli connection add type ethernet ifname eth0 con-name eth0 \
 			  ipv4.method disabled \
 			  ipv6.addresses "${IPv6_ADDRESS}"/"${IPv6_PREFIX}" \
-			  ipv6.gateway "${IPv6_GATEWAY}" \
 			  ipv6.dns "${IPv6_DNS_SERVER}" \
 			  ipv6.dns-search "${IPv4_DNS_DOMAIN}" \
 			  ipv6.method manual \
@@ -384,9 +383,6 @@ network:
             accept-ra: false
             addresses:
               - ${IPv6_ADDRESS}/${IPv6_PREFIX}
-            routes:
-              - to: default
-                via: ${IPv6_GATEWAY}
             nameservers:
               addresses: [${IPv6_DNS_SERVER}]
               search: [${IPv4_DNS_DOMAIN}]
@@ -439,7 +435,6 @@ iface lo inet loopback
 auto eth0
 iface eth0 inet6 static
     address ${IPv6_ADDRESS}/${IPv6_PREFIX}
-    gateway ${IPv6_GATEWAY}
     dns-nameservers ${IPv6_DNS_SERVER}
     dns-search ${IPv4_DNS_DOMAIN}
 EOF
@@ -480,7 +475,6 @@ EOF
 				ipv4.method disabled \
 				ipv6.method manual \
 				ipv6.addresses "${IPv6_ADDRESS}/${IPv6_PREFIX}" \
-				ipv6.gateway "${IPv6_GATEWAY}" \
 				ipv6.dns "${IPv6_DNS_SERVER}" \
 				connection.autoconnect yes
 		fi
