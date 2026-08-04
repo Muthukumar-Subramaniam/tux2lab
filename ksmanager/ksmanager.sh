@@ -1895,7 +1895,8 @@ if [[ "${stack_mode}" != "ipv4" ]] && [[ -n "${ipv6_address}" ]]; then
   ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${ipv6_address}
   ${MAKE_IT_CYAN}✓ IPv6 Prefix      :${RESET_COLOR} ${ipv6_prefix}
   ${MAKE_IT_CYAN}✓ IPv6 Gateway     :${RESET_COLOR} ${ipv6_gateway}
-  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}"
+  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}
+  ${MAKE_IT_CYAN}✓ IPv6 DNS         :${RESET_COLOR} ${ipv6_nameserver}"
 fi
 
 _summary+="
