@@ -1597,18 +1597,6 @@ fn_set_environment() {
         }
         1
         ' "${working_file}" > "${working_file}"_tmp_ksmanager && mv "${working_file}"_tmp_ksmanager "${working_file}"
-
-        # Strip artifacts from empty IPv6/IPv4 tokens in install configs
-        if [[ -z "${ipv6_address}" ]]; then
-            # YAML: remove "- /" lines (Ubuntu eth0.yaml)
-            sed -i '/^\s*-\s*\/\s*$/d' "${working_file}"
-            # JSON: remove "/"  entries (openSUSE profile.json)
-            sed -i 's|,\s*"/"||g; s|"/",\s*||g; s|"/"||g' "${working_file}"
-            # JSON: remove empty gateway6 line
-            sed -i '/"gateway6":\s*""/d' "${working_file}"
-            # Netplan: remove empty IPv6 nameserver from address list
-            sed -i 's|,\s*]|]|g' "${working_file}"
-        fi
     }
 
     if [[ -d "${input_dir_or_file}" ]]
