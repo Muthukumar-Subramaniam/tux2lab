@@ -1620,8 +1620,9 @@ if ! $invoked_with_golden_image; then
     if [[ "${os_distribution}" == "opensuse-leap" ]] && [[ "${stack_mode}" == "ipv4" ]]; then
         _profile="${host_kickstart_dir}/${os_distribution}-${version}-profile.json"
         jq '(.network.connections[0].addresses) |= map(select(startswith("/") | not)) |
+            .network.connections[0].method6 = "disabled" |
             del(.network.connections[0].gateway6) |
-            (.network.connections[0].nameservers) |= map(select(. != ""))' "$_profile" > "${_profile}.tmp" && mv "${_profile}.tmp" "$_profile"
+            (.network.connections[0].nameservers) |= map(select(contains(":") | not))' "$_profile" > "${_profile}.tmp" && mv "${_profile}.tmp" "$_profile"
     fi
 
     mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
