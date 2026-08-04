@@ -1616,6 +1616,14 @@ if ! $invoked_with_golden_image; then
 
     fn_set_environment "${host_kickstart_dir}"
 
+    # openSUSE: fix profile.json after token replacement for ipv4-only (empty IPv6 tokens)
+    if [[ "${os_distribution}" == "opensuse-leap" ]] && [[ "${stack_mode}" == "ipv4" ]]; then
+        _profile="${host_kickstart_dir}/${os_distribution}-${version}-profile.json"
+        jq '(.network.connections[0].addresses) |= map(select(startswith("/") | not)) |
+            del(.network.connections[0].gateway6) |
+            (.network.connections[0].nameservers) |= map(select(. != ""))' "$_profile" > "${_profile}.tmp" && mv "${_profile}.tmp" "$_profile"
+    fi
+
     mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
 
     if [[ -z "${redhat_based_distro_name}" ]]; then
