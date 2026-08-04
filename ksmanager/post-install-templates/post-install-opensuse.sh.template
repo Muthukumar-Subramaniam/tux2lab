@@ -140,7 +140,70 @@ done
 zypper --non-interactive modifyrepo --enable openSUSE:repo-non-oss 2>/dev/null && echo "Enabled repo-non-oss" || true
 
 ######################################################################
-# 14. Golden image setup (conditional)
+# 14. Stack-aware network reconfiguration (PXE installs only)
+######################################################################
+if get_golden_image_creation_not_requested; then
+    /bin/rm -f /etc/NetworkManager/system-connections/*
+
+    /bin/cat > /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+[connection]
+id=eth0
+type=ethernet
+interface-name=eth0
+autoconnect=true
+
+[ethernet]
+NMEOF
+
+    if [[ "get_stack_mode" != "ipv6" ]]; then
+        /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv4]
+method=manual
+address1=get_ipv4_address/get_ipv4_prefix,get_ipv4_gateway
+dns=get_ipv4_nameserver;
+dns-search=get_ipv4_domain;
+NMEOF
+    else
+        /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv4]
+method=disabled
+NMEOF
+    fi
+
+    if [[ "get_stack_mode" == "ipv6" ]]; then
+        /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv6]
+method=manual
+address1=get_ipv6_address/get_ipv6_prefix,get_ipv6_gateway
+dns=get_ipv6_nameserver;
+dns-search=get_ipv4_domain;
+NMEOF
+    elif [[ "get_stack_mode" != "ipv4" ]]; then
+        /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv6]
+method=manual
+address1=get_ipv6_address/get_ipv6_prefix
+dns=get_ipv6_nameserver;
+dns-search=get_ipv4_domain;
+NMEOF
+    else
+        /bin/cat >> /etc/NetworkManager/system-connections/eth0.nmconnection << 'NMEOF'
+
+[ipv6]
+method=disabled
+NMEOF
+    fi
+
+    /bin/chmod 0600 /etc/NetworkManager/system-connections/eth0.nmconnection
+    echo "Network configured: get_stack_mode stack"
+fi
+
+######################################################################
+# 15. Golden image setup (conditional)
 ######################################################################
 if ! get_golden_image_creation_not_requested; then
 

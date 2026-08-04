@@ -1364,7 +1364,11 @@ fi
 
 if ! $invoked_with_golden_image; then
     if [[ "${os_distribution}" == "opensuse-leap" ]]; then
-        rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile-${stack_mode}.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"; then
+            print_error "Failed to copy Agama profile for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
     elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
         if ! rsync -a -q --delete --exclude='eth0-*.yaml' "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
             print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
