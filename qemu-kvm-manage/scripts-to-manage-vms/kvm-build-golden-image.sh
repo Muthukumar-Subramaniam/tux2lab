@@ -252,10 +252,10 @@ while sudo virsh domstate "$qemu_kvm_hostname" &>/dev/null && \
 
     sleep 4
 
-    # Timeout: 30 minutes
-    if [[ $elapsed -ge 1800 ]]; then
+    # Timeout: 60 minutes
+    if [[ $elapsed -ge 3600 ]]; then
         echo ""
-        print_error "Stage 1 timed out after 30 minutes. Cleaning up..."
+        print_error "Stage 1 timed out after 60 minutes. Cleaning up..."
         sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
         sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
         sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
