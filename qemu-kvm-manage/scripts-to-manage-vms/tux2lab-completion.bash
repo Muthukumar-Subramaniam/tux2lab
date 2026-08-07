@@ -189,7 +189,7 @@ _tux2lab_completions() {
         # already handled above with their own completion handlers.
         # -H/--hosts/--host is handled earlier via COMP_LINE detection.
         case "${prev}" in
-            -f|--force|-C|--clean-install|--ignore-ksmanager-cleanup|-h|--help) ;;
+            -f|--force|--reset-specs-to-default|--ignore-ksmanager-cleanup|-h|--help) ;;
             -c|--console)
                 case "${vm_subcmd}" in
                     install|reimage) ;;
@@ -211,7 +211,7 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console -d --distro -v --version --ipv4-only --ipv6-only --dual-stack --cpu --memory --root-disk-size -h --help" -- "${cur}") )
                 ;;
             reimage)
-                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console -C --clean-install -d --distro -v --version --ipv4-only --ipv6-only --dual-stack -f --force -h --help" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console --reset-specs-to-default -d --distro -v --version --ipv4-only --ipv6-only --dual-stack -f --force -h --help" -- "${cur}") )
                 ;;
             start)
                 COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )

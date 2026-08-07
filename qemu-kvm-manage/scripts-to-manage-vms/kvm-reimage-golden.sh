@@ -10,12 +10,12 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 DIR_PATH_SCRIPTS_TO_MANAGE_VMS='/tux2lab/qemu-kvm-manage/scripts-to-manage-vms'
 
 ATTACH_CONSOLE="no"
-CLEAN_INSTALL="no"
+RESET_SPECS="no"
 FORCE_REIMAGE="false"
 OS_DISTRO=""
 VERSION_TYPE=""
 HOSTNAMES=()
-SUPPORTS_CLEAN_INSTALL="yes"
+SUPPORTS_RESET_SPECS="yes"
 SUPPORTS_FORCE="yes"
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
@@ -32,7 +32,7 @@ fn_show_help() {
 Options:
   -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
   -c, --console        Attach console during reimage (single VM only)
-  -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
+  --reset-specs-to-default     Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
   -d, --distro         Specify OS distribution
                        (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
   -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
@@ -48,12 +48,12 @@ Options:
 Examples:
   tux2lab vm reimage-golden -H vm1                                   # Reimage single VM
   tux2lab vm reimage-golden -H vm1 --console                         # Reimage and attach console
-  tux2lab vm reimage-golden -H vm1 --clean-install                   # Reimage with default specs
+  tux2lab vm reimage-golden -H vm1 --reset-specs-to-default                   # Reimage with default specs
   tux2lab vm reimage-golden -H vm1 --distro almalinux                # Reimage with AlmaLinux (will prompt for version)
   tux2lab vm reimage-golden -H vm1 -d ubuntu-lts -v 26.04            # Reimage with Ubuntu 26.04
   tux2lab vm reimage-golden -f -H vm1                                # Reimage without confirmation
   tux2lab vm reimage-golden -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04   # Reimage multiple with Ubuntu 26.04
-  tux2lab vm reimage-golden -H vm1,vm2,vm3 --clean-install           # Reimage multiple with defaults
+  tux2lab vm reimage-golden -H vm1,vm2,vm3 --reset-specs-to-default           # Reimage multiple with defaults
 "
 }
 
@@ -181,8 +181,8 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Run ksmanager and extract VM details
     # Handle MAC address based on operation type
-    if [[ "$CLEAN_INSTALL" == "yes" ]]; then
-        # For clean install, generate new MAC (VM will be destroyed and recreated)
+    if [[ "$RESET_SPECS" == "yes" ]]; then
+        # For reset-specs, generate new MAC (VM will be destroyed and recreated)
         print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
         if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
@@ -266,13 +266,13 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # If --clean-install is specified, destroy and reinstall VM with default specs
-    if [[ "$CLEAN_INSTALL" == "yes" ]]; then
-        print_info "Using --clean-install: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)."
+    # If --reset-specs-to-default is specified, destroy and reinstall VM with default specs
+    if [[ "$RESET_SPECS" == "yes" ]]; then
+        print_info "Using --reset-specs-to-default: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)."
         
         # Destroy VM and delete directory
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-clean-install.sh
-        if ! destroy_vm_for_clean_install "$qemu_kvm_hostname"; then
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-reset-specs.sh
+        if ! destroy_vm_for_reset_specs "$qemu_kvm_hostname"; then
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
