@@ -158,6 +158,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
 
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
+    report_retained_resources "$qemu_kvm_hostname"
+
     # Clean up temp PXE bootstrap record for --ipv6-only
     if [[ -n "${PXE_BOOTSTRAP_HOSTNAME:-}" ]]; then
         print_task "Removing temporary PXE bootstrap record '${PXE_BOOTSTRAP_HOSTNAME}'..."

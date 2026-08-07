@@ -290,6 +290,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
 
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
+    report_retained_resources "$qemu_kvm_hostname"
+
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
     show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via golden image disk" "Installation via golden image disk takes ~1 minute per VM."
