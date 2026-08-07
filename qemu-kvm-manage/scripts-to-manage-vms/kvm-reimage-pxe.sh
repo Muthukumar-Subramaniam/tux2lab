@@ -24,8 +24,11 @@ SUPPORTS_MIN_RESOURCES="pxe"
 STACK_MODE="dual"
 STACK_MODE_EXPLICIT=false
 VM_CPUS="2"
+VM_CPUS_SPECIFIED=false
 VM_MEMORY="2"
+VM_MEMORY_SPECIFIED=false
 VM_DISK_SIZE="30"
+VM_DISK_SIZE_SPECIFIED=false
 
 # Function to show help
 fn_show_help() {
@@ -249,15 +252,31 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             continue
         fi
     else
-        # Default path: preserve disk size
+        # Default path: preserve existing specs unless explicitly overridden
         print_info "Reimaging VM \"$qemu_kvm_hostname\" by replacing its qcow2 disk with a new one..."
         
+        # Apply CPU/memory overrides to the shut-off VM's definition
+        if [[ "$VM_CPUS_SPECIFIED" == "true" ]]; then
+            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum 2>/dev/null
+            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config 2>/dev/null
+        fi
+        if [[ "$VM_MEMORY_SPECIFIED" == "true" ]]; then
+            new_mem_kib=$(( VM_MEMORY * 1024 * 1024 ))
+            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config 2>/dev/null
+            sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config 2>/dev/null
+            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config 2>/dev/null
+        fi
+
         vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-current-disk-size.sh
         get_current_disk_size "$qemu_kvm_hostname"
         current_disk_gib="${CURRENT_DISK_SIZE:-30}"
         
+        # Use user-specified disk size if provided, otherwise preserve current
+        target_disk_gib="${current_disk_gib}"
+        [[ "$VM_DISK_SIZE_SPECIFIED" == "true" ]] && target_disk_gib="${VM_DISK_SIZE}"
+
         # Delete existing qcow2 disk and recreate with appropriate size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/delete-vm-disk.sh
         delete_vm_disk "$qemu_kvm_hostname"
@@ -270,7 +289,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         fi
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/resize-disk-if-larger.sh
-        resize_disk_if_larger "$qemu_kvm_hostname" "$current_disk_gib" "30"
+        resize_disk_if_larger "$qemu_kvm_hostname" "$target_disk_gib" "30"
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
         report_retained_resources "$qemu_kvm_hostname"

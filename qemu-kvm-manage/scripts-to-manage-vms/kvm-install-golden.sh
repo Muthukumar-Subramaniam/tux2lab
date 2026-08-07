@@ -19,8 +19,11 @@ SUPPORTS_STACK="yes"
 STACK_MODE="dual"
 STACK_MODE_EXPLICIT=false
 VM_CPUS="2"
+VM_CPUS_SPECIFIED=false
 VM_MEMORY="2"
+VM_MEMORY_SPECIFIED=false
 VM_DISK_SIZE="30"
+VM_DISK_SIZE_SPECIFIED=false
 
 # Function to show help
 fn_show_help() {

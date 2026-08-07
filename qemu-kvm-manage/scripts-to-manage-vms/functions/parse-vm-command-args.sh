@@ -167,6 +167,7 @@ parse_vm_command_args() {
                     exit 1
                 fi
                 VM_CPUS="$2"
+                VM_CPUS_SPECIFIED=true
                 shift 2
                 ;;
             --memory)
@@ -191,6 +192,7 @@ parse_vm_command_args() {
                     exit 1
                 fi
                 VM_MEMORY="$2"
+                VM_MEMORY_SPECIFIED=true
                 shift 2
                 ;;
             --root-disk-size)
@@ -203,6 +205,7 @@ parse_vm_command_args() {
                     exit 1
                 fi
                 VM_DISK_SIZE="$2"
+                VM_DISK_SIZE_SPECIFIED=true
                 shift 2
                 ;;
             -*)
