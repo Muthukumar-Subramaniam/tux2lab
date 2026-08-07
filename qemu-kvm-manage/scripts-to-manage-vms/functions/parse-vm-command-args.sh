@@ -223,7 +223,7 @@ parse_vm_command_args() {
     done
 
     # --reset-specs-to-default is mutually exclusive with --cpu/--memory/--root-disk-size
-    if [[ "$RESET_SPECS" == "yes" ]]; then
+    if [[ "${RESET_SPECS:-no}" == "yes" ]]; then
         if [[ "$VM_CPUS_SPECIFIED" == "true" || "$VM_MEMORY_SPECIFIED" == "true" || "$VM_DISK_SIZE_SPECIFIED" == "true" ]]; then
             print_error "--reset-specs-to-default cannot be combined with --cpu, --memory, or --root-disk-size."
             print_info "Use --reset-specs-to-default alone to reset to defaults (2 vCPUs, 2 GiB RAM, 30 GiB disk),"
