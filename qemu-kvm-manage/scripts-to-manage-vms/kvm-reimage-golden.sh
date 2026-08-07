@@ -311,14 +311,14 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Apply CPU/memory overrides to the shut-off VM's definition
         if [[ "$VM_CPUS_SPECIFIED" == "true" ]]; then
-            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum 2>/dev/null
-            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config 2>/dev/null
+            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum >/dev/null 2>&1
+            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config >/dev/null 2>&1
         fi
         if [[ "$VM_MEMORY_SPECIFIED" == "true" ]]; then
             new_mem_kib=$(( VM_MEMORY * 1024 * 1024 ))
-            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config 2>/dev/null
-            sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config 2>/dev/null
-            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config 2>/dev/null
+            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1
+            sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1
+            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1
         fi
 
         vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
