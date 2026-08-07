@@ -22,12 +22,12 @@ show_vm_completion_message() {
         print_info "Attaching to VM console. Press Ctrl+] to exit console."
         sudo virsh console "${vm_hostname}"
     elif [[ $total_vms -eq 1 ]]; then
-        if [[ -n "$time_message" ]]; then
-            print_info "${time_message}"
-        fi
-        print_info "To monitor progress, use: tux2lab vm console -H ${vm_hostname}"
-        print_info "To check VM status, use: tux2lab vm list"
         print_success "VM \"${vm_hostname}\" ${operation_desc} initiated successfully."
+        if [[ -n "$time_message" ]]; then
+            print_yellow "    ▸ ${time_message}"
+        fi
+        print_yellow "    ▸ To monitor progress: tux2lab vm console -H ${vm_hostname}"
+        print_yellow "    ▸ To check VM status:  tux2lab vm list"
     fi
 
     return 0
