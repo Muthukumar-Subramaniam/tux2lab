@@ -350,9 +350,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/resize-disk-if-larger.sh
         resize_disk_if_larger "$qemu_kvm_hostname" "$target_disk_gib" "$golden_disk_gib"
         
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
-        report_retained_resources "$qemu_kvm_hostname"
-        
         # Start reimaging process
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-for-reimage.sh
         if ! start_vm_for_reimage "$qemu_kvm_hostname" "reimaging via golden image disk"; then
@@ -361,6 +358,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             continue
         fi
     fi
+
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
+    report_retained_resources "$qemu_kvm_hostname"
 
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")

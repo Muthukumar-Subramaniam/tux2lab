@@ -30,9 +30,7 @@ report_retained_resources() {
     current_disk_gib=$(sudo qemu-img info "$vm_disk_path" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
     current_disk_gib="${current_disk_gib:-30}"
 
-    if [[ "$current_vcpus" -gt 2 || "$current_mem_gib" -gt 2 || "$current_disk_gib" -gt 30 ]]; then
-        print_info "VM specs: ${current_vcpus} vCPUs, ${current_mem_gib} GiB RAM, ${current_disk_gib} GiB disk"
-    fi
+    print_info "VM specs: ${current_vcpus} vCPUs, ${current_mem_gib} GiB RAM, ${current_disk_gib} GiB disk"
 
     return 0
 }
