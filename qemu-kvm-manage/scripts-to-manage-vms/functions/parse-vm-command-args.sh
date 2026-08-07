@@ -222,6 +222,16 @@ parse_vm_command_args() {
         esac
     done
 
+    # --reset-specs-to-default is mutually exclusive with --cpu/--memory/--root-disk-size
+    if [[ "$RESET_SPECS" == "yes" ]]; then
+        if [[ "$VM_CPUS_SPECIFIED" == "true" || "$VM_MEMORY_SPECIFIED" == "true" || "$VM_DISK_SIZE_SPECIFIED" == "true" ]]; then
+            print_error "--reset-specs-to-default cannot be combined with --cpu, --memory, or --root-disk-size."
+            print_info "Use --reset-specs-to-default alone to reset to defaults (2 vCPUs, 2 GiB RAM, 30 GiB disk),"
+            print_info "or use --cpu/--memory/--root-disk-size without it to apply custom specs."
+            exit 1
+        fi
+    fi
+
     # Validate console + multiple VMs conflict
     if [[ "$ATTACH_CONSOLE" == "yes" && ${#HOSTNAMES[@]} -gt 1 ]]; then
         print_error "--console/-c option cannot be used with multiple VMs."
