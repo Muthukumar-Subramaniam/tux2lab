@@ -211,7 +211,7 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console -d --distro -v --version --ipv4-only --ipv6-only --dual-stack --cpu --memory --root-disk-size -h --help" -- "${cur}") )
                 ;;
             reimage)
-                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console --reset-specs-to-default -d --distro -v --version --ipv4-only --ipv6-only --dual-stack -f --force -h --help" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console --reset-specs-to-default -d --distro -v --version --ipv4-only --ipv6-only --dual-stack --cpu --memory --root-disk-size -f --force -h --help" -- "${cur}") )
                 ;;
             start)
                 COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
