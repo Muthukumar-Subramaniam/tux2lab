@@ -27,7 +27,7 @@ report_retained_resources() {
 
     local current_disk_gib
     local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
-    current_disk_gib=$(sudo qemu-img info "$vm_disk_path" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
+    current_disk_gib=$(sudo qemu-img info -U "$vm_disk_path" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
     current_disk_gib="${current_disk_gib:-30}"
 
     print_info "VM specs: ${current_vcpus} vCPUs, ${current_mem_gib} GiB RAM, ${current_disk_gib} GiB disk"
