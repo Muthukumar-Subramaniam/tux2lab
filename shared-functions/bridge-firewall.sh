@@ -17,8 +17,8 @@ open_bridge_firewall() {
             print_task_skip
             return 0
         fi
-        if sudo firewall-cmd --zone=trusted --add-interface="${bridge}" --permanent &>/dev/null && \
-           sudo firewall-cmd --reload &>/dev/null; then
+        if sudo firewall-cmd --zone=trusted --change-interface="${bridge}" --permanent &>/dev/null && \
+           sudo firewall-cmd --zone=trusted --change-interface="${bridge}" &>/dev/null; then
             print_task_done
         else
             print_task_fail
@@ -91,7 +91,7 @@ close_bridge_firewall() {
         print_task "Removing ${bridge} from firewalld trusted zone..."
         if sudo firewall-cmd --zone=trusted --query-interface="${bridge}" &>/dev/null; then
             sudo firewall-cmd --zone=trusted --remove-interface="${bridge}" --permanent &>/dev/null
-            sudo firewall-cmd --reload &>/dev/null
+            sudo firewall-cmd --zone=trusted --remove-interface="${bridge}" &>/dev/null
             print_task_done
         else
             print_task_skip
