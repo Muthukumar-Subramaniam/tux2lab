@@ -32,7 +32,7 @@ print_cyan "tux2lab Log Flush"
 print_cyan "--------------------------------------------------------------"
 
 total=0
-for log_file in $(find "$LOG_DIR" -type f -name "*.log" -size +0c 2>/dev/null); do
+for log_file in $(find "$LOG_DIR" -type f \( -name "*.log" -o -name "named.run" \) -size +0c 2>/dev/null); do
     size=$(du -h "$log_file" | cut -f1)
     print_task "Flushing ${log_file#${LOG_DIR}/} (${size})..."
     sudo truncate -s 0 "$log_file"
