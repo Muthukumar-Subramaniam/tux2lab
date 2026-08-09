@@ -53,12 +53,11 @@ generate_nginx() {
     mkdir -p "${DATA_DIR}/logs/nginx"
 
     cat > "${DATA_DIR}/nginx/nginx.conf" <<EOF
+load_module /usr/lib/nginx/modules/ngx_stream_module.so;
 user nginx;
 worker_processes auto;
 error_log ${DATA_DIR}/logs/nginx/error.log notice;
 pid /run/nginx.pid;
-
-include /usr/share/nginx/modules/*.conf;
 
 events {
     worker_connections 1024;
@@ -154,7 +153,7 @@ generate_kea_dhcp4() {
     "renew-timer": 900,
     "rebind-timer": 1800,
     "hooks-libraries": [
-      { "library": "/usr/lib64/kea/hooks/libdhcp_lease_cmds.so" }
+      { "library": "/usr/lib/kea/hooks/libdhcp_lease_cmds.so" }
     ],
     "loggers": [
       {
@@ -216,7 +215,7 @@ generate_kea_dhcp6() {
     "rebind-timer": 1800,
     "preferred-lifetime": 1800,
     "hooks-libraries": [
-      { "library": "/usr/lib64/kea/hooks/libdhcp_lease_cmds.so" }
+      { "library": "/usr/lib/kea/hooks/libdhcp_lease_cmds.so" }
     ],
     "loggers": [
       {

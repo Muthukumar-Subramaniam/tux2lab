@@ -8,47 +8,31 @@
 #     -v /tux2lab-data:/tux2lab-data \
 #     tux2lab-engine:latest
 
-# Start from AlmaLinux 10 (minimal, RHEL-compatible)
-FROM docker.io/library/almalinux:10
+FROM docker.io/library/alpine:3.21
 
-# Install all required services in a single layer (keeps image small)
-RUN dnf install -y \
-        # DNS server
+RUN apk add --no-cache \
+        bash \
         bind \
-        bind-utils \
-        # DHCP server (Kea - modern, JSON-configured)
-        kea \
-        kea-hooks \
-        # Web server (serves boot ISOs, kickstarts, lab-config)
+        kea-dhcp4 \
+        kea-dhcp6 \
+        kea-ctrl-agent \
+        kea-hook-lease-cmds \
         nginx \
         nginx-mod-stream \
-        # TFTP server (iPXE chainload for PXE boot)
-        tftp-server \
-        # NTP server
+        tftp-hpa \
         chrony \
-        # IPv6 Router Advertisements (dual-stack support)
         radvd \
-        # SSL/TLS (nginx HTTPS)
-        openssl \
-        # Utilities
-        procps-ng \
-        iproute \
-        jq \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
-
-# Create directories that services expect
-RUN mkdir -p /tux2lab-data \
+        iproute2 \
+    && mkdir -p /var/named/data /var/named/dynamic \
+    && chown -R named:named /var/named \
     && mkdir -p /run/named \
     && chown named:named /run/named \
     && mkdir -p /run/kea \
     && mkdir -p /var/lib/kea
 
-# Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Expose service ports (documentation only — with --network=host these are on the host)
 # DNS: 53/tcp+udp | DHCPv4: 67/udp | DHCPv6: 547/udp | HTTP: 80/tcp | HTTPS: 443/tcp
 # TFTP: 69/udp | NTP: 123/udp
 EXPOSE 53/tcp 53/udp 67/udp 69/udp 80/tcp 123/udp 443/tcp 547/udp

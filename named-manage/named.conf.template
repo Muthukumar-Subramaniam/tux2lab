@@ -45,14 +45,10 @@ options {
 # END public-dns-servers-as-forwarders
 
 	managed-keys-directory "/var/named/dynamic";
-	geoip-directory "/usr/share/GeoIP";
 
 	pid-file "/run/named/named.pid";
 	session-keyfile "/run/named/session.key";
 
-	/* https://fedoraproject.org/wiki/Changes/CryptoPolicy */
-	include "/etc/crypto-policies/back-ends/bind.config";
-	
 	/* Hide BIND version for security */
 	version "not disclosed";
 	
@@ -84,8 +80,5 @@ zone "." IN {
 	type hint;
 	file "/tux2lab-data/named/named.root";
 };
-
-include "/etc/named.rfc1912.zones";
-include "/etc/named.root.key";
 
 # Zones managed by dnsbinder will be appended below

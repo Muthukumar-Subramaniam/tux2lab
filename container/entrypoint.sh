@@ -33,7 +33,7 @@ echo "============================================"
 # Config/content comes from /tux2lab-data (read-only mount)
 mkdir -p /var/named/data /var/named/dynamic
 chown -R named:named /var/named
-mkdir -p /var/run/kea /run/named
+mkdir -p /var/run/kea /run/named /run/radvd
 chown named:named /run/named
 
 # Clean stale PID files from previous container run (podman start reuses filesystem)
@@ -55,7 +55,8 @@ if [[ ! -f /etc/rndc.key ]]; then
     rndc-confgen -a -u named &>/dev/null
 fi
 
-# Enable IPv6 forwarding on bridge (required for radvd)
+# Enable IPv6 forwarding (required for radvd)
+sysctl -w "net.ipv6.conf.all.forwarding=1" &>/dev/null || true
 sysctl -w "net.ipv6.conf.${BRIDGE_IF}.forwarding=1" &>/dev/null || true
 
 # --- Wait for bridge interface and IPs to be ready ---

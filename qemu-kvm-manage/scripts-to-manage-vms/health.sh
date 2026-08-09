@@ -88,20 +88,20 @@ else
 fi
 
 # --- DHCP: kea-dhcp4 and kea-dhcp6 process running ---
-if fn_exec "pgrep -x kea-dhcp4 >/dev/null"; then
+if fn_exec "pgrep kea-dhcp4 >/dev/null"; then
     fn_deep_pass "Kea DHCPv4 process running"
 else
     fn_deep_fail "Kea DHCPv4 process not running"
 fi
 
-if fn_exec "pgrep -x kea-dhcp6 >/dev/null"; then
+if fn_exec "pgrep kea-dhcp6 >/dev/null"; then
     fn_deep_pass "Kea DHCPv6 process running"
 else
     fn_deep_fail "Kea DHCPv6 process not running"
 fi
 
 # --- NTP: chronyd running and synchronized ---
-if fn_exec "pgrep -x chronyd >/dev/null"; then
+if fn_exec "pgrep chronyd >/dev/null"; then
     fn_deep_pass "Chronyd process running"
 else
     fn_deep_fail "Chronyd process not running"
