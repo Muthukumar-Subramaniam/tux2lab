@@ -313,8 +313,8 @@ if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
     sudo /tux2lab/lb-manage/lbmanager.sh restore || true
 fi
 
-# ====== STEP 13: Ensure boot service is enabled ======
-if [[ -x /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh ]]; then
+# ====== STEP 13: Preserve boot service state ======
+if sudo systemctl is-enabled tux2lab.service &>/dev/null; then
     /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/enable.sh
 fi
 
