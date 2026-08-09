@@ -5,7 +5,7 @@
 #----------------------------------------------------------------------------------------#
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 VERSION=$(jq -r '.version' /tux2lab/project_version.json)
 GHCR="ghcr.io/muthukumar-subramaniam/tux2lab-engine"
@@ -21,7 +21,7 @@ done
 sudo podman image prune -f &>/dev/null || true
 
 # Build
-sudo podman build --no-cache -t "${GHCR}:${VERSION}" -f Containerfile .
+sudo podman build --no-cache -t "${GHCR}:${VERSION}" -f container/Containerfile .
 
 # Tag
 sudo podman tag "${GHCR}:${VERSION}" "${GHCR}:latest"

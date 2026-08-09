@@ -40,7 +40,7 @@ chown named:named /run/named
 rm -f /var/run/kea/*.pid /run/named/named.pid /run/radvd/radvd.pid /run/chrony/chronyd.pid /run/nginx.pid
 
 # Create persistent log directories
-mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,chrony,tftpd,radvd}
+mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,chrony,radvd}
 chown named:named "${DATA_DIR}/logs/named"
 
 # Symlink /var/log/kea → persistent kea log dir (kea restricts output paths)
@@ -164,17 +164,14 @@ echo "[*] Starting in.tftpd (TFTP)..."
     --listen \
     --address "${BRIDGE_IP}:69" \
     --secure \
-    --verbosity 3 \
-    "${DATA_DIR}/tftpboot" >> "${DATA_DIR}/logs/tftpd/tftpd.log" 2>&1 &
-# IPv6 TFTP instance
+    "${DATA_DIR}/tftpboot" &
 if [[ -n "${BRIDGE_IPV6}" ]]; then
     /usr/sbin/in.tftpd \
         --foreground \
         --listen \
         --address "[${BRIDGE_IPV6}]:69" \
         --secure \
-        --verbosity 3 \
-        "${DATA_DIR}/tftpboot" >> "${DATA_DIR}/logs/tftpd/tftpd-ipv6.log" 2>&1 &
+        "${DATA_DIR}/tftpboot" &
     echo "    → tftpd started on ${BRIDGE_IP}:69 + [${BRIDGE_IPV6}]:69"
 else
     echo "    → tftpd started on ${BRIDGE_IP}:69 (IPv6 not available)"

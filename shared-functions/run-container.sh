@@ -16,7 +16,7 @@ run_tux2lab_container() {
     local bridge_ipv6
     bridge_ipv6=$(jq -r '.network.ipv6.address' "${data_dir}/lab-config/lab_environment.json")
 
-    sudo mkdir -p "${data_dir}/logs"/{nginx,named,kea,chrony,tftpd,radvd} "${data_dir}/nginx/stream.d"
+    sudo mkdir -p "${data_dir}/logs"/{nginx,named,kea,chrony,radvd} "${data_dir}/nginx/stream.d"
     sudo chown named:named "${data_dir}/logs/named" 2>/dev/null || true
     sudo podman run -d \
         --name "${name}" \

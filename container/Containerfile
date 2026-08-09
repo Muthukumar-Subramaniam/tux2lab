@@ -30,7 +30,7 @@ RUN apk add --no-cache \
     && mkdir -p /run/kea \
     && mkdir -p /var/lib/kea
 
-COPY entrypoint.sh /entrypoint.sh
+COPY container/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # DNS: 53/tcp+udp | DHCPv4: 67/udp | DHCPv6: 547/udp | HTTP: 80/tcp | HTTPS: 443/tcp
