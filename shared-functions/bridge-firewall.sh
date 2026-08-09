@@ -1,20 +1,37 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Shared firewall functions for lab bridge.                                              #
-# Ensures iptables/ip6tables allow traffic on the lab bridge interface.                  #
-# Only adds rules if the default policy is DROP/REJECT (restrictive firewall).           #
+# Ensures traffic is allowed on the lab bridge interface.                                #
+# Supports firewalld (Fedora/RHEL) and raw iptables (other distros).                    #
 #----------------------------------------------------------------------------------------#
 
-# Add ACCEPT rules for the lab bridge interface (idempotent)
+# Add the bridge to firewalld trusted zone, or add iptables ACCEPT rules (idempotent)
 # Usage: open_bridge_firewall <bridge_interface>
 open_bridge_firewall() {
     local bridge="$1"
+
+    # firewalld takes priority if running
+    if systemctl is-active firewalld &>/dev/null; then
+        print_task "Opening firewall for ${bridge}..."
+        if sudo firewall-cmd --zone=trusted --query-interface="${bridge}" &>/dev/null; then
+            print_task_skip
+            return 0
+        fi
+        if sudo firewall-cmd --zone=trusted --add-interface="${bridge}" --permanent &>/dev/null && \
+           sudo firewall-cmd --reload &>/dev/null; then
+            print_task_done
+        else
+            print_task_fail
+            print_warning "Could not add ${bridge} to firewalld trusted zone."
+        fi
+        return 0
+    fi
+
+    # Fallback: raw iptables/ip6tables
     local rules_needed=false
 
-    # Check if restrictive policy exists (IPv4 or IPv6)
     if sudo iptables -S INPUT 2>/dev/null | head -1 | grep -q "DROP\|REJECT" || \
        sudo ip6tables -S INPUT 2>/dev/null | head -1 | grep -q "DROP\|REJECT"; then
-        # Check if rules already present
         if sudo iptables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null && \
            sudo ip6tables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null; then
             print_task "Opening firewall for ${bridge}..."
@@ -32,7 +49,6 @@ open_bridge_firewall() {
 
     print_task "Opening firewall for ${bridge}..."
 
-    # IPv4: only if INPUT policy is not ACCEPT
     if sudo iptables -S INPUT 2>/dev/null | head -1 | grep -q "DROP\|REJECT"; then
         for rule in \
             "INPUT -i ${bridge} -j ACCEPT" \
@@ -45,7 +61,6 @@ open_bridge_firewall() {
         done
     fi
 
-    # IPv6: only if INPUT policy is not ACCEPT
     if sudo ip6tables -S INPUT 2>/dev/null | head -1 | grep -q "DROP\|REJECT"; then
         for rule in \
             "INPUT -i ${bridge} -j ACCEPT" \
@@ -58,7 +73,6 @@ open_bridge_firewall() {
         done
     fi
 
-    # Verify rules were applied
     if sudo iptables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null || \
        sudo ip6tables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null; then
         print_task_done
@@ -68,18 +82,57 @@ open_bridge_firewall() {
     fi
 }
 
+# Remove bridge from firewalld trusted zone / iptables rules
+# Usage: close_bridge_firewall <bridge_interface>
+close_bridge_firewall() {
+    local bridge="$1"
+
+    if systemctl is-active firewalld &>/dev/null; then
+        print_task "Removing ${bridge} from firewalld trusted zone..."
+        if sudo firewall-cmd --zone=trusted --query-interface="${bridge}" &>/dev/null; then
+            sudo firewall-cmd --zone=trusted --remove-interface="${bridge}" --permanent &>/dev/null
+            sudo firewall-cmd --reload &>/dev/null
+            print_task_done
+        else
+            print_task_skip
+        fi
+        return 0
+    fi
+
+    print_task "Removing firewall rules for ${bridge}..."
+    local removed=false
+    for rule in \
+        "INPUT -i ${bridge} -j ACCEPT" \
+        "FORWARD -i ${bridge} -j ACCEPT" \
+        "FORWARD -o ${bridge} -j ACCEPT" \
+        "OUTPUT -o ${bridge} -j ACCEPT"; do
+        if sudo iptables -D $rule 2>/dev/null; then removed=true; fi
+        if sudo ip6tables -D $rule 2>/dev/null; then removed=true; fi
+    done
+    if $removed; then
+        print_task_done
+    else
+        print_task_skip
+    fi
+}
+
 # Check if bridge firewall rules are in place (for health check)
 # Usage: check_bridge_firewall <bridge_interface>
 # Returns 0 if rules present or policy is ACCEPT, 1 if missing
 check_bridge_firewall() {
     local bridge="$1"
 
-    # If policy is ACCEPT, no rules needed
+    # firewalld: check if bridge is in trusted zone
+    if systemctl is-active firewalld &>/dev/null; then
+        sudo firewall-cmd --zone=trusted --query-interface="${bridge}" &>/dev/null && return 0
+        return 1
+    fi
+
+    # iptables: if policy is ACCEPT, no rules needed
     if sudo iptables -S INPUT 2>/dev/null | head -1 | grep -q "\-P INPUT ACCEPT"; then
         return 0
     fi
 
-    # Check if our rules exist
     if sudo iptables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null && \
        sudo ip6tables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null; then
         return 0

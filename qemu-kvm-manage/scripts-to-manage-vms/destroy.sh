@@ -239,7 +239,11 @@ fi
 source /tux2lab/shared-functions/lablink0.sh
 remove_lablink0
 
-# ====== STEP 8: DESTROY VIRTUAL NETWORK ======
+# ====== STEP 8: REMOVE FIREWALL RULES ======
+source /tux2lab/shared-functions/bridge-firewall.sh
+close_bridge_firewall "labbr0"
+
+# ====== STEP 9: DESTROY VIRTUAL NETWORK ======
 print_task "Destroying tux2lab virtual network..."
 if sudo virsh net-info tux2lab &>/dev/null 2>&1 || ip link show labbr0 &>/dev/null 2>&1; then
     sudo virsh net-destroy tux2lab &>/dev/null || true
