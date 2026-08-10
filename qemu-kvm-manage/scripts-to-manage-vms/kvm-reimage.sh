@@ -28,8 +28,10 @@ for arg in "$@"; do
     tux2lab vm reimage [OPTIONS] [ARGUMENTS]
 
 DESCRIPTION:
-    Wipe and reinstall VM(s). Uses golden image by default (fast disk clone).
-    Use --via-pxe for a full network reinstall.
+    Wipe and reinstall VM(s). Uses golden image by default (fast disk clone) or
+    full PXE network reinstall. Preserves existing VM identity (MAC address) while
+    replacing the OS. Supports stack mode switching, resource overrides (CPU, memory,
+    disk), auto-detection of previous OS, and --reset-specs-to-default for a clean slate.
 
 OPTIONS:
     --via-golden        Reinstall from golden image (default)
@@ -44,15 +46,21 @@ OPTIONS:
     --cpu <n>           vCPUs (power of 2, default: 2)
     --memory <n>        RAM in GiB (power of 2, default: 2)
     --root-disk-size <n> Disk in GiB (multiple of 5, default: 30)
+    --reset-specs-to-default  Destroy and reinstall with default specs
     -f, --force         Skip confirmation prompt
     -h, --help          Show this help message
 
 EXAMPLES:
-    tux2lab vm reimage -H vm1
-    tux2lab vm reimage -H vm1 -d rocky -v 10
-    tux2lab vm reimage -H vm1 --ipv4-only
-    tux2lab vm reimage -H vm1 --dual-stack --cpu 4 --memory 8
-    tux2lab vm reimage --via-pxe -H vm1 -d ubuntu-lts -v 24.04"
+    tux2lab vm reimage -H testvm1
+    tux2lab vm reimage -H testvm1 -d rocky -v 10
+    tux2lab vm reimage -H testvm1 --ipv4-only
+    tux2lab vm reimage -H testvm1 --ipv6-only -d debian -v 13
+    tux2lab vm reimage -H testvm1 --dual-stack --cpu 4 --memory 8
+    tux2lab vm reimage -H testvm1 --root-disk-size 50
+    tux2lab vm reimage -H testvm1 --reset-specs-to-default
+    tux2lab vm reimage --via-pxe -H testvm1 -d ubuntu-lts -v 24.04
+    tux2lab vm reimage --via-pxe -H testvm1 --console
+    tux2lab vm reimage -f -H testvm1,testvm2,testvm3"
             exit 0
             ;;
         *)
