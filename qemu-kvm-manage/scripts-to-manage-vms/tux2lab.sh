@@ -20,7 +20,7 @@ VERSION=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json | cut -d'"
 
 # Show version
 show_version() {
-    print_cyan "tux2lab - Lab Management Tool
+    print_cyan "tux2lab - Virtual Lab Management Tool
 ├─ Version    : $VERSION
 ├─ Repository : https://github.com/Muthukumar-Subramaniam/tux2lab
 └─ Issues     : https://github.com/Muthukumar-Subramaniam/tux2lab/issues"
@@ -30,14 +30,19 @@ show_version() {
 show_usage() {
     show_version
     echo ""
-    print_cyan "USAGE:
+    print_cyan "DESCRIPTION:
+    Transform your Linux workstation into a powerful, automated virtual datacenter.
+    Build golden images via PXE boot, then deploy VMs in seconds from those images.
+    Supports Red Hat, Debian, and SUSE families with dual-stack networking, automated
+    infrastructure services, and complete VM lifecycle management.
+
+USAGE:
     tux2lab <command> [options] [arguments]
 
 VM MANAGEMENT:
-    vm               Manage KVM virtual machines
+    vm               Manage virtual machines
     golden-image     Manage golden image disks for OS provisioning
     distro           Manage OS distributions for PXE provisioning
-    dns              Manage DNS records for lab infrastructure
     ipv6-route       Manage IPv6 default routes on lab VMs
 
 LAB OPERATIONS:
@@ -47,14 +52,15 @@ LAB OPERATIONS:
     disable          Disable lab infrastructure auto-start on boot
     health           Check lab infrastructure health
     info             Display lab deployment information
+    dns              Manage DNS records for lab infrastructure
     credentials      Manage lab credentials (password, SSH keys, cert)
-    logflush         Truncate all service log files
+    logflush         Clear all service log files
 
 LAB ADD-ONS:
     lb               Manage TCP load balancers
 
 LAB LIFECYCLE:
-    deploy           Deploy a new lab infrastructure server
+    deploy           Deploy the lab environment (one-time setup)
     rebuild          Regenerate configs and recreate container
     destroy          Permanently destroy the entire lab environment
 

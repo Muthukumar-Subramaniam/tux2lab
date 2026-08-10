@@ -28,8 +28,10 @@ for arg in "$@"; do
     tux2lab vm install [OPTIONS] [ARGUMENTS]
 
 DESCRIPTION:
-    Deploy new VM(s). Uses golden image by default (fast disk clone).
-    Use --via-pxe for a full network install.
+    Deploy new VM(s). Uses golden image by default (fast disk clone) or full
+    PXE network install. Supports per-VM stack mode selection (dual/IPv4/IPv6),
+    custom resource specs (CPU, memory, disk), multi-VM batch deployment, and
+    console attachment for monitoring PXE installations.
 
 OPTIONS:
     --via-golden        Deploy from golden image (default)
@@ -47,13 +49,14 @@ OPTIONS:
     -h, --help          Show this help message
 
 EXAMPLES:
-    tux2lab vm install -H vm1
-    tux2lab vm install -H vm1 -d almalinux -v 10
-    tux2lab vm install -H vm1 --ipv4-only -d almalinux -v 10
-    tux2lab vm install -H vm1 --cpu 4 --memory 8 --root-disk-size 50
-    tux2lab vm install -H vm1,vm2,vm3
-    tux2lab vm install --via-pxe -H vm1 -d ubuntu-lts -v 24.04
-    tux2lab vm install --via-pxe -H vm1 --console"
+    tux2lab vm install -H testvm1
+    tux2lab vm install -H testvm1 -d almalinux -v 10
+    tux2lab vm install -H testvm1 --ipv4-only -d almalinux -v 10
+    tux2lab vm install -H testvm1 --ipv6-only -d rocky -v 10
+    tux2lab vm install -H testvm1 --cpu 4 --memory 8 --root-disk-size 50
+    tux2lab vm install -H testvm1,testvm2,testvm3
+    tux2lab vm install --via-pxe -H testvm1 -d ubuntu-lts -v 24.04
+    tux2lab vm install --via-pxe -H testvm1 --console"
             exit 0
             ;;
         *)

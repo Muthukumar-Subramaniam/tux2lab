@@ -28,10 +28,15 @@ show_version() {
 
 # Display usage information
 show_usage() {
-    show_version
-    echo ""
     print_cyan "USAGE:
     tux2lab vm <subcommand> [options] [arguments]
+
+DESCRIPTION:
+    Manage the full lifecycle of KVM virtual machines. Deploy from golden images
+    or PXE boot, reimage, resize CPU/memory/disk, add/remove NICs and disks,
+    create and revert snapshots, validate post-install configuration, and control
+    power state. Supports multi-VM operations, per-VM stack mode (dual/IPv4/IPv6),
+    and custom resource specifications.
 
 VM DEPLOYMENT:
     install                 Deploy VM(s) [--via-golden (default) | --via-pxe]
@@ -47,7 +52,7 @@ VM OPERATIONS:
     shutdown                Gracefully shutdown VM(s)
     restart                 Hard restart (reset) VM(s)
     reboot                  Gracefully reboot VM(s)
-    remove                  Delete VM(s) and its data
+    remove                  Delete VM(s) and their data
 
 VM CONFIGURATION:
     resize                  Resize VM resources (CPU, memory, disk)
