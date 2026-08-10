@@ -1893,7 +1893,6 @@ _summary="Configuration Summary:
 if [[ "${stack_mode}" != "ipv6" ]]; then
     _summary+="
   ${MAKE_IT_CYAN}✓ IPv4 Address     :${RESET_COLOR} ${ipv4_address}
-  ${MAKE_IT_CYAN}✓ IPv4 Netmask     :${RESET_COLOR} ${ipv4_netmask}
   ${MAKE_IT_CYAN}✓ IPv4 Gateway     :${RESET_COLOR} ${ipv4_gateway}
   ${MAKE_IT_CYAN}✓ IPv4 Network     :${RESET_COLOR} ${ipv4_network_cidr}
   ${MAKE_IT_CYAN}✓ IPv4 DNS         :${RESET_COLOR} ${ipv4_nameserver}"
@@ -1902,7 +1901,6 @@ fi
 if [[ "${stack_mode}" != "ipv4" ]] && [[ -n "${ipv6_address}" ]]; then
     _summary+="
   ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${ipv6_address}
-  ${MAKE_IT_CYAN}✓ IPv6 Prefix      :${RESET_COLOR} ${ipv6_prefix}
   ${MAKE_IT_CYAN}✓ IPv6 Gateway     :${RESET_COLOR} ${ipv6_gateway}
   ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}
   ${MAKE_IT_CYAN}✓ IPv6 DNS         :${RESET_COLOR} ${ipv6_nameserver}"

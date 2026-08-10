@@ -68,6 +68,13 @@ else
     auto_start="Disabled"
 fi
 
+# IPv6 route status
+if [[ -f /tux2lab-data/lab-config/ipv6-route-active ]]; then
+    ipv6_route_status="Enabled"
+else
+    ipv6_route_status="Disabled"
+fi
+
 # Data directory size
 if [[ -d /tux2lab-data ]]; then
     data_size=$(sudo du -sh /tux2lab-data 2>/dev/null | awk '{print $1}') || data_size="N/A"
@@ -122,6 +129,7 @@ echo -e "  ${MAKE_IT_CYAN}Bridge:${RESET_COLOR}            $lab_bridge"
 echo -e "  ${MAKE_IT_CYAN}Container:${RESET_COLOR}         ${CONTAINER_NAME} (${container_status})"
 echo -e "  ${MAKE_IT_CYAN}Container Image:${RESET_COLOR}   $container_image"
 echo -e "  ${MAKE_IT_CYAN}Auto-start:${RESET_COLOR}        $auto_start"
+echo -e "  ${MAKE_IT_CYAN}IPv6 Route:${RESET_COLOR}        $ipv6_route_status"
 echo -e "  ${MAKE_IT_CYAN}SSH Key:${RESET_COLOR}           $ssh_key_info"
 echo -e "  ${MAKE_IT_CYAN}Data Directory:${RESET_COLOR}    /tux2lab-data ($data_size)"
 echo -e "  ${MAKE_IT_CYAN}VMs:${RESET_COLOR}               $running_vms running, $stopped_vms stopped ($total_vms total)"
