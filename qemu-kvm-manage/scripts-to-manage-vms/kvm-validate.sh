@@ -24,28 +24,22 @@ ssh_options=(
 
 # ====== HELP ======
 show_usage() {
-    print_cyan "Usage: tux2lab vm validate [OPTIONS]
+    print_cyan "USAGE:
+    tux2lab vm validate [OPTIONS]
 
-Validate post-install configuration of VM(s).
-Checks networking, services, filesystem, NFS mounts, security, and distro-specific settings.
+DESCRIPTION:
+    Run post-install validation checks on VM(s) via SSH. Verifies networking
+    (stack-aware), DNS, services, filesystem, user/auth, certificates, timezone,
+    and shell configuration. Without -H, validates all running VMs.
 
 OPTIONS:
-    -H, --hosts <hosts>     Comma-separated list of hostnames (e.g., vm1,vm2,vm3)
+    -H, --hosts <hosts>     Hostname(s) to validate (comma-separated)
     -h, --help              Show this help message
 
-BEHAVIOR:
-    - Without arguments: Validates all running VMs
-    - With -H flag: Validates specified comma-separated VMs
-
-EXIT CODES:
-    0   All validations passed
-    1   One or more validations failed
-    2   Could not reach any target VM
-
 EXAMPLES:
-    tux2lab vm validate                        # Validate all running VMs
-    tux2lab vm validate -H test-rhel-10        # Validate a single VM
-    tux2lab vm validate -H vm1,vm2,vm3         # Validate multiple VMs
+    tux2lab vm validate
+    tux2lab vm validate -H testvm1
+    tux2lab vm validate -H testvm1,testvm2,testvm3
 "
 }
 

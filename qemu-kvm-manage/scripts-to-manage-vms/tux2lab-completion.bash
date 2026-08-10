@@ -220,7 +220,7 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "-H --hosts -f --force -h --help" -- "${cur}") )
                 ;;
             remove)
-                COMPREPLY=( $(compgen -W "-H --hosts -f --force --ignore-ksmanager-cleanup -h --help" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-H --hosts -f --force --ignore-ksmanager-cleanup --ksmanager-cleanup-only -h --help" -- "${cur}") )
                 ;;
             list)
                 COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )

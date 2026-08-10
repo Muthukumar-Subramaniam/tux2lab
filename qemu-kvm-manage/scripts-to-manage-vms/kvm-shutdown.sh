@@ -10,17 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm shutdown [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames to shutdown
-  -f, --force          Skip confirmation prompt and force graceful shutdown
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm shutdown [OPTIONS]
 
-Examples:
-  tux2lab vm shutdown -H vm1                    # Shutdown single VM with confirmation
-  tux2lab vm shutdown -f -H vm1                 # Shutdown single VM without confirmation
-  tux2lab vm shutdown -H vm1,vm2,vm3            # Shutdown multiple VMs with confirmation
-  tux2lab vm shutdown -f -H vm1,vm2             # Shutdown multiple VMs without confirmation
+DESCRIPTION:
+    Gracefully shut down one or more VMs via ACPI signal. The guest OS performs
+    a clean shutdown. Use 'stop' for immediate power off.
+
+OPTIONS:
+    -H, --hosts <hosts>     Hostname(s) to shut down (comma-separated)
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm shutdown -H testvm1
+    tux2lab vm shutdown -f -H testvm1,testvm2,testvm3
 "
 }
 

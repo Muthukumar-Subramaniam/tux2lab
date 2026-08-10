@@ -10,21 +10,25 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm remove [OPTIONS]
-Options:
-  -H, --hosts <list>               Comma-separated list of VM hostnames to remove
-  -f, --force                      Skip confirmation prompt (except for lab infra server)
-  --ignore-ksmanager-cleanup       Skip cleanup of ksmanager databases (DNS, MAC, kickstart, iPXE, DHCP)
-  -h, --help                       Show this help message
+    print_cyan "USAGE:
+    tux2lab vm remove [OPTIONS]
 
-Examples:
-  tux2lab vm remove -H vm1                             # Remove single VM with confirmation
-  tux2lab vm remove -f -H vm1                          # Remove single VM without confirmation
-  tux2lab vm remove --ignore-ksmanager-cleanup -H vm1  # Remove VM but keep ksmanager data
-  tux2lab vm remove -H vm1,vm2,vm3                     # Remove multiple VMs with confirmation
-  tux2lab vm remove -f -H vm1,vm2                      # Remove multiple VMs without confirmation
+DESCRIPTION:
+    Permanently delete one or more VMs and all associated data — disk images,
+    DNS records, DHCP reservations, MAC cache, and kickstart configs.
 
-Note: Lab infra server always requires special confirmation regardless of -f flag.
+OPTIONS:
+    -H, --hosts <hosts>             Hostname(s) to remove (comma-separated)
+    -f, --force                     Skip confirmation prompt
+    --ignore-ksmanager-cleanup      Skip DNS/DHCP/MAC/kickstart cleanup
+    --ksmanager-cleanup-only        Only clean ksmanager data (DNS, DHCP, MAC, kickstart)
+    -h, --help                      Show this help message
+
+EXAMPLES:
+    tux2lab vm remove -H testvm1
+    tux2lab vm remove -f -H testvm1,testvm2,testvm3
+    tux2lab vm remove --ignore-ksmanager-cleanup -H testvm1
+    tux2lab vm remove --ksmanager-cleanup-only -H testvm1
 "
 }
 
@@ -36,6 +40,7 @@ parse_vm_control_args "$@"
 
 force_remove="$FORCE_FLAG"
 ignore_ksmanager_cleanup="$IGNORE_KSMANAGER_CLEANUP"
+ksmanager_cleanup_only="$KSMANAGER_CLEANUP_ONLY"
 hosts_list="$HOSTS_LIST"
 vm_hostname_arg="$VM_HOSTNAME_ARG"
 
@@ -44,6 +49,17 @@ remove_vm() {
     local vm_name="$1"
     local skip_confirmation="${2:-false}"
     
+    # --ksmanager-cleanup-only: only clean ksmanager data, skip VM operations
+    if [[ "$ksmanager_cleanup_only" == true ]]; then
+        print_info "Removing host '$vm_name' from all ksmanager databases..."
+        if /tux2lab/ksmanager/ksmanager.sh "$vm_name" --remove-host; then
+            return 0
+        else
+            print_warning "Could not clean up ksmanager databases for '$vm_name'."
+            return 1
+        fi
+    fi
+
     # Check if VM exists in 'virsh list --all'
     print_task "Checking if VM exists..."
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then

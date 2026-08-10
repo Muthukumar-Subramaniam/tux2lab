@@ -10,17 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm restart [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames to restart
-  -f, --force          Skip confirmation prompt and force cold restart
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm restart [OPTIONS]
 
-Examples:
-  tux2lab vm restart -H vm1                    # Restart single VM with confirmation
-  tux2lab vm restart -f -H vm1                 # Restart single VM without confirmation
-  tux2lab vm restart -H vm1,vm2,vm3            # Restart multiple VMs with confirmation
-  tux2lab vm restart -f -H vm1,vm2             # Restart multiple VMs without confirmation
+DESCRIPTION:
+    Hard restart (power cycle) one or more VMs. Equivalent to reset button.
+    Use 'reboot' for a graceful OS-level reboot instead.
+
+OPTIONS:
+    -H, --hosts <hosts>     Hostname(s) to restart (comma-separated)
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm restart -H testvm1
+    tux2lab vm restart -f -H testvm1,testvm2,testvm3
 "
 }
 

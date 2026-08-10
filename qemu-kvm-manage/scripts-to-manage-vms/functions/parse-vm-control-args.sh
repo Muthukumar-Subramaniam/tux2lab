@@ -23,6 +23,7 @@ parse_vm_control_args() {
     fi
     if [[ "${SUPPORTS_IGNORE_KSMANAGER:-no}" == "yes" ]]; then
         IGNORE_KSMANAGER_CLEANUP=false
+        KSMANAGER_CLEANUP_ONLY=false
     fi
     HOSTS_LIST=""
     VM_HOSTNAME_ARG=""
@@ -47,6 +48,16 @@ parse_vm_control_args() {
             --ignore-ksmanager-cleanup)
                 if [[ "${SUPPORTS_IGNORE_KSMANAGER:-no}" == "yes" ]]; then
                     IGNORE_KSMANAGER_CLEANUP=true
+                    shift
+                else
+                    print_error "No such option: $1"
+                    fn_show_help
+                    exit 1
+                fi
+                ;;
+            --ksmanager-cleanup-only)
+                if [[ "${SUPPORTS_IGNORE_KSMANAGER:-no}" == "yes" ]]; then
+                    KSMANAGER_CLEANUP_ONLY=true
                     shift
                 else
                     print_error "No such option: $1"
