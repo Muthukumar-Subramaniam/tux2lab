@@ -26,8 +26,9 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 - Dynamic DNS management for your local domain
 - Complete VM lifecycle management — deploy, resize, snapshot, destroy
 - Multi-distribution support across Red Hat, Debian, and SUSE families
-- Dual-stack networking (IPv4 + IPv6) out of the box
-- Containerized infrastructure — all lab services in a single rootful Podman container
+- Dual-stack networking (IPv4 + IPv6) with per-VM stack mode selection
+- TCP load balancer management (nginx stream)
+- Containerized infrastructure — all lab services in a single rootful Podman container (~60 MB)
 
 ---
 
@@ -41,17 +42,16 @@ virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:300
 |---|---|---|
 | DNS | BIND (named) | Local domain resolution |
 | DHCP | Kea (v4 + v6) | Automatic IP assignment |
-| PXE/TFTP | tftp-server + iPXE | Network boot for OS installs |
+| PXE/TFTP | tftp-hpa + iPXE | Network boot for OS installs |
 | NTP | chrony | Time synchronization |
 | NFS | nfs-server | Shared storage |
 | HTTP/HTTPS | nginx | Boot ISO & kickstart serving |
 | IPv6 RA | radvd | Router advertisements |
-| SSH | sshd | Debug access to container |
 
 ### Infrastructure Container
 
 All lab services run inside a single **rootful Podman container** (`tux2lab-engine`)
-based on AlmaLinux 10. The container uses `--network=host` to bind directly to the
+based on Alpine Linux 3.21 (~60 MB). The container uses `--network=host` to bind directly to the
 lab bridge interface, providing seamless network access for all guest VMs.
 
 | Feature | Detail |
@@ -188,6 +188,13 @@ tux2lab vm install -H vm1 --via-pxe -d ubuntu-lts -v 24.04
 # Multiple VMs at once
 tux2lab vm install -H vm1,vm2,vm3
 
+# Stack mode selection
+tux2lab vm install -H vm1 --ipv4-only -d almalinux -v 10
+tux2lab vm install -H vm1 --ipv6-only -d rocky -v 10
+
+# Custom resource specs
+tux2lab vm install -H vm1 --cpu 4 --memory 8 --root-disk-size 50
+
 # Attach to console during install
 tux2lab vm install -H vm1 --via-pxe --console
 ```
@@ -220,6 +227,7 @@ tux2lab golden-image cleanup      Remove golden image(s)
 ```
 tux2lab vm install                Deploy VM(s) [--via-golden (default) | --via-pxe]
 tux2lab vm reimage                Reinstall VM(s) [--via-golden (default) | --via-pxe]
+tux2lab vm reimage --reset-specs-to-default  Destroy and reinstall with default specs
 ```
 
 ### VM Operations
@@ -275,7 +283,11 @@ tux2lab rebuild                   Regenerate configs and recreate container
 tux2lab rebuild --pull-image       Also pull latest container image from registry
 tux2lab destroy                   Permanently destroy the entire lab environment
 tux2lab info                      Show lab deployment details
+tux2lab logflush                  Truncate all service log files
 tux2lab dns [options]             Manage DNS records via dnsbinder
+tux2lab lb create                 Create a TCP load balancer
+tux2lab lb list                   List active load balancers
+tux2lab lb remove                 Remove a load balancer
 tux2lab ipv6-route enable         Add IPv6 route to lab network
 tux2lab ipv6-route disable        Remove IPv6 route
 tux2lab ipv6-route check          Check IPv6 connectivity and route status
@@ -297,6 +309,7 @@ These tools run on the KVM host and power the provisioning pipeline:
 |---|---|
 | **dnsbinder** | Manages BIND DNS zone records — automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
 | **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
+| **lbmanager** | Manages nginx TCP stream load balancers — creates VIPs, configures backends, manages DNS records |
 | **prepare-distro-for-ksmanager** | Downloads boot ISOs, registers distributions with ksmanager for PXE provisioning |
 
 ---
@@ -314,6 +327,7 @@ tux2lab/
 │   └── scripts-to-manage-vms/    CLI dispatcher and all tux2lab subcommands
 ├── ksmanager/                   Kickstart/cloud-init templates and ksmanager
 ├── named-manage/                DNS zone management (dnsbinder)
+├── lb-manage/                   TCP load balancer management (lbmanager)
 ├── common-utils/                Shared utilities (color output, disk tools)
 └── vendor/                      Vendored virt-manager (no system package needed)
 ```
