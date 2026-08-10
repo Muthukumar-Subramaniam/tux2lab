@@ -179,24 +179,41 @@ fi
 
 # --- Networking ---
 IPV4_ADDR=$(ip -4 addr show dev eth0 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
-[[ -n "$IPV4_ADDR" ]] && emit "eth0 IPv4" "PASS" "$IPV4_ADDR" || emit "eth0 IPv4" "FAIL" "missing"
-
 IPV6_ADDR=$(ip -6 addr show dev eth0 scope global 2>/dev/null | grep -oP 'inet6 \K[0-9a-f:]+' | head -1)
-[[ -n "$IPV6_ADDR" ]] && emit "eth0 IPv6 global" "PASS" "$IPV6_ADDR" || emit "eth0 IPv6 global" "FAIL" "missing"
 
-ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" || emit "IPv4 default route" "FAIL" ""
+# Detect stack mode from actual network state
+HAS_IPV4=false; [[ -n "$IPV4_ADDR" ]] && HAS_IPV4=true
+HAS_IPV6=false; [[ -n "$IPV6_ADDR" ]] && HAS_IPV6=true
 
-# Connectivity to lab infra server
-if timeout 3 ping -c 1 "$LAB_INFRA_SERVER" &>/dev/null; then
-    emit "Ping infra server (IPv4)" "PASS" ""
+if $HAS_IPV4; then
+    emit "eth0 IPv4" "PASS" "$IPV4_ADDR"
+    ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" || emit "IPv4 default route" "FAIL" ""
+    if timeout 3 ping -c 1 "$LAB_INFRA_SERVER" &>/dev/null; then
+        emit "Ping infra server (IPv4)" "PASS" ""
+    else
+        emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
+    fi
 else
-    emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
+    emit "eth0 IPv4" "PASS" "N/A - IPv6-only"
+    emit "IPv4 default route" "PASS" "N/A - IPv6-only"
+    emit "Ping infra server (IPv4)" "PASS" "N/A - IPv6-only"
 fi
 
-if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
-    emit "Ping infra server (IPv6)" "PASS" ""
+if $HAS_IPV6; then
+    emit "eth0 IPv6 global" "PASS" "$IPV6_ADDR"
+    if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
+        emit "Ping infra server (IPv6)" "PASS" ""
+    else
+        emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
+    fi
 else
-    emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
+    emit "eth0 IPv6 global" "PASS" "N/A - IPv4-only"
+    emit "Ping infra server (IPv6)" "PASS" "N/A - IPv4-only"
+fi
+
+if ! $HAS_IPV4 && ! $HAS_IPV6; then
+    emit "eth0 IPv4" "FAIL" "missing"
+    emit "eth0 IPv6 global" "FAIL" "missing"
 fi
 
 # --- Filesystem ---
