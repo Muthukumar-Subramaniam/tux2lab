@@ -214,6 +214,9 @@ fn_enable_all() {
     fn_enable_host_ipv6_forwarding
     echo ""
     
+    # Set flag BEFORE triggering sync so VMs see the new state
+    echo "enabled" > /tux2lab-data/lab-config/ipv6-route-active
+
     local vms=$(fn_get_running_vms)
     
     if [[ -z "$vms" ]]; then
@@ -227,15 +230,15 @@ fn_enable_all() {
     
     echo ""
     print_success "IPv6 default route configuration complete."
-
-    # Set flag so VMs pick up route via tux2lab-sync
-    echo "enabled" > /tux2lab-data/lab-config/ipv6-route-active
 }
 
 fn_disable_all() {
     print_notify "Disabling IPv6 default route on all running VMs..."
     echo ""
     
+    # Remove flag BEFORE triggering sync so VMs see the new state
+    rm -f /tux2lab-data/lab-config/ipv6-route-active
+
     local vms=$(fn_get_running_vms)
     
     if [[ -z "$vms" ]]; then
@@ -251,9 +254,6 @@ fn_disable_all() {
 
     # Clean up host-level forwarding and NAT rules
     fn_disable_host_ipv6_forwarding
-
-    # Remove flag so VMs remove route via tux2lab-sync
-    rm -f /tux2lab-data/lab-config/ipv6-route-active
 }
 
 fn_auto_configure() {
