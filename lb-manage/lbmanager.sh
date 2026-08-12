@@ -527,6 +527,7 @@ fn_reload_nginx() {
 # ====== SUBCOMMAND: CREATE ======
 fn_create() {
     local name="" port="" target_port="" backends="" algorithm="round-robin" yes_flag=false
+    local algorithm_specified=false
     local prev_arg=""
 
     for arg in "$@"; do
@@ -535,7 +536,7 @@ fn_create() {
             --port)        port="$arg" ;;
             --target-port) target_port="$arg" ;;
             --backends)    backends="$arg" ;;
-            --algorithm)   algorithm="$arg" ;;
+            --algorithm)   algorithm="$arg"; algorithm_specified=true ;;
         esac
         prev_arg="$arg"
         [[ "$arg" == "-y" || "$arg" == "--yes" ]] && yes_flag=true
@@ -554,7 +555,7 @@ fn_create() {
     if [[ -z "$backends" ]]; then
         read -rp "Enter backend hostnames (comma-separated): " backends
     fi
-    if [[ "$algorithm" == "round-robin" ]] && ! $yes_flag; then
+    if ! $algorithm_specified && ! $yes_flag; then
         local algo_input
         read -rp "Enter algorithm [round-robin/least-conn/ip-hash] (default: round-robin): " algo_input
         if [[ -n "$algo_input" ]]; then
