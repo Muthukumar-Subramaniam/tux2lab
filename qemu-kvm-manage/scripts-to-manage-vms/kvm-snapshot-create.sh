@@ -11,18 +11,25 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/snapshot-utils.s
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm snapshot-create [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames
-  -l, --label <name>   Snapshot label (lowercase alphanumeric + hyphens, max 40 chars)
-  -d, --desc <text>    Optional description for the snapshot
-  -f, --force          Force power-off without prompt if VM is running
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm snapshot-create [OPTIONS]
 
-Examples:
-  tux2lab vm snapshot-create -H vm1 -l pre-update
-  tux2lab vm snapshot-create -H vm1,vm2 -l baseline -d \"Clean install state\"
-  tux2lab vm snapshot-create -f -H vm1 -l before-kernel-upgrade
+DESCRIPTION:
+    Create an offline snapshot of one or more VMs. VM must be shut off;
+    use -f to auto power-off. Snapshots capture the full disk state.
+
+OPTIONS:
+    -H, --hosts <list>   Comma-separated list of VM hostnames
+    -l, --label <name>   Snapshot label (lowercase alphanumeric + hyphens, max 40 chars)
+    -d, --desc <text>    Optional description for the snapshot
+    -f, --force          Force power-off without prompt if VM is running
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm snapshot-create -H testvm1 -l pre-update
+    tux2lab vm snapshot-create -H testvm1,testvm2 -l baseline -d \"Clean install state\"
+    tux2lab vm snapshot-create -f -H testvm1 -l before-kernel-upgrade
 "
 }
 

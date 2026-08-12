@@ -10,26 +10,30 @@ source /tux2lab/common-utils/color-functions.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm resize [-f] [-m <GiB>] [-c <count>] [-d <GiB>] [-H hostname]
+    print_cyan "
+USAGE:
+    tux2lab vm resize [OPTIONS]
 
-Resources (can be combined in any order):
-  -m, --memory <GiB>   Set VM memory — power of 2 (1, 2, 4, 8, 16...), less than host memory
-  -c, --cpu <count>    Set VM vCPUs — power of 2 (1, 2, 4, 8...)
-  -d, --disk <GiB>     Set OS disk to target size — must be larger than current size,
-                       multiple of 5, max increase of 100 GiB per operation
+DESCRIPTION:
+    Resize CPU, memory, or root disk of a VM.
+    VM must be shut off; use -f to auto power-off.
 
-Options:
-  -f, --force          Force power-off without prompt if VM is running
-  -H, --host           Name of the VM to resize (optional, will prompt if not given)
-  -h, --help           Show this help message
+OPTIONS:
+    -m, --memory <GiB>   Set VM memory — power of 2 (1, 2, 4, 8, 16...), less than host memory
+    -c, --cpu <count>    Set VM vCPUs — power of 2 (1, 2, 4, 8...)
+    -d, --disk <GiB>     Set OS disk to target size — must be larger than current size,
+                         multiple of 5, max increase of 100 GiB per operation
+    -f, --force          Force power-off without prompt if VM is running
+    -H, --host           Name of the VM to resize (optional, will prompt if not given)
+    -h, --help           Show this help message
 
-Examples:
-  tux2lab vm resize -H vm1                              # Interactive mode
-  tux2lab vm resize -f -m 8 -H vm1                     # Set memory to 8 GiB
-  tux2lab vm resize -f -c 4 -H vm1                     # Set vCPUs to 4
-  tux2lab vm resize -f -d 50 -H vm1                    # Set OS disk to 50 GiB
-  tux2lab vm resize -f -m 8 -c 4 -H vm1               # Set memory and CPU together
-  tux2lab vm resize -f -d 50 -m 8 -c 4 -H vm1         # Resize all three at once
+EXAMPLES:
+    tux2lab vm resize -H testvm1
+    tux2lab vm resize -f -m 8 -H testvm1
+    tux2lab vm resize -f -c 4 -H testvm1
+    tux2lab vm resize -f -d 50 -H testvm1
+    tux2lab vm resize -f -m 8 -c 4 -H testvm1
+    tux2lab vm resize -f -d 50 -m 8 -c 4 -H testvm1
 "
 }
 

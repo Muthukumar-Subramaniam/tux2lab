@@ -10,18 +10,25 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm nic-remove [OPTIONS]
-Options:
-  -H, --host <name>    Name of the VM to remove NICs from (will prompt if not given)
-  -f, --force          Force power-off without prompt if VM is running
-  -m, --macs <list>    Comma-separated list of MAC addresses to remove
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm nic-remove [OPTIONS]
 
-Examples:
-  tux2lab vm nic-remove -H vm1                              # Interactive mode - select NICs
-  tux2lab vm nic-remove -f -H vm1                           # Force power-off if running
-  tux2lab vm nic-remove -m 52:54:00:aa:bb:cc -H vm1        # Remove specific NIC
-  tux2lab vm nic-remove -f -m 52:54:00:11:22:33 -H vm2     # Fully automated
+DESCRIPTION:
+    Remove network interface(s) from a VM by MAC address.
+    VM must be shut off.
+
+OPTIONS:
+    -H, --host <name>    Name of the VM to remove NICs from (will prompt if not given)
+    -f, --force          Force power-off without prompt if VM is running
+    -m, --macs <list>    Comma-separated list of MAC addresses to remove
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm nic-remove -H testvm1
+    tux2lab vm nic-remove -f -H testvm1
+    tux2lab vm nic-remove -m 52:54:00:aa:bb:cc -H testvm1
+    tux2lab vm nic-remove -f -m 52:54:00:11:22:33 -H testvm1
 "
 }
 

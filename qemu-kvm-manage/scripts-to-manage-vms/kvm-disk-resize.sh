@@ -10,24 +10,29 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-resize [OPTIONS]
-Options:
-  -H, --host <host>    Hostname of the VM
-  -f, --force          Force power-off without prompt if VM is running
-  -d, --disk <disk>    Disk target to resize (e.g., vdb, vdc, vdd, all, default: prompt)
-  -g, --gib <size>     Size in GiB to increase (1-100, default: prompt)
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm disk-resize [OPTIONS]
 
-Examples:
-  tux2lab vm disk-resize -H vm1                      # Interactive mode with prompts
-  tux2lab vm disk-resize -f -H vm1                   # Force power-off if running
-  tux2lab vm disk-resize -d vdb -g 5 -H vm1          # Add 5 GiB to vdb
-  tux2lab vm disk-resize -f -d vdc -g 10 -H vm1      # Fully automated: add 10 GiB to vdc
-  tux2lab vm disk-resize -f -d vdc,vdd -g 10 -H vm1  # Fully automated: add 10 GiB to vdc and vdd
-  tux2lab vm disk-resize -f -d all -g 10 -H vm1      # Fully automated: add 10 GiB to all additional disks
+DESCRIPTION:
+    Increase the size of additional disk(s) on a VM. Supports resizing
+    individual disks, multiple, or all at once. Only resizes additional
+    disks (vdb, vdc, etc.); use 'tux2lab vm resize -d' for OS disk (vda).
 
-Note: This script only resizes additional disks (vdb, vdc, etc.).
-      Use 'tux2lab vm resize disk <GiB> -H <hostname>' for OS disk (vda) resizing.
+OPTIONS:
+    -H, --host <host>    Hostname of the VM
+    -f, --force          Force power-off without prompt if VM is running
+    -d, --disk <disk>    Disk target to resize (e.g., vdb, vdc, vdd, all, default: prompt)
+    -g, --gib <size>     Size in GiB to increase (1-100, default: prompt)
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm disk-resize -H testvm1
+    tux2lab vm disk-resize -f -H testvm1
+    tux2lab vm disk-resize -d vdb -g 5 -H testvm1
+    tux2lab vm disk-resize -f -d vdc -g 10 -H testvm1
+    tux2lab vm disk-resize -f -d vdc,vdd -g 10 -H testvm1
+    tux2lab vm disk-resize -f -d all -g 10 -H testvm1
 "
 }
 

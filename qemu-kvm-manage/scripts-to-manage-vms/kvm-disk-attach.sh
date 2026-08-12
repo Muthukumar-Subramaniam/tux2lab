@@ -10,18 +10,24 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-attach [OPTIONS]
-Options:
-  -H, --host <host>    Hostname of the VM
-  -f, --force          Force power-off without prompt if VM is running
-  -d, --disks <list>   Comma-separated list of disk files to attach from detached storage
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm disk-attach [OPTIONS]
 
-Examples:
-  tux2lab vm disk-attach -H vm1                              # Interactive mode - select disks
-  tux2lab vm disk-attach -f -H vm1                           # Force power-off if running
-  tux2lab vm disk-attach -d disk1.qcow2,disk2.qcow2 -H vm1  # Attach specific disks
-  tux2lab vm disk-attach -f -d disk1.qcow2 -H vm1            # Fully automated
+DESCRIPTION:
+    Re-attach previously detached disk(s) from detached storage back to a VM.
+
+OPTIONS:
+    -H, --host <host>    Hostname of the VM
+    -f, --force          Force power-off without prompt if VM is running
+    -d, --disks <list>   Comma-separated list of disk files to attach from detached storage
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm disk-attach -H testvm1
+    tux2lab vm disk-attach -f -H testvm1
+    tux2lab vm disk-attach -d disk1.qcow2,disk2.qcow2 -H testvm1
+    tux2lab vm disk-attach -f -d disk1.qcow2 -H testvm1
 "
 }
 
