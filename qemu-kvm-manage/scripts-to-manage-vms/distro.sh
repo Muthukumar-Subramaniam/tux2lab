@@ -15,16 +15,11 @@ readonly PREPARE_SCRIPT="/tux2lab/ksmanager/prepare-distro-for-ksmanager.sh"
 show_distro_help() {
     print_cyan "USAGE:
     tux2lab distro <command> [<distro> -v <version>]
-    tux2lab distro -h
 
 DESCRIPTION:
-    Manage OS distributions for PXE-based provisioning. Before a distro can
-    be used to install or reimage VMs, its boot media must be downloaded and
-    prepared. This command handles that lifecycle.
-
-    Note: If a distro is not yet set up when building a golden image, it
-    will be prepared automatically. This command is useful for pre-staging
-    ISOs ahead of time or cleaning up disk space.
+    Manage OS distributions for PXE provisioning. Set up, list, or clean up
+    boot ISOs and repositories. If a distro is not yet set up when building
+    a golden image, it will be prepared automatically.
 
 COMMANDS:
     list                        List all distros with PXE and golden image readiness

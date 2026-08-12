@@ -20,11 +20,11 @@ or invoke immediately from any VM with: tux2lab-sync"
 show_credentials_help() {
     print_cyan "USAGE:
     tux2lab credentials <command>
-    tux2lab credentials -h
 
 DESCRIPTION:
-    Manage lab credentials that are synced to all VMs. Changes propagate
-    automatically within 5 minutes via the tux2lab-sync agent on each VM.
+    Manage lab credentials. Update admin password, regenerate SSH keys, or
+    refresh the self-signed SSL certificate. Changes propagate automatically
+    within 5 minutes via the tux2lab-sync agent on each VM.
 
 COMMANDS:
     password             Change the lab-wide global password

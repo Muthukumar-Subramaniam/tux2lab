@@ -13,10 +13,11 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 # ====== HELP ======
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     print_cyan "USAGE:
-    tux2lab lb <command> [options]
+    tux2lab lb <command> [OPTIONS]
 
 DESCRIPTION:
-    Manage nginx TCP stream load balancers on the lab infrastructure.
+    Manage nginx TCP stream load balancers. Create LBs with dedicated VIPs,
+    configure backends, and manage DNS records.
     Run without arguments for an interactive menu.
 
 COMMANDS:

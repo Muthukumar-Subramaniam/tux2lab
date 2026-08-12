@@ -19,11 +19,11 @@ for arg in "$@"; do
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
-    tux2lab stop [-y]
+    tux2lab stop [OPTIONS]
 
 DESCRIPTION:
-    Gracefully shuts down all running VMs, stops the tux2lab-engine
-    container, and tears down the lab infrastructure.
+    Stop the lab infrastructure. Shuts down all running VMs gracefully,
+    stops the container, and unmounts ISOs.
     VMs that do not shut down within ${vm_shutdown_timeout}s are force stopped.
 
 OPTIONS:

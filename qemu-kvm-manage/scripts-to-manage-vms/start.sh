@@ -16,9 +16,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab start
 
 DESCRIPTION:
-    Starts the tux2lab infrastructure: libvirtd, the virtual network,
-    and the tux2lab-engine container.
-    Verifies all essential services are reachable after startup."
+    Start the lab infrastructure. Ensures the bridge is up, opens firewall,
+    starts the tux2lab-engine container, mounts ISOs, and configures DNS."
     exit 0
 fi
 

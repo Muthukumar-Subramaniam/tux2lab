@@ -16,7 +16,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab disable
 
 DESCRIPTION:
-    Disables the lab infrastructure from auto-starting on boot.
+    Disable automatic start of lab infrastructure on system boot.
     Requires confirmation before proceeding."
     exit 0
 fi

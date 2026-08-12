@@ -15,8 +15,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab logflush
 
 DESCRIPTION:
-    Truncates all tux2lab service log files without restarting services.
-    Log files are zeroed out in place (file handles remain valid)."
+    Clear all service log files (nginx, named, kea, chrony, radvd) to free
+    disk space. Log files are zeroed out in place (file handles remain valid)."
     exit 0
 fi
 

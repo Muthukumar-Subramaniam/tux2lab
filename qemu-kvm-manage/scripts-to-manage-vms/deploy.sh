@@ -15,15 +15,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab deploy
 
 DESCRIPTION:
-    Deploy a new lab infrastructure server. This is the starting point
-    for creating your tux2lab KVM environment.
-
-    Guides you through an interactive setup to configure:
-    - Admin credentials (password)
-    - SSH keys and SSL certificates
-    - All service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
-
-    Deploys the tux2lab-engine container with all lab services.
+    Deploy the lab environment (one-time setup). Interactive wizard configures
+    admin credentials, generates service configs, pulls the container image,
+    and starts all services.
 
     Prerequisites:
     - Run /tux2lab/setup/setup-host.sh first to prepare the host"

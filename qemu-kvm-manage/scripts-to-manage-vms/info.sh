@@ -15,8 +15,8 @@ if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
     tux2lab info
 
 DESCRIPTION:
-    Displays tux2lab deployment information including server details,
-    network configuration, and lab inventory."
+    Display lab deployment details including server address, network config,
+    container status, VM count, and golden images."
     exit 0
 fi
 

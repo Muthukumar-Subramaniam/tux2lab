@@ -47,8 +47,9 @@ fn_usage() {
     tux2lab ipv6-route <subcommand>
 
 DESCRIPTION:
-    Manage IPv6 default routes on running lab VMs.
-    Enable or disable IPv6 internet access based on host connectivity.
+    Manage IPv6 default routes on running lab VMs. Enable or disable
+    internet-bound IPv6 routing based on host connectivity.
+    Local IPv6 subnet routes are always present regardless of this setting.
 
 SUBCOMMANDS:
     enable      Enable IPv6 default route on all running VMs
@@ -61,10 +62,7 @@ EXAMPLES:
     tux2lab ipv6-route enable      # Enable IPv6 default route
     tux2lab ipv6-route disable     # Remove IPv6 default route
     tux2lab ipv6-route check       # Test connectivity and show status
-    tux2lab ipv6-route auto        # Auto-configure based on connectivity
-
-NOTE:
-    Local IPv6 subnet routes are always present regardless of this setting."
+    tux2lab ipv6-route auto        # Auto-configure based on connectivity"
 }
 
 fn_test_ipv6_connectivity() {

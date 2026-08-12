@@ -16,7 +16,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab enable
 
 DESCRIPTION:
-    Enables the lab infrastructure to auto-start on boot.
+    Enable automatic start of lab infrastructure on system boot via systemd.
     Creates a systemd service that starts the tux2lab-engine container
     after libvirtd and the lab bridge are ready."
     exit 0

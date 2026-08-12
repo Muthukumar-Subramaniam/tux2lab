@@ -18,7 +18,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab health
 
 DESCRIPTION:
-    Checks all lab infrastructure services and reports their status.
+    Run deep validation of all lab services (DNS, DHCP, NTP, TFTP, NFS,
+    HTTP/S) and dual-stack port reachability checks.
     Exit codes: 0 = STABLE, 1 = DEGRADED, 2 = CRITICAL."
     exit 0
 fi

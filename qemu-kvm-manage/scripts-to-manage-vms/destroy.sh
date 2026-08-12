@@ -25,19 +25,9 @@ for arg in "$@"; do
     tux2lab destroy [OPTIONS]
 
 DESCRIPTION:
-    Permanently destroys the entire tux2lab environment, including:
-      - The tux2lab-engine container
-      - All virtual machines and their data
-      - Lab network configuration
-      - Lab data files (/tux2lab-data/ contents, excluding ISOs)
-      - SSH keys and configuration for lab access
-      - tux2lab systemd service
-
+    Permanently destroy the entire lab environment including all VMs, data,
+    DNS, networking, and the container. This cannot be undone.
     Downloaded boot ISO files are preserved by default.
-
-    If you wish to rebuild your lab after destruction:
-      1. Run /tux2lab/setup/setup-host.sh
-      2. Run tux2lab deploy
 
 OPTIONS:
     --wipe-iso-files-too    Also delete downloaded boot ISO files

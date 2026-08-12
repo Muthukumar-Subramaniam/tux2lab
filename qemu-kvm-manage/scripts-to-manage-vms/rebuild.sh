@@ -16,17 +16,9 @@ if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
     tux2lab rebuild [OPTIONS]
 
 DESCRIPTION:
-    Regenerates service configurations from lab_environment.json, syncs
-    credentials to the host, pulls the latest container image, and recreates
-    the tux2lab-engine container.
-
+    Regenerate service configurations, optionally pull latest container image,
+    and recreate the tux2lab-engine container. Running VMs are not affected.
     Use after pulling project updates (git pull) or changing lab configs.
-
-    This command does NOT touch:
-      - Guest virtual machines
-      - DNS host records
-      - Lab configuration (lab_environment.json)
-      - ISOs, golden images
 
 OPTIONS:
     --pull-image     Pull latest container image from registry
