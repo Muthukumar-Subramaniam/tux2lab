@@ -241,7 +241,7 @@ for v_interface in /sys/class/net/*; do
 	v_interface=$(basename "$v_interface")
 	[[ "$v_interface" == "lo" ]] && continue
 	log "  Bringing down interface: $v_interface"
-	ip link set $v_interface down
+	ip link set "$v_interface" down
 done
 
 log "Reloading udev rules for interface renaming"
@@ -266,7 +266,7 @@ for v_interface in /sys/class/net/*; do
 	v_interface=$(basename "$v_interface")
 	[[ "$v_interface" == "lo" ]] && continue
 	log "  Bringing up interface: $v_interface"
-	ip link set $v_interface up
+	ip link set "$v_interface" up
 done
 
 # Distro-specific network configuration

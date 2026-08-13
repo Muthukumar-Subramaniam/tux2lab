@@ -47,7 +47,7 @@ if [[ -n "$current_authkeys" ]]; then
         echo "$current_authkeys" > /home/${ADMIN_USER}/.ssh/authorized_keys
         echo "$current_authkeys" > /root/.ssh/authorized_keys
         chmod 600 /home/${ADMIN_USER}/.ssh/authorized_keys /root/.ssh/authorized_keys
-        chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/authorized_keys
+        chown "${ADMIN_USER}":"$(id -g "${ADMIN_USER}")" /home/${ADMIN_USER}/.ssh/authorized_keys
         log_change "SSH authorized_keys updated"
     fi
 fi
@@ -60,7 +60,7 @@ if [[ -n "$current_privkey" ]]; then
         echo "$current_privkey" > /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
         echo "$current_privkey" > /root/.ssh/tux2lab_id_rsa
         chmod 600 /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa /root/.ssh/tux2lab_id_rsa
-        chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
+        chown "${ADMIN_USER}":"$(id -g "${ADMIN_USER}")" /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa
         log_change "SSH private key updated"
     fi
 fi
@@ -73,7 +73,7 @@ if [[ -n "$current_pubkey" ]]; then
         echo "$current_pubkey" > /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub
         echo "$current_pubkey" > /root/.ssh/tux2lab_id_rsa.pub
         chmod 644 /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub /root/.ssh/tux2lab_id_rsa.pub
-        chown ${ADMIN_USER}:$(id -g ${ADMIN_USER}) /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub
+        chown "${ADMIN_USER}":"$(id -g "${ADMIN_USER}")" /home/${ADMIN_USER}/.ssh/tux2lab_id_rsa.pub
         log_change "SSH public key updated"
     fi
 fi
