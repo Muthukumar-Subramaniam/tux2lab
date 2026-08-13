@@ -36,7 +36,7 @@ total=0
 # Delete rotated log archives (dead data, never written to again)
 for rotated in $(find "$LOG_DIR" -type f -name "*.log.[0-9]*" 2>/dev/null); do
     size=$(du -h "$rotated" | cut -f1)
-    print_task "Removing ${rotated#${LOG_DIR}/} (${size})..."
+    print_task "Removing ${rotated} (${size})..."
     sudo rm -f "$rotated"
     print_task_done
     total=$((total + 1))
@@ -45,7 +45,7 @@ done
 # Truncate active log files (zeroed in place, services keep writing)
 for log_file in $(find "$LOG_DIR" -type f \( -name "*.log" -o -name "named.run" \) -size +0c 2>/dev/null); do
     size=$(du -h "$log_file" | cut -f1)
-    print_task "Flushing ${log_file#${LOG_DIR}/} (${size})..."
+    print_task "Flushing ${log_file} (${size})..."
     sudo truncate -s 0 "$log_file"
     print_task_done
     total=$((total + 1))
