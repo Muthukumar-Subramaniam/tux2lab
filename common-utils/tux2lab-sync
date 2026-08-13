@@ -104,7 +104,8 @@ if [[ "$DISTRO_ID" == "rhel" ]] && command -v subscription-manager &>/dev/null; 
     if ! subscription-manager identity &>/dev/null; then
         rhel_sub_conf=$(curl -fsSL "${LAB_CONFIG_URL}/rhel-subscription.conf" 2>/dev/null) || true
         if [[ -n "$rhel_sub_conf" ]]; then
-            eval "$rhel_sub_conf"
+            RHEL_ORG_ID=$(grep '^RHEL_ORG_ID=' <<< "$rhel_sub_conf" | cut -d= -f2- | tr -d '"')
+            RHEL_ACTIVATION_KEY=$(grep '^RHEL_ACTIVATION_KEY=' <<< "$rhel_sub_conf" | cut -d= -f2- | tr -d '"')
             if subscription-manager register --org="${RHEL_ORG_ID}" --activationkey="${RHEL_ACTIVATION_KEY}" >/dev/null 2>&1; then
                 log_change "RHEL subscription re-registered"
             fi
