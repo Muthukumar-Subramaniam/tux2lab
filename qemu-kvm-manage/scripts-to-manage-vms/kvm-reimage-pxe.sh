@@ -119,12 +119,18 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # PXE installation requires minimum 2 GiB memory and 2 vCPUs
     if [[ "$RESET_SPECS" != "yes" ]]; then
-        current_mem_kib=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^Max memory/ {print $3}')
+        if ! dominfo=$(sudo virsh dominfo "$qemu_kvm_hostname" 2>/dev/null); then
+            print_error "Could not query VM specs for '${qemu_kvm_hostname}'."
+            fn_release_vm_hostname_lock
+            FAILED_VMS+=("$qemu_kvm_hostname")
+            continue
+        fi
+        current_mem_kib=$(awk '/^Max memory/ {print $3}' <<< "$dominfo")
+        current_vcpus=$(awk '/^CPU\(s\)/ {print $2}' <<< "$dominfo")
         current_mem_gib=$(( current_mem_kib / 1024 / 1024 ))
-        current_vcpus=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^CPU\(s\)/ {print $2}')
         if (( current_mem_gib < 2 || current_vcpus < 2 )); then
             print_error "VM '${qemu_kvm_hostname}' has ${current_vcpus} vCPU(s) and ${current_mem_gib} GiB memory — minimum 2 vCPUs and 2 GiB required for PXE installation."
-            print_info "Run 'tux2lab vm resize cpu 2 memory 2 -H ${qemu_kvm_hostname}' first, or use --reset-specs-to-default to reset to defaults."
+            print_info "Run 'tux2lab vm resize -m 2 -c 2 -H ${qemu_kvm_hostname}' first, or use --reset-specs-to-default to reset to defaults."
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
