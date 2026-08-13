@@ -13,6 +13,11 @@ source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Validate required variables
+if [[ ! -f "${LAB_ENV_JSON}" ]]; then
+    print_error "Lab environment config not found: ${LAB_ENV_JSON}"
+    print_info "Deploy the lab first with: tux2lab deploy"
+    exit 1
+fi
 lab_infra_server_ipv6_gateway=$(jq -r '.network.ipv6.gateway' "${LAB_ENV_JSON}")
 lab_infra_server_ipv6_ula_subnet=$(jq -r '.network.ipv6.ula_subnet' "${LAB_ENV_JSON}")
 if [[ -z "${lab_infra_server_ipv6_gateway}" || "${lab_infra_server_ipv6_gateway}" == "null" ]]; then

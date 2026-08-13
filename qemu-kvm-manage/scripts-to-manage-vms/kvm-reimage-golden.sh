@@ -311,14 +311,14 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Apply CPU/memory overrides to the shut-off VM's definition
         if [[ "$VM_CPUS_SPECIFIED" == "true" ]]; then
-            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum >/dev/null 2>&1
-            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config >/dev/null 2>&1
+            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum >/dev/null 2>&1 || true
+            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config >/dev/null 2>&1 || true
         fi
         if [[ "$VM_MEMORY_SPECIFIED" == "true" ]]; then
             new_mem_kib=$(( VM_MEMORY * 1024 * 1024 ))
-            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1
-            sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1
-            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1
+            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || true
+            sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || true
+            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || true
         fi
 
         vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
@@ -327,7 +327,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         get_current_disk_size "$qemu_kvm_hostname"
         current_disk_gib="${CURRENT_DISK_SIZE:-30}"
         
-        golden_disk_gib=$(sudo qemu-img info "${golden_qcow2_disk_path}" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}')
+        golden_disk_gib=$(sudo qemu-img info -U "${golden_qcow2_disk_path}" 2>/dev/null | awk '/virtual size/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1)=="GiB") {print $i; exit}}' || true)
         golden_disk_gib="${golden_disk_gib:-30}"
         
         # Use user-specified disk size if provided, otherwise preserve current
