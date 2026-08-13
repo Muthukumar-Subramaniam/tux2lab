@@ -684,20 +684,6 @@ if $remove_host_requested; then
                 "$kea_api_url" &>/dev/null
         fi
         
-        # Delete DHCPv6 lease by MAC address
-        curl -s -X POST -H "Content-Type: application/json" \
-            -u "$kea_api_auth" \
-            -d "{
-                  \"command\": \"lease6-del\",
-                  \"service\": [ \"dhcp6\" ],
-                  \"arguments\": {
-                    \"identifier-type\": \"hw-address\",
-                    \"identifier\": \"${cached_mac}\",
-                    \"subnet-id\": 1
-                  }
-                }" \
-            "$kea_api_url" &>/dev/null
-        
         # Delete DHCPv6 lease by IP address (if IPv6 exists in cache)
         if [[ -n "$cached_ipv6" ]]; then
             curl -s -X POST -H "Content-Type: application/json" \
@@ -1827,21 +1813,6 @@ EOF
    "$kea_api_url" &>/dev/null
 
   # ===== Delete old DHCPv6 leases =====
-  # Delete old DHCPv6 lease by MAC (safe if none exists)
-  curl -s -X POST -H "Content-Type: application/json" \
-    -u "$kea_api_auth" \
-    -d "{
-          \"command\": \"lease6-del\",
-          \"service\": [ \"dhcp6\" ],
-          \"arguments\": {
-            \"identifier-type\": \"hw-address\",
-            \"identifier\": \"${mac_address_of_host}\",
-            \"subnet-id\": 1
-          }
-        }" \
-  "$kea_api_url" &>/dev/null
-
-  # Delete DHCPv6 lease by IP (safe if none exists)
   curl -s -X POST -H "Content-Type: application/json" \
     -u "$kea_api_auth" \
     -d "{
