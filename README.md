@@ -85,7 +85,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 > These are the minimum recommended values. Adjust based on your workload.
 
-**Guest VMs (each):** 2 GB RAM · 2 vCPUs · 30 GB disk
+**Guest VMs (each):** 2 GiB RAM · 2 vCPUs · 30 GiB disk
 
 **KVM Host:** RHEL-based, Ubuntu, or openSUSE (hardware virtualization required).
 Podman must be available (installed automatically by setup).
@@ -178,32 +178,32 @@ tux2lab golden-image list                        # Show available images
 
 ```bash
 # From golden image (default — fast disk clone)
-tux2lab vm install -H vm1
-tux2lab vm install -H vm1 -d almalinux -v 10
+tux2lab vm install -H testvm1
+tux2lab vm install -H testvm1 -d almalinux -v 10
 
 # Via PXE boot (full network install)
-tux2lab vm install -H vm1 --via-pxe
-tux2lab vm install -H vm1 --via-pxe -d ubuntu-lts -v 24.04
+tux2lab vm install -H testvm1 --via-pxe
+tux2lab vm install -H testvm1 --via-pxe -d ubuntu-lts -v 24.04
 
 # Multiple VMs at once
-tux2lab vm install -H vm1,vm2,vm3
+tux2lab vm install -H testvm1,testvm2,testvm3
 
 # Stack mode selection
-tux2lab vm install -H vm1 --ipv4-only -d almalinux -v 10
-tux2lab vm install -H vm1 --ipv6-only -d rocky -v 10
+tux2lab vm install -H testvm1 --ipv4-only -d almalinux -v 10
+tux2lab vm install -H testvm1 --ipv6-only -d rocky -v 10
 
 # Custom resource specs
-tux2lab vm install -H vm1 --cpu 4 --memory 8 --root-disk-size 50
+tux2lab vm install -H testvm1 --cpu 4 --memory 8 --root-disk-size 50
 
 # Attach to console during install
-tux2lab vm install -H vm1 --via-pxe --console
+tux2lab vm install -H testvm1 --via-pxe --console
 ```
 
 ---
 
 ## CLI Reference
 
-> Most commands accept `-H vm1,vm2,vm3` for multi-VM operations.
+> Most commands accept `-H testvm1,testvm2,testvm3` for multi-VM operations.
 
 ### Distro Management
 
@@ -278,12 +278,13 @@ tux2lab stop                      Stop lab infrastructure and shut down all VMs
 tux2lab enable                    Enable lab infrastructure auto-start on boot
 tux2lab disable                   Disable lab infrastructure auto-start on boot
 tux2lab health                    Check all lab service health
-tux2lab deploy                    Deploy a new lab infrastructure server
+tux2lab deploy                    Deploy the lab environment (one-time setup)
 tux2lab rebuild                   Regenerate configs and recreate container
 tux2lab rebuild --pull-image       Also pull latest container image from registry
 tux2lab destroy                   Permanently destroy the entire lab environment
 tux2lab info                      Show lab deployment details
-tux2lab logflush                  Truncate all service log files
+tux2lab credentials               Manage lab credentials (password, SSH keys, cert)
+tux2lab logflush                  Clear all service log files
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab lb create                 Create a TCP load balancer
 tux2lab lb list                   List active load balancers
