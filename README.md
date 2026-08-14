@@ -70,11 +70,11 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 | Family | Distribution | Versions | Method |
 |---|---|---|---|
-| Red Hat-based | AlmaLinux, Rocky, Oracle Linux, CentOS Stream | 10, 9, 8 | Kickstart |
-| Red Hat-based | RHEL | 10, 9, 8 | Kickstart (via subscription-manager) |
-| Debian-based | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
-| Debian-based | Debian | 13, 12, 11 | Preseed (netboot) |
-| SUSE-based | openSUSE Leap | 16.0 | Agama |
+| Red Hat | AlmaLinux, Rocky, Oracle Linux, CentOS Stream | 10, 9, 8 | Kickstart |
+| | RHEL | 10, 9, 8 | Kickstart (subscription-manager) |
+| Debian | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
+| | Debian | 13, 12, 11 | Preseed (netboot) |
+| SUSE | openSUSE Leap | 16.0 | Agama |
 
 > Distros are set up automatically when needed — manual `tux2lab distro setup`
 > is optional (useful for pre-staging ISOs or managing disk space).
@@ -159,8 +159,6 @@ Use these commands to pre-stage ISOs or check status:
 ```bash
 tux2lab distro list                              # Show setup status
 tux2lab distro setup almalinux -v 10             # Pre-stage a distro
-tux2lab distro cleanup almalinux -v 10           # Remove to free disk space
-tux2lab distro cleanup almalinux -v 10 --force   # Skip confirmation
 ```
 
 ### Create a Golden Image (Optional, Recommended)
@@ -168,9 +166,7 @@ tux2lab distro cleanup almalinux -v 10 --force   # Skip confirmation
 Golden images let you deploy VMs in seconds instead of running a full PXE install:
 
 ```bash
-tux2lab golden-image build                       # Interactive
 tux2lab golden-image build almalinux -v 10       # Non-interactive
-tux2lab golden-image rebuild almalinux -v 10     # Rebuild (or build if none exists)
 tux2lab golden-image list                        # Show available images
 ```
 
@@ -178,25 +174,10 @@ tux2lab golden-image list                        # Show available images
 
 ```bash
 # From golden image (default — fast disk clone)
-tux2lab vm install -H testvm1
 tux2lab vm install -H testvm1 -d almalinux -v 10
 
-# Via PXE boot (full network install)
-tux2lab vm install -H testvm1 --via-pxe
-tux2lab vm install -H testvm1 --via-pxe -d ubuntu-lts -v 24.04
-
 # Multiple VMs at once
-tux2lab vm install -H testvm1,testvm2,testvm3
-
-# Stack mode selection
-tux2lab vm install -H testvm1 --ipv4-only -d almalinux -v 10
-tux2lab vm install -H testvm1 --ipv6-only -d rocky -v 10
-
-# Custom resource specs
-tux2lab vm install -H testvm1 --cpu 4 --memory 8 --root-disk-size 50
-
-# Attach to console during install
-tux2lab vm install -H testvm1 --via-pxe --console
+tux2lab vm install -H testvm1,testvm2,testvm3 -d almalinux -v 10
 ```
 
 ---
@@ -227,7 +208,6 @@ tux2lab golden-image cleanup      Remove golden image(s)
 ```
 tux2lab vm install                Deploy VM(s) [--via-golden (default) | --via-pxe]
 tux2lab vm reimage                Reinstall VM(s) [--via-golden (default) | --via-pxe]
-tux2lab vm reimage --reset-specs-to-default  Destroy and reinstall with default specs
 ```
 
 ### VM Operations
