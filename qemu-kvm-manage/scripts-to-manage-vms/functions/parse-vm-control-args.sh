@@ -87,4 +87,9 @@ parse_vm_control_args() {
                 ;;
         esac
     done
+
+    if [[ "${IGNORE_KSMANAGER_CLEANUP:-false}" == "true" ]] && [[ "${KSMANAGER_CLEANUP_ONLY:-false}" == "true" ]]; then
+        print_error "--ignore-ksmanager-cleanup and --ksmanager-cleanup-only cannot be used together."
+        exit 1
+    fi
 }

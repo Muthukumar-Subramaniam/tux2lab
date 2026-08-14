@@ -39,7 +39,7 @@ Options:
   --ipv6-only          Create IPv6-only VM (AAAA only; temp IPv4 for PXE boot)
   --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
   --cpu <n>             Number of vCPUs (default: 2)
-  --memory <MiB>       RAM in MiB (default: 2048)
+  --memory <n>        RAM in GiB (power of 2, default: 2)
   --root-disk-size <GiB>  Root disk size in GiB (default: 30)
   -h, --help           Show this help message
 

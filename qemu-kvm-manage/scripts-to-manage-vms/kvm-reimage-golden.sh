@@ -43,7 +43,7 @@ Options:
   --ipv6-only          Reimage as IPv6-only VM (golden-boot handles the rest)
   --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
   --cpu <n>             Number of vCPUs (default: 2)
-  --memory <MiB>       RAM in MiB (default: 2048)
+  --memory <n>        RAM in GiB (power of 2, default: 2)
   --root-disk-size <GiB>  Root disk size in GiB (default: 30)
   -f, --force          Skip confirmation prompt
   -h, --help           Show this help message
@@ -311,14 +311,18 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Apply CPU/memory overrides to the shut-off VM's definition
         if [[ "$VM_CPUS_SPECIFIED" == "true" ]]; then
-            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum >/dev/null 2>&1 || true
-            sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config >/dev/null 2>&1 || true
+            if ! sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum >/dev/null 2>&1 || 
+               ! sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config >/dev/null 2>&1; then
+                print_warning "Could not apply --cpu ${VM_CPUS} override. VM will keep existing CPU count."
+            fi
         fi
         if [[ "$VM_MEMORY_SPECIFIED" == "true" ]]; then
             new_mem_kib=$(( VM_MEMORY * 1024 * 1024 ))
-            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || true
-            sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || true
-            sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || true
+            if ! sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || 
+               ! sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || 
+               ! sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1; then
+                print_warning "Could not apply --memory ${VM_MEMORY} override. VM will keep existing memory."
+            fi
         fi
 
         vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
