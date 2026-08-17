@@ -74,7 +74,7 @@ REQUIRED_PACKAGES_APT=(
     python3-requests python3-libxml2 python3-libvirt
     libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0
     ovmf ed git openssl
-    podman jq
+    podman jq dnsutils
     nfs-kernel-server rsync
 )
 REQUIRED_PACKAGES_DNF=(
@@ -82,7 +82,7 @@ REQUIRED_PACKAGES_DNF=(
     python3-requests python3-libxml2 python3-libvirt
     libosinfo python3-gobject gobject-introspection
     edk2-ovmf ed git openssl
-    podman jq
+    podman jq bind-utils
     nfs-utils rsync
 )
 REQUIRED_PACKAGES_ZYPPER=(
@@ -90,7 +90,7 @@ REQUIRED_PACKAGES_ZYPPER=(
     python3-requests python3-libxml2-python python3-libvirt-python
     libosinfo typelib-1_0-Libosinfo-1_0 python3-gobject gobject-introspection
     qemu-ovmf-x86_64 ed git openssl
-    podman jq
+    podman jq bind-utils
     nfs-utils rsync
 )
 

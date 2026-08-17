@@ -856,35 +856,6 @@ fn_configure_named_dns_server() {
 
     print_task_done
 
-    print_task "Installing dns utility packages if required..."
-
-    if command -v dig &>/dev/null; then
-        print_task_skip
-    else
-        if command -v dnf &>/dev/null; then
-            sudo dnf install -y bind-utils &>/dev/null
-        elif command -v apt-get &>/dev/null; then
-            sudo apt-get install -y dnsutils &>/dev/null
-        elif command -v zypper &>/dev/null; then
-            sudo zypper install -y bind-utils &>/dev/null
-        fi
-        if command -v dig &>/dev/null; then
-            print_task_done
-        else
-            print_task_fail
-            print_error "Failed to install 'dig'. Install bind-utils/dnsutils manually."
-            exit 1
-        fi
-    fi
-
-    print_task "Taking backup of named.conf..."
-
-    if [[ -f /tux2lab-data/named/named.conf ]]; then
-        cp -p /tux2lab-data/named/named.conf /tux2lab-data/named/named.conf_bkp_by_dnsbinder
-    fi
-    
-    print_task_done
-
     print_task "Configuring named.conf from template..."
 
     v_template_file="${v_script_dir}/named.conf.template"
@@ -929,16 +900,10 @@ fn_configure_named_dns_server() {
 
     print_task_done
 
-    print_task "Downloading latest root hints file (named.root)..."
-
-    # Download the latest named.root from IANA
-    if curl -s -o /tux2lab-data/named/named.root https://www.internic.net/domain/named.root; then
-        chown root:named /tux2lab-data/named/named.root
-        chmod 644 /tux2lab-data/named/named.root
-        print_task_done
-    else
-        print_warning "Failed to download named.root, using system default"
-    fi
+    print_task "Installing root hints file (named.root)..."
+    cp "${v_script_dir}/named.root" /tux2lab-data/named/named.root
+    chmod 644 /tux2lab-data/named/named.root
+    print_task_done
 
     print_task "Adding DNS zones to named.conf..."
 
@@ -1077,21 +1042,15 @@ EOF
 
     print_task_done
 
-    chown -R named:named "${var_zone_dir}"
     chmod -R o+r "${var_zone_dir}"
     find "${var_zone_dir}" -type d -exec chmod o+x {} \;
 
-    print_task "Enabling and starting named DNS Service..."
-
-    # named runs inside container (auto-started by entrypoint)    
-    
-    print_task_done
-
-    print_task "Doing a final restart of named DNS Service..."
-
-    sudo podman exec tux2lab-engine rndc reload &>/dev/null 
-
-    print_task_done
+    # Reload named only if container is running (not during initial deploy)
+    if sudo podman ps --filter "name=tux2lab-engine" --format "{{.Names}}" 2>/dev/null | grep -q "tux2lab-engine"; then
+        print_task "Reloading named DNS service in container..."
+        sudo podman exec tux2lab-engine rndc reload &>/dev/null
+        print_task_done
+    fi
 
     # v2.0.0: No /etc/environment writes needed — lab_environment.json is source of truth
     # DNS resolution for the host is configured by deploy-lab.sh (resolvectl)

@@ -456,7 +456,9 @@ setup_dns() {
         print_warning "dnsbinder not found — skipping DNS setup."
         return
     fi
+}
 
+create_dhcp_pool_dns_records() {
     # Pre-populate DNS records for DHCP pool IPs (needed for NFS ACL reverse-lookup)
     if dig @"${IPV4_ADDRESS}" +short +time=1 +tries=1 A "dhcp4-lease1.${ADMIN_DOMAIN}" 2>/dev/null | grep -q '^[0-9]'; then
         print_info "DHCP lease DNS records already exist — skipping."
@@ -757,6 +759,7 @@ main() {
     setup_dns
     ensure_bridge_up
     start_container
+    create_dhcp_pool_dns_records
     source /tux2lab/shared-functions/host-nfs.sh
     start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
     configure_host_dns
