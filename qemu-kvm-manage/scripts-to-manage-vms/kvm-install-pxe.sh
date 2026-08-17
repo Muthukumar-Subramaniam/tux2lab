@@ -28,28 +28,36 @@ VM_DISK_SIZE_SPECIFIED=false
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm install-pxe [OPTIONS]
-Options:
-  -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
-  -c, --console        Attach console during installation (single VM only)
-  -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
-  --ipv4-only          Create IPv4-only VM (no AAAA record, no IPv6 config)
-  --ipv6-only          Create IPv6-only VM (AAAA only; temp IPv4 for PXE boot)
-  --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
-  --cpu <n>             Number of vCPUs (default: 2)
-  --memory <n>        RAM in GiB (power of 2, default: 2)
-  --root-disk-size <GiB>  Root disk size in GiB (default: 30)
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm install --via-pxe [OPTIONS]
 
-Examples:
-  tux2lab vm install-pxe -H vm1                              # Install single VM (will prompt for distro/version)
-  tux2lab vm install-pxe -H vm1 --console                    # Install and attach console
-  tux2lab vm install-pxe -H vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
-  tux2lab vm install-pxe -H vm1 -d almalinux -v 9            # Install with AlmaLinux 9
-  tux2lab vm install-pxe -H vm1,vm2,vm3                      # Install multiple VMs
-  tux2lab vm install-pxe -H vm1 -d almalinux -v 10 --ipv4-only  # IPv4-only VM
+DESCRIPTION:
+    Deploy new VM(s) via PXE network boot (full OS installation). Supports
+    per-VM stack mode selection (dual/IPv4/IPv6), custom resource specs
+    (CPU, memory, disk), multi-VM batch deployment, and console attachment
+    for monitoring the installation process.
+
+OPTIONS:
+    -H <hostnames>      Hostname(s) to deploy (comma-separated)
+    -d <distro>         OS distribution
+    -v <version>        OS version
+    -c, --console       Attach to serial console during install (single VM only)
+    --ipv4-only         Create IPv4-only VM
+    --ipv6-only         Create IPv6-only VM
+    --dual-stack        Create dual-stack VM (default if neither is specified)
+    --cpu <n>           vCPUs (power of 2, min: 2, default: 2)
+    --memory <n>        RAM in GiB (power of 2, min: 2, default: 2)
+    --root-disk-size <n> Disk in GiB (multiple of 5, default: 30)
+    -h, --help          Show this help message
+
+EXAMPLES:
+    tux2lab vm install --via-pxe -H testvm1
+    tux2lab vm install --via-pxe -H testvm1 -d almalinux -v 10
+    tux2lab vm install --via-pxe -H testvm1 --console
+    tux2lab vm install --via-pxe -H testvm1 --ipv4-only -d almalinux -v 10
+    tux2lab vm install --via-pxe -H testvm1 --cpu 4 --memory 8 --root-disk-size 50
+    tux2lab vm install --via-pxe -H testvm1,testvm2,testvm3
+    tux2lab vm install --via-pxe -H testvm1 -d ubuntu-lts -v 24.04 --console
 "
 }
 
