@@ -149,6 +149,11 @@ fi
 log "Setting hostname to: ${HOST_NAME}"
 hostnamectl set-hostname "${HOST_NAME}"
 
+# Update the 127.0.1.1 entry (Debian/Ubuntu) to the new hostname
+if grep -q "^127.0.1.1" /etc/hosts; then
+	sed -i "s/^127.0.1.1.*/127.0.1.1 ${HOST_NAME} ${HOST_NAME%%.*}/" /etc/hosts
+fi
+
 log "Configuring kernel hostname"
 cat << EOF > /etc/sysctl.d/hostname.conf
 kernel.hostname=${HOST_NAME}
