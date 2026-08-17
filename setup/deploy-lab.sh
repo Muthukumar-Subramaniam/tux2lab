@@ -772,14 +772,7 @@ main() {
     fi
 
     print_green "═══════════════════════════════════════════════════════════════════
-  Lab Infrastructure deployed successfully!
-═══════════════════════════════════════════════════════════════════
-  Hostname  : ${INFRA_FQDN}
-  Domain    : ${ADMIN_DOMAIN}
-  Admin     : ${ADMIN_USERNAME}
-  IPv4      : ${IPV4_ADDRESS}
-  IPv6      : ${IPV6_ADDRESS}
-  Container : ${CONTAINER_NAME}
+  tux2lab Lab Infrastructure deployed successfully!
 ═══════════════════════════════════════════════════════════════════"
 }
 

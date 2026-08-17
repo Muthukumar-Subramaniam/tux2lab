@@ -183,7 +183,9 @@ fi
 # -u root = stay as root (avoids UID mismatch between container and host)
 echo "[*] Starting chronyd (NTP)..."
 if [[ -f "${DATA_DIR}/chrony/chrony.conf" ]]; then
-    /usr/sbin/chronyd -f "${DATA_DIR}/chrony/chrony.conf" -d -x -u root &
+    # Copy to writable path (data dir is mounted ro)
+    cp "${DATA_DIR}/chrony/chrony.conf" /etc/chrony/chrony.conf
+    /usr/sbin/chronyd -f /etc/chrony/chrony.conf -d -x -u root &
     echo "    → chronyd started on ${BRIDGE_IP} (time server only, no clock adjust)"
 else
     /usr/sbin/chronyd -d -x -u root &
