@@ -185,34 +185,35 @@ capture_network_config() {
     IPV6_PREFIX_BASE=$(echo "$IPV6_GATEWAY" | sed 's/::[^:]*$//')
     IPV6_ULA_SUBNET="${IPV6_PREFIX_BASE}::/${IPV6_PREFIX}"
 
+    # DHCPv6 pool range (matches generate-service-configs.sh)
+    DHCPV6_RANGE_START="${IPV6_PREFIX_BASE}::3ff"
+    DHCPV6_RANGE_END="${IPV6_PREFIX_BASE}::461"
+
     print_task_done
 
-    print_info "Network Configuration (Dual-Stack):
-  IPv4 Address  : ${IPV4_ADDRESS}
-  IPv4 Network  : ${IPV4_CIDR}
-  IPv4 Netmask  : ${IPV4_NETMASK}
-  IPv4 Broadcast: ${IPV4_BROADCAST}
-  First /24     : ${IPV4_FIRST24}.0/24
-  Last /24      : ${IPV4_LAST24}.0/24
-  DHCP Range    : ${DHCP_RANGE_START} - ${DHCP_RANGE_END}
-  IPv6 Address  : ${IPV6_ADDRESS}
-  IPv6 Subnet   : ${IPV6_ULA_SUBNET}
-  Bridge        : ${BRIDGE_INTERFACE}"
+    echo -e "
+  ${MAKE_IT_CYAN}✓ Bridge           :${RESET_COLOR} ${BRIDGE_INTERFACE}
+  ${MAKE_IT_CYAN}✓ IPv4 Address     :${RESET_COLOR} ${IPV4_ADDRESS}
+  ${MAKE_IT_CYAN}✓ IPv4 Network     :${RESET_COLOR} ${IPV4_CIDR}
+  ${MAKE_IT_CYAN}✓ IPv4 Broadcast   :${RESET_COLOR} ${IPV4_BROADCAST}
+  ${MAKE_IT_CYAN}✓ DHCPv4 Pool      :${RESET_COLOR} ${DHCP_RANGE_START} - ${DHCP_RANGE_END}
+  ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${IPV6_ADDRESS}
+  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${IPV6_ULA_SUBNET}
+  ${MAKE_IT_CYAN}✓ DHCPv6 Pool      :${RESET_COLOR} ${DHCPV6_RANGE_START} - ${DHCPV6_RANGE_END}
+  ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${INFRA_HOSTNAME}.${USER}.internal
+  ${MAKE_IT_CYAN}✓ Admin User       :${RESET_COLOR} ${USER}
+"
 }
 
 # ============================================================================
 # COLLECT CREDENTIALS (only user prompt: password)
 # ============================================================================
 collect_credentials() {
-    # Admin username = current user (no prompt)
     ADMIN_USERNAME="$USER"
     ADMIN_DOMAIN="${USER}.internal"
     INFRA_FQDN="${INFRA_HOSTNAME}.${ADMIN_DOMAIN}"
 
-    print_info "Lab Infra Server : ${INFRA_FQDN}"
-    print_info "Admin User       : ${ADMIN_USERNAME}"
-
-    print_warning "The following will be configured:
+    print_yellow "The following will be configured:
   - Generate SSH keypair for lab access
   - Generate self-signed SSL certificate
   - Generate service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
