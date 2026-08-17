@@ -149,12 +149,8 @@ fi
 log "Setting hostname to: ${HOST_NAME}"
 hostnamectl set-hostname "${HOST_NAME}"
 
-# Ensure the 127.0.1.1 entry maps to the new hostname (resolves locally when DNS is down)
-if grep -q "^127.0.1.1" /etc/hosts; then
-	sed -i "s/^127.0.1.1.*/127.0.1.1 ${HOST_NAME} ${HOST_NAME%%.*}/" /etc/hosts
-else
-	echo "127.0.1.1 ${HOST_NAME} ${HOST_NAME%%.*}" >> /etc/hosts
-fi
+# Remove stale golden-image 127.0.1.1 entry — lab DNS resolves the hostname to its real IP
+sed -i "/^127.0.1.1/d" /etc/hosts
 
 log "Configuring kernel hostname"
 cat << EOF > /etc/sysctl.d/hostname.conf
