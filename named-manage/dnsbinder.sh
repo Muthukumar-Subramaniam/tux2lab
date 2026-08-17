@@ -456,11 +456,6 @@ fn_reconfigure_named() {
         exit 1
     fi
 
-    print_task "Backing up named.conf..."
-    cp -p "$named_conf" "${named_conf}_bkp_by_dnsbinder"
-    print_task_done
-
-    # Read config from lab_environment.json
     local listen_ipv4="${dnsbinder_server_ipv4_address}"
     local listen_ipv6="${dnsbinder_server_ipv6_address:-none}"
     local allow_networks="localhost; ${dnsbinder_network_cidr}"

@@ -59,11 +59,11 @@ fi
 # ====== CONFIRM ======
 if [[ "${skip_confirm}" != "true" ]]; then
     if [[ "$pull_image" == "true" ]]; then
-        print_warning "This will regenerate service configs, pull the latest image, recreate the container, and restart NFS."
+        print_yellow "This will regenerate service configs, pull the latest image, recreate the container, and restart NFS."
     else
-        print_warning "This will regenerate service configs, recreate the container from the local image, and restart NFS."
+        print_yellow "This will regenerate service configs, recreate the container from the local image, and restart NFS."
     fi
-    print_warning "Running VMs will NOT be affected, but lab services (DNS, DHCP, NTP, NFS, HTTP, TFTP) will have a brief disruption."
+    print_yellow "Running VMs will NOT be affected, but lab services (DNS, DHCP, NTP, NFS, HTTP, TFTP) will have a brief disruption."
     read -rp "Continue? (yes/no): " confirm
     if [[ "${confirm}" != "yes" ]]; then
         print_info "Aborted."
