@@ -39,7 +39,7 @@ if [[ ! -d /sys/module/kvm ]]; then
     fi
 fi
 
-print_warning "This script will configure the tux2lab host environment.
+print_yellow "This script will configure the tux2lab host environment.
 The following actions will be performed:
   - Grant passwordless sudo privileges to user '$USER'
   - Install QEMU/KVM, libvirt, podman, and dependencies
