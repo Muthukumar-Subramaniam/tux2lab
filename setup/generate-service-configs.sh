@@ -341,15 +341,12 @@ EOF
 generate_chrony() {
     print_task "Generating chrony config..."
     mkdir -p "${DATA_DIR}/chrony"
-    mkdir -p "${DATA_DIR}/logs/chrony"
 
     cat > "${DATA_DIR}/chrony/chrony.conf" <<EOF
 pool time.google.com iburst
 
 driftfile /var/lib/chrony/drift
 ntsdumpdir /var/lib/chrony
-logdir ${DATA_DIR}/logs/chrony
-log tracking measurements statistics
 
 bindaddress ${IPV4_ADDRESS}
 bindaddress ${IPV6_ADDRESS}

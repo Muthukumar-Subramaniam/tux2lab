@@ -40,7 +40,7 @@ chown named:named /run/named
 rm -f /var/run/kea/*.pid /run/named/named.pid /run/radvd/radvd.pid /run/chrony/chronyd.pid /run/nginx.pid
 
 # Create persistent log directories
-mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,chrony,radvd}
+mkdir -p "${DATA_DIR}/logs"/{nginx,named,kea,radvd}
 chown named:named "${DATA_DIR}/logs/named"
 
 # Symlink /var/log/kea → persistent kea log dir (kea restricts output paths)
@@ -183,7 +183,7 @@ fi
 # -u root = stay as root (avoids UID mismatch between container and host)
 echo "[*] Starting chronyd (NTP)..."
 if [[ -f "${DATA_DIR}/chrony/chrony.conf" ]]; then
-    # Copy to writable path (data dir is mounted ro)
+    # Copy to writable path (chronyd's seccomp filter restricts to standard paths)
     cp "${DATA_DIR}/chrony/chrony.conf" /etc/chrony/chrony.conf
     /usr/sbin/chronyd -f /etc/chrony/chrony.conf -d -x -u root &
     echo "    → chronyd started on ${BRIDGE_IP} (time server only, no clock adjust)"
