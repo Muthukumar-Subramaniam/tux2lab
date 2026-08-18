@@ -27,6 +27,13 @@ open_bridge_firewall() {
         return 0
     fi
 
+    # No iptables available (e.g. openSUSE with pure nftables) — nothing to configure
+    if ! command -v iptables &>/dev/null; then
+        print_task "Opening firewall for ${bridge}..."
+        print_task_skip
+        return 0
+    fi
+
     # Fallback: raw iptables/ip6tables
     local rules_needed=false
 
@@ -99,6 +106,13 @@ close_bridge_firewall() {
         return 0
     fi
 
+    # No iptables available (e.g. openSUSE with pure nftables) — nothing to remove
+    if ! command -v iptables &>/dev/null; then
+        print_task "Removing firewall rules for ${bridge}..."
+        print_task_skip
+        return 0
+    fi
+
     print_task "Removing firewall rules for ${bridge}..."
     local removed=false
     for rule in \
@@ -128,11 +142,17 @@ check_bridge_firewall() {
         return 1
     fi
 
-    # iptables: if policy is ACCEPT, no rules needed
-    if sudo iptables -S INPUT 2>/dev/null | head -1 | grep -q "\-P INPUT ACCEPT"; then
+    # No iptables available (e.g. openSUSE with pure nftables) — no host firewall blocking
+    if ! command -v iptables &>/dev/null; then
         return 0
     fi
 
+    # iptables: if INPUT policy is not DROP/REJECT, traffic is allowed (mirrors open_bridge_firewall)
+    if ! sudo iptables -S INPUT 2>/dev/null | head -1 | grep -q "DROP\|REJECT"; then
+        return 0
+    fi
+
+    # Restrictive policy — require explicit ACCEPT rules on the bridge
     if sudo iptables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null && \
        sudo ip6tables -C INPUT -i "${bridge}" -j ACCEPT 2>/dev/null; then
         return 0
