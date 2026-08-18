@@ -149,8 +149,10 @@ fi
 log "Setting hostname to: ${HOST_NAME}"
 hostnamectl set-hostname "${HOST_NAME}"
 
-# Remove stale golden-image 127.0.1.1 entry — lab DNS resolves the hostname to its real IP
-sed -i "/^127.0.1.1/d" /etc/hosts
+# Replace stale golden-image hostname in the 127.0.1.1 entry (Debian/Ubuntu) with the new hostname
+if grep -q "^127.0.1.1[[:space:]].*golden-image" /etc/hosts; then
+	sed -i "s/^\(127.0.1.1[[:space:]]\+\)[^[:space:]]*golden-image[^[:space:]]*/\1${HOST_NAME}/" /etc/hosts
+fi
 
 log "Configuring kernel hostname"
 cat << EOF > /etc/sysctl.d/hostname.conf
