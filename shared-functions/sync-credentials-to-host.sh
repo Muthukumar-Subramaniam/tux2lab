@@ -84,6 +84,8 @@ EOF
         local _host_cert=""
         if command -v update-ca-trust &>/dev/null; then
             _host_cert="/etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt"
+        elif [[ -d /etc/pki/trust/anchors ]]; then
+            _host_cert="/etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt"
         elif command -v update-ca-certificates &>/dev/null; then
             _host_cert="/usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt"
         fi

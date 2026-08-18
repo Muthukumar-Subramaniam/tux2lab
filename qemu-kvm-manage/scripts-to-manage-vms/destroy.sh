@@ -198,6 +198,7 @@ has_artifacts=false
 [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] && has_artifacts=true
 grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null && has_artifacts=true
 [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
+[[ -f /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
 [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
 
 if $has_artifacts; then
@@ -216,6 +217,9 @@ if $has_artifacts; then
     if [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]]; then
         sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
         sudo update-ca-trust &>/dev/null || true
+    elif [[ -f /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-certificates &>/dev/null || true
     elif [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]]; then
         sudo rm -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
         sudo update-ca-certificates &>/dev/null || true

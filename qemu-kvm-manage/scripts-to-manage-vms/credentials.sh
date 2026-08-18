@@ -213,6 +213,9 @@ credentials_cert() {
     if command -v update-ca-trust &>/dev/null; then
         sudo cp "${cert_dir}/tux2lab-nginx-selfsigned.crt" /etc/pki/ca-trust/source/anchors/ 2>/dev/null || true
         sudo update-ca-trust 2>/dev/null || true
+    elif [[ -d /etc/pki/trust/anchors ]]; then
+        sudo cp "${cert_dir}/tux2lab-nginx-selfsigned.crt" /etc/pki/trust/anchors/ 2>/dev/null || true
+        sudo update-ca-certificates 2>/dev/null || true
     elif command -v update-ca-certificates &>/dev/null; then
         sudo cp "${cert_dir}/tux2lab-nginx-selfsigned.crt" /usr/local/share/ca-certificates/ 2>/dev/null || true
         sudo update-ca-certificates 2>/dev/null || true

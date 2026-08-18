@@ -282,6 +282,7 @@ print_task_done
 
 print_task "Installing bash completion..."
 if [[ -f "$scripts_directory/tux2lab-completion.bash" ]]; then
+    sudo mkdir -p /etc/bash_completion.d
     sudo ln -sf "$scripts_directory/tux2lab-completion.bash" /etc/bash_completion.d/tux2lab-completion.bash
     print_task_done
 else

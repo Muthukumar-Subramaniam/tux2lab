@@ -326,10 +326,14 @@ generate_ssl_cert() {
     chmod 644 "$cert_file"
 
     # Install cert into host CA trust store (so curl/wget work without -k)
-    if [[ -d /etc/pki/ca-trust/source/anchors ]]; then
-        # RHEL/Fedora/SUSE
+    if command -v update-ca-trust &>/dev/null; then
+        # RHEL/Fedora/CentOS
         sudo cp "$cert_file" /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
         sudo update-ca-trust &>/dev/null
+    elif [[ -d /etc/pki/trust/anchors ]]; then
+        # openSUSE/SLES
+        sudo cp "$cert_file" /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-certificates &>/dev/null
     elif [[ -d /usr/local/share/ca-certificates ]]; then
         # Debian/Ubuntu
         sudo cp "$cert_file" /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
