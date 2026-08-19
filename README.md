@@ -1,10 +1,10 @@
-# tux2lab — Build Your Own KVM Virtual Home Lab
+# tux2lab: Build Your Own KVM Virtual Home Lab
 
 [![Latest Release](https://img.shields.io/github/v/release/Muthukumar-Subramaniam/tux2lab?label=Latest%20Release&color=green)](https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-Transform your Linux workstation into a powerful, automated virtual datacenter —
-deploy, break, and rebuild VMs effortlessly. tux2lab automates provisioning,
+Transform your Linux workstation into a powerful, automated virtual datacenter
+where you can deploy, break, and rebuild VMs effortlessly. tux2lab automates provisioning,
 manages the complete VM lifecycle, and provides a flexible environment for
 learning, testing, and experimenting with Linux-based technologies.
 
@@ -12,7 +12,7 @@ Plenty of open-source alternatives may exist; this project was built out of the
 sheer fun of creating something from scratch and sharing it with anyone who has
 similar interests.
 
-Architecturally, tux2lab is orchestrated by **JBOBS** — *Just a Bunch Of Bash Scripts*.
+Architecturally, tux2lab is orchestrated by **JBOBS**, *Just a Bunch Of Bash Scripts*.
 No frameworks, no extra languages. Just Bash doing what Bash does best.
 
 > [!WARNING]
@@ -24,11 +24,11 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 
 - Automated VM provisioning via PXE boot & golden images
 - Dynamic DNS management for your local domain
-- Complete VM lifecycle management — deploy, resize, snapshot, destroy
+- Complete VM lifecycle management: deploy, resize, snapshot, destroy
 - Multi-distribution support across Red Hat, Debian, and SUSE families
 - Dual-stack networking (IPv4 + IPv6) with per-VM stack mode selection
 - TCP load balancer management (nginx stream)
-- Containerized infrastructure — all lab services in a single rootful Podman container (~60 MB)
+- Containerized infrastructure: all lab services in a single rootful Podman container (~60 MB)
 
 ---
 
@@ -60,7 +60,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 | **Runtime** | Podman (rootful, `--network=host --privileged`) |
 | **Persistence** | All state in `/tux2lab-data/` (bind-mounted into container) |
 | **Lifecycle** | Start/stop/rebuild without touching the host |
-| **Resources** | Minimal — shares host kernel, no VM overhead |
+| **Resources** | Minimal, shares host kernel, no VM overhead |
 
 ---
 
@@ -76,8 +76,8 @@ lab bridge interface, providing seamless network access for all guest VMs.
 | | Debian | 13, 12, 11 | Preseed (netboot) |
 | SUSE | openSUSE Leap | 16.0 | Agama |
 
-> Distros are set up automatically when needed — manual `tux2lab distro setup`
-> is optional (useful for pre-staging ISOs or managing disk space).
+> Distros are set up automatically when needed. Running `tux2lab distro setup`
+> manually is optional (useful for pre-staging ISOs or managing disk space).
 
 ---
 
@@ -94,7 +94,7 @@ Podman must be available (installed automatically by setup).
 
 ## Quick Start
 
-### Step 1 — Get tux2lab
+### Step 1: Get tux2lab
 
 **Download the latest release tarball:**
 
@@ -105,7 +105,7 @@ curl -sSL https://github.com/Muthukumar-Subramaniam/tux2lab/releases/latest/down
   | tar -xzv -C /tux2lab
 ```
 
-**For developers/contributors — clone from the repository:**
+**For developers and contributors, clone from the repository:**
 
 ```bash
 sudo mkdir -p /tux2lab
@@ -113,7 +113,7 @@ sudo chown "${USER}:$(id -g)" /tux2lab
 git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
 ```
 
-### Step 2 — Prepare the Host
+### Step 2: Prepare the Host
 
 ```bash
 /tux2lab/setup/setup-host.sh
@@ -126,7 +126,7 @@ This script:
 - Sets up the `/tux2lab-data/` data directory
 - Installs the `tux2lab` CLI and bash completion
 
-### Step 3 — Deploy the Lab
+### Step 3: Deploy the Lab
 
 ```bash
 tux2lab deploy
@@ -141,7 +141,7 @@ The interactive wizard handles:
 
 The hostname is fixed to `tux2lab-engine` and the domain is automatically set to `<your-username>.internal`.
 
-### Step 4 — Verify Your Lab
+### Step 4: Verify Your Lab
 
 ```bash
 tux2lab health
@@ -173,7 +173,7 @@ tux2lab golden-image list                        # Show available images
 ### Deploy VMs
 
 ```bash
-# From golden image (default — fast disk clone)
+# From golden image (default, fast disk clone)
 tux2lab vm install -H testvm1 -d almalinux -v 10
 
 # Multiple VMs at once
@@ -288,9 +288,9 @@ These tools run on the KVM host and power the provisioning pipeline:
 
 | Tool | Purpose |
 |---|---|
-| **dnsbinder** | Manages BIND DNS zone records — automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
-| **ksmanager** | Orchestrates OS provisioning — generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
-| **lbmanager** | Manages nginx TCP stream load balancers — creates VIPs, configures backends, manages DNS records |
+| **dnsbinder** | Manages BIND DNS zone records with automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
+| **ksmanager** | Orchestrates OS provisioning: generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
+| **lbmanager** | Manages nginx TCP stream load balancers: creates VIPs, configures backends, manages DNS records |
 | **prepare-distro-for-ksmanager** | Downloads boot ISOs, registers distributions with ksmanager for PXE provisioning |
 
 ---
@@ -331,7 +331,7 @@ tux2lab/
 ## Support & Contributing
 
 - Found a bug? Have ideas? [Open an issue](https://github.com/Muthukumar-Subramaniam/tux2lab/issues) on GitHub.
-- Pull requests are welcome — improve automation, add distros, or enhance docs.
+- Pull requests are welcome, whether to improve automation, add distros, or enhance docs.
 
 ## License
 
