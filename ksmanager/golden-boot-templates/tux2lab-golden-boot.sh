@@ -645,20 +645,19 @@ fi
 
 log "Starting SSH service with new host keys"
 if systemctl list-unit-files ssh.service 2>/dev/null | grep -q 'ssh.service'; then
-	log "Found ssh.service, enabling and starting..."
+	log "Found ssh.service, enabling standalone service (socket activation disabled)..."
+	systemctl disable --now ssh.socket 2>/dev/null || true
 	systemctl reset-failed ssh.service 2>/dev/null || true
 	systemctl enable ssh.service 2>/dev/null || true
-	systemctl enable ssh.socket 2>/dev/null || true
 	systemctl daemon-reload
-	systemctl start ssh.socket 2>/dev/null || true
-	systemctl start ssh && log "SSH service started successfully" || log "WARNING: SSH service start failed"
+	systemctl restart ssh.service && log "SSH service started successfully" || log "WARNING: SSH service start failed"
 elif systemctl list-unit-files sshd.service 2>/dev/null | grep -q 'sshd.service'; then
-	log "Found sshd.service, enabling and starting..."
+	log "Found sshd.service, enabling standalone service (socket activation disabled)..."
+	systemctl disable --now sshd.socket 2>/dev/null || true
 	systemctl reset-failed sshd.service 2>/dev/null || true
-	systemctl enable sshd 2>/dev/null || true
-	systemctl enable sshd.socket 2>/dev/null || true
+	systemctl enable sshd.service 2>/dev/null || true
 	systemctl daemon-reload
-	systemctl start sshd && log "SSH service started successfully" || log "WARNING: SSH service start failed"
+	systemctl restart sshd.service && log "SSH service started successfully" || log "WARNING: SSH service start failed"
 else
 	log "WARNING: No SSH service unit found (sshd.service or ssh.service)"
 fi
