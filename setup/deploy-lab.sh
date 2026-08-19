@@ -191,8 +191,7 @@ capture_network_config() {
 
     print_task_done
 
-    echo -e "
-  ${MAKE_IT_CYAN}✓ Bridge           :${RESET_COLOR} ${BRIDGE_INTERFACE}
+    echo -e "  ${MAKE_IT_CYAN}✓ Bridge           :${RESET_COLOR} ${BRIDGE_INTERFACE}
   ${MAKE_IT_CYAN}✓ IPv4 Address     :${RESET_COLOR} ${IPV4_ADDRESS}
   ${MAKE_IT_CYAN}✓ IPv4 Network     :${RESET_COLOR} ${IPV4_CIDR}
   ${MAKE_IT_CYAN}✓ IPv4 Broadcast   :${RESET_COLOR} ${IPV4_BROADCAST}
@@ -201,8 +200,7 @@ capture_network_config() {
   ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${IPV6_ULA_SUBNET}
   ${MAKE_IT_CYAN}✓ DHCPv6 Pool      :${RESET_COLOR} ${DHCPV6_RANGE_START} - ${DHCPV6_RANGE_END}
   ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${INFRA_HOSTNAME}.${USER}.internal
-  ${MAKE_IT_CYAN}✓ Admin User       :${RESET_COLOR} ${USER}
-"
+  ${MAKE_IT_CYAN}✓ Admin User       :${RESET_COLOR} ${USER}"
 }
 
 # ============================================================================
