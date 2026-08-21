@@ -63,10 +63,10 @@ show_vm_operation_summary() {
     # Add helpful info for install/reimage operations - only if some VMs succeeded
     if [[ ${#successful_vms[@]} -gt 0 ]]; then
         if [[ -n "$additional_info" ]]; then
-            print_info "${additional_info}"
+            print_yellow "    ▸ ${additional_info}"
         fi
-        print_info "To monitor progress: tux2lab vm console -H <hostname>"
-        print_info "To check VM status: tux2lab vm list"
+        print_yellow "    ▸ To monitor progress: tux2lab vm console -H <hostname>"
+        print_yellow "    ▸ To check VM status:  tux2lab vm list"
     fi
 
     # Return failure if any VMs failed
