@@ -210,15 +210,24 @@ tux2lab golden-image list                        # Show available images
 ```bash
 # From golden image (default, fast disk clone)
 tux2lab vm install -H testvm1 -d almalinux -v 10
-
-# Multiple VMs at once
-tux2lab vm install -H testvm1,testvm2,testvm3 -d almalinux -v 10
 ```
 
 <details>
 <summary>Show example output</summary>
 
 ![tux2lab vm install](docs/images/tux2lab-vm-install.png)
+
+</details>
+
+```bash
+# Multiple VMs at once
+tux2lab vm install -H testvm2,testvm3,testvm4 -d almalinux -v 10
+```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab vm install (multiple)](docs/images/tux2lab-vm-install-multi.png)
 
 </details>
 
