@@ -175,11 +175,25 @@ tux2lab health
 ### Prepare a Distribution for Provisioning (Optional)
 
 Distros are prepared automatically when you build a golden image or install a VM.
-Use these commands to pre-stage ISOs or check status:
+Use these commands to pre-stage ISOs or check status.
+
+Check the readiness of every supported distribution and version:
 
 ```bash
-tux2lab distro list                              # Show setup status
-tux2lab distro setup almalinux -v 10             # Pre-stage a distro
+tux2lab distro list
+```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab distro list](docs/images/tux2lab-distro-list-before.png)
+
+</details>
+
+Pre-stage a specific distribution (downloads and mounts its ISO):
+
+```bash
+tux2lab distro setup almalinux -v 10
 ```
 
 <details>
@@ -189,19 +203,72 @@ tux2lab distro setup almalinux -v 10             # Pre-stage a distro
 
 </details>
 
-### Create a Golden Image (Optional, Recommended)
-
-Golden images let you deploy VMs in seconds instead of running a full PXE install:
+Running `distro list` again shows it is now PXE-ready:
 
 ```bash
-tux2lab golden-image build almalinux -v 10       # Non-interactive
-tux2lab golden-image list                        # Show available images
+tux2lab distro list
+```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab distro list](docs/images/tux2lab-distro-list-after.png)
+
+</details>
+
+### Create a Golden Image (Recommended)
+
+Golden images let you deploy VMs in seconds instead of running a full PXE install.
+
+List existing golden images (none yet on a fresh install):
+
+```bash
+tux2lab golden-image list
+```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab golden-image list](docs/images/tux2lab-golden-list-before.png)
+
+</details>
+
+Build a golden image for a distribution:
+
+```bash
+tux2lab golden-image build almalinux -v 10
 ```
 
 <details>
 <summary>Show example output</summary>
 
 ![tux2lab golden-image build](docs/images/tux2lab-golden-build.png)
+
+</details>
+
+List again to confirm the image is available:
+
+```bash
+tux2lab golden-image list
+```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab golden-image list](docs/images/tux2lab-golden-list-after.png)
+
+</details>
+
+`distro list` now shows AlmaLinux 10 as both PXE-ready and having a golden image:
+
+```bash
+tux2lab distro list
+```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab distro list](docs/images/tux2lab-distro-list-after-golden.png)
 
 </details>
 
