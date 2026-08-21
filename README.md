@@ -120,7 +120,7 @@ git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab setup-host](docs/images/tux2lab-setup-host.png)
 
@@ -140,7 +140,7 @@ tux2lab deploy
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab deploy](docs/images/tux2lab-deploy.png)
 
@@ -162,7 +162,7 @@ tux2lab health
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab health](docs/images/tux2lab-health.png)
 
@@ -184,7 +184,7 @@ tux2lab distro list
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab distro list](docs/images/tux2lab-distro-list-before.png)
 
@@ -197,7 +197,7 @@ tux2lab distro setup almalinux -v 10
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab distro setup](docs/images/tux2lab-distro-setup.png)
 
@@ -210,7 +210,7 @@ tux2lab distro list
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab distro list](docs/images/tux2lab-distro-list-after.png)
 
@@ -227,7 +227,7 @@ tux2lab golden-image list
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab golden-image list](docs/images/tux2lab-golden-list-before.png)
 
@@ -240,7 +240,7 @@ tux2lab golden-image build almalinux -v 10
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab golden-image build](docs/images/tux2lab-golden-build.png)
 
@@ -253,7 +253,7 @@ tux2lab golden-image list
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab golden-image list](docs/images/tux2lab-golden-list-after.png)
 
@@ -266,7 +266,7 @@ tux2lab distro list
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab distro list](docs/images/tux2lab-distro-list-after-golden.png)
 
@@ -280,7 +280,7 @@ tux2lab vm install -H testvm1 -d almalinux -v 10
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab vm install](docs/images/tux2lab-vm-install.png)
 
@@ -292,7 +292,7 @@ tux2lab vm install -H testvm2,testvm3,testvm4 -d almalinux -v 10
 ```
 
 <details>
-<summary>Show example output</summary>
+<summary>See it in action</summary>
 
 ![tux2lab vm install (multiple)](docs/images/tux2lab-vm-install-multi.png)
 
