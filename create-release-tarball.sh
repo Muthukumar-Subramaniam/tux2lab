@@ -19,6 +19,8 @@ tar -czf "$TARBALL_NAME" \
     --exclude='.gitignore' \
     --exclude='latest-release' \
     --exclude='create-release-tarball.sh' \
+    --exclude='docs' \
+    --exclude='RELEASE_PROCESS.md' \
     *
 
 echo "✅ Tarball created: $TARBALL_NAME"

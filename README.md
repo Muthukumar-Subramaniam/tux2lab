@@ -119,6 +119,13 @@ git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
 /tux2lab/setup/setup-host.sh
 ```
 
+<details>
+<summary>Show example output</summary>
+
+![tux2lab setup-host](docs/images/tux2lab-setup-host.png)
+
+</details>
+
 This script:
 - Installs QEMU/KVM, libvirt, Podman, jq, and all dependencies (supports `apt`, `dnf`, `zypper`)
 - Grants passwordless sudo to the current user
@@ -131,6 +138,13 @@ This script:
 ```bash
 tux2lab deploy
 ```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab deploy](docs/images/tux2lab-deploy.png)
+
+</details>
 
 The interactive wizard handles:
 - Admin password setup
@@ -147,6 +161,13 @@ The hostname is fixed to `tux2lab-engine` and the domain is automatically set to
 tux2lab health
 ```
 
+<details>
+<summary>Show example output</summary>
+
+![tux2lab health](docs/images/tux2lab-health.png)
+
+</details>
+
 ---
 
 ## Using tux2lab
@@ -161,6 +182,13 @@ tux2lab distro list                              # Show setup status
 tux2lab distro setup almalinux -v 10             # Pre-stage a distro
 ```
 
+<details>
+<summary>Show example output</summary>
+
+![tux2lab distro setup](docs/images/tux2lab-distro-setup.png)
+
+</details>
+
 ### Create a Golden Image (Optional, Recommended)
 
 Golden images let you deploy VMs in seconds instead of running a full PXE install:
@@ -169,6 +197,13 @@ Golden images let you deploy VMs in seconds instead of running a full PXE instal
 tux2lab golden-image build almalinux -v 10       # Non-interactive
 tux2lab golden-image list                        # Show available images
 ```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab golden-image build](docs/images/tux2lab-golden-build.png)
+
+</details>
 
 ### Deploy VMs
 
@@ -179,6 +214,13 @@ tux2lab vm install -H testvm1 -d almalinux -v 10
 # Multiple VMs at once
 tux2lab vm install -H testvm1,testvm2,testvm3 -d almalinux -v 10
 ```
+
+<details>
+<summary>Show example output</summary>
+
+![tux2lab vm install](docs/images/tux2lab-vm-install.png)
+
+</details>
 
 ---
 
