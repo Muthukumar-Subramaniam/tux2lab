@@ -21,7 +21,8 @@ done
 sudo podman image prune -f &>/dev/null || true
 
 # Build
-sudo podman build --no-cache -t "${GHCR}:${VERSION}" -f container/Containerfile .
+# --network=host avoids podman creating a throwaway bridge just for the apk step
+sudo podman build --no-cache --network=host -t "${GHCR}:${VERSION}" -f container/Containerfile .
 
 # Tag
 sudo podman tag "${GHCR}:${VERSION}" "${GHCR}:latest"
