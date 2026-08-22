@@ -357,6 +357,24 @@ fn_check_ip_on_interface() {
     ip addr show dev "$interface" 2>/dev/null | grep -qw "$ip"
 }
 
+# A freshly added IPv6 address stays "tentative" until DAD completes and cannot be bound.
+fn_wait_for_ip_ready() {
+    local ipv4="$1" ipv6="$2" interface="$3"
+    local retries=20 ipv4_ready ipv6_ready
+
+    while [[ $retries -gt 0 ]]; do
+        ipv4_ready=false
+        ipv6_ready=false
+        ip addr show dev "$interface" | grep -qw "$ipv4" && ipv4_ready=true
+        ip -6 addr show dev "$interface" | grep "$ipv6" | grep -qv "tentative" && ipv6_ready=true
+        $ipv4_ready && $ipv6_ready && return 0
+        sleep 0.5
+        retries=$((retries - 1))
+    done
+
+    return 1
+}
+
 fn_add_secondary_ip() {
     local ipv4="$1" ipv6="$2" interface="$3"
     local ipv4_prefix ipv6_prefix
@@ -391,6 +409,15 @@ fn_add_secondary_ip() {
             print_error "Failed to add IPv6 ${ipv6}/${ipv6_prefix} to ${interface}"
             return 1
         fi
+    fi
+
+    print_task "Waiting for ${ipv6} to pass DAD..."
+    if fn_wait_for_ip_ready "$ipv4" "$ipv6" "$interface"; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Address ${ipv6} did not become available on ${interface}."
+        return 1
     fi
 }
 
@@ -458,7 +485,7 @@ fn_generate_nginx_config() {
         upstream_servers="${upstream_servers}    server ${backend}:${target_port} max_fails=3 fail_timeout=30s;\n"
     done
 
-    print_task "Generating nginx stream config ${config_file}..."
+    print_task "Generating nginx stream config for ${name}..."
 
     cat > "$config_file" <<EOF
 # Managed by tux2lab lbmanager — do not edit manually
@@ -493,7 +520,7 @@ fn_remove_nginx_config() {
     local name="$1"
     local config_file="${STREAM_CONF_DIR}/${name}.conf"
 
-    print_task "Removing nginx config ${config_file}..."
+    print_task "Removing nginx config for ${name}..."
     if [[ -f "$config_file" ]]; then
         rm -f "$config_file"
         print_task_done
@@ -504,11 +531,13 @@ fn_remove_nginx_config() {
 
 fn_validate_nginx() {
     print_task "Validating nginx configuration..."
-    if podman exec "$CONTAINER_NAME" nginx -t -c /tux2lab-data/nginx/nginx.conf &>/dev/null; then
+    local _nginx_output
+    if _nginx_output=$(podman exec "$CONTAINER_NAME" nginx -t -c /tux2lab-data/nginx/nginx.conf 2>&1); then
         print_task_done
     else
         print_task_fail
-        print_error "nginx configuration validation failed. Rolling back."
+        print_error "nginx configuration validation failed:"
+        printf '%s\n' "$_nginx_output" | sed 's/^/    /'
         return 1
     fi
 }
@@ -638,16 +667,7 @@ fn_create() {
 
     # Wait for IPv6 DAD to complete before nginx binds
     print_task "Waiting for addresses to be ready..."
-    local dad_retries=20
-    while [[ $dad_retries -gt 0 ]]; do
-        local ipv4_ready=false ipv6_ready=false
-        ip addr show dev "$MGMT_INTERFACE" | grep -qw "$ipv4" && ipv4_ready=true
-        ip -6 addr show dev "$MGMT_INTERFACE" | grep "$ipv6" | grep -qv "tentative" && ipv6_ready=true
-        $ipv4_ready && $ipv6_ready && break
-        sleep 0.5
-        dad_retries=$((dad_retries - 1))
-    done
-    if $ipv4_ready && $ipv6_ready; then
+    if fn_wait_for_ip_ready "$ipv4" "$ipv6" "$MGMT_INTERFACE"; then
         print_task_done
     else
         print_task_fail
@@ -1117,7 +1137,7 @@ fn_status() {
         fi
 
         # Check 4: nginx config exists
-        print_task "Nginx config (${STREAM_CONF_DIR}/${lb_name}.conf)..."
+        print_task "Nginx config (${lb_name})..."
         if [[ -f "${STREAM_CONF_DIR}/${lb_name}.conf" ]]; then
             print_task_done
             total_pass=$((total_pass + 1))
@@ -1208,7 +1228,11 @@ fn_restore() {
     done < <(jq -r '.load_balancers[].name' "$LB_REGISTRY")
 
     # Always reload nginx to ensure stream configs are active
-    fn_validate_nginx
+    if ! fn_validate_nginx; then
+        print_error "Load balancer restore aborted: nginx configuration is invalid."
+        print_info "Load balancers are NOT listening. Re-run once resolved: tux2lab lb restore"
+        return 1
+    fi
     fn_reload_nginx
 
     print_success "All load balancers restored."

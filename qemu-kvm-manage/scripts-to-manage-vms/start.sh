@@ -150,7 +150,10 @@ print_task_done
 
 # ====== STEP 10: Restore load balancer IPs ======
 if [[ -f /tux2lab-data/lb-hub/lb-registry.json ]]; then
-    sudo /tux2lab/lb-manage/lbmanager.sh restore || true
+    if ! sudo /tux2lab/lb-manage/lbmanager.sh restore; then
+        print_warning "Load balancer restore failed. Load balancers are not listening."
+        print_info "Re-run once resolved: tux2lab lb restore"
+    fi
 fi
 
 # ====== STEP 11: Restore IPv6 forwarding if previously enabled ======
