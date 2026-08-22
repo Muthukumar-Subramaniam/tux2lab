@@ -456,6 +456,20 @@ tux2lab/
 
 ---
 
+## HA K8s Cluster Running on tux2lab
+
+Three control planes and four workers, with the control plane endpoint and workload
+publishing served by `tux2lab lb`.
+
+The infrastructure is provisioned and managed by tux2lab. The Kubernetes deployment
+itself is done with
+[install-k8s-on-linux](https://github.com/Muthukumar-Subramaniam/install-k8s-on-linux),
+a companion Ansible playbook for kubeadm-based clusters.
+
+![HA Kubernetes cluster running on tux2lab](docs/images/tux2lab-k8s-cluster.png)
+
+---
+
 ## Support & Contributing
 
 - Found a bug? Have ideas? [Open an issue](https://github.com/Muthukumar-Subramaniam/tux2lab/issues) on GitHub.
