@@ -192,7 +192,7 @@ else
     echo "    → chronyd started (default config, no clock adjust)"
 fi
 
-# --- 9. Start radvd (IPv6 Router Advertisements) ---
+# --- 8. Start radvd (IPv6 Router Advertisements) ---
 # Sends RAs on labbr0 so guest VMs get IPv6 addresses
 echo "[*] Starting radvd (IPv6 RA)..."
 if [[ -f "${DATA_DIR}/radvd/radvd.conf" ]]; then

@@ -34,7 +34,7 @@ _tux2lab_completions() {
     local distro_subcommands="list setup cleanup"
 
     # Golden image subcommands
-    local golden_image_subcommands="build create rebuild list cleanup"
+    local golden_image_subcommands="build rebuild list cleanup"
 
     # IPv6 route subcommands
     local ipv6_route_subcommands="enable disable check auto status"

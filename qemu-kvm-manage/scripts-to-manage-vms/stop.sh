@@ -50,15 +50,15 @@ print_cyan "tux2lab Infrastructure Shutdown"
 print_cyan "--------------------------------------------------------------"
 
 if [[ "${skip_confirm}" != "true" ]]; then
-    print_warning "This will shut down all running VMs and stop all tux2lab services."
+    print_yellow "This will shut down all running VMs and stop all tux2lab services."
 
     # Show running VMs if any
     running_vms_list=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
     if [[ -n "$running_vms_list" ]]; then
-        print_warning "The following VMs will be shut down:"
+        print_yellow "The following VMs will be shut down:"
         while IFS= read -r vm; do
             [[ -z "$vm" ]] && continue
-            print_warning "  - $vm"
+            print_yellow "  - $vm"
         done <<< "$running_vms_list"
     fi
 
