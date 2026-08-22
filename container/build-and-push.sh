@@ -11,6 +11,16 @@ VERSION=$(jq -r '.version' /tux2lab/project_version.json)
 GHCR="ghcr.io/muthukumar-subramaniam/tux2lab-engine"
 DOCKERHUB="docker.io/musubram/tux2lab-engine"
 
+# Root's credentials live on tmpfs and are lost on reboot, so check before the
+# build rather than discovering it after a full rebuild.
+for registry in ghcr.io docker.io; do
+    if ! sudo podman login --get-login "${registry}" &>/dev/null; then
+        echo "Not logged in to ${registry}."
+        echo "Run: sudo podman login ${registry}"
+        exit 1
+    fi
+done
+
 echo "Building tux2lab-engine:${VERSION}..."
 
 # Remove only tux2lab-engine images
