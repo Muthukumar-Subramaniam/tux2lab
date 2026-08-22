@@ -28,7 +28,7 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 - Multi-distribution support across Red Hat, Debian, and SUSE families
 - Dual-stack networking (IPv4 + IPv6) with per-VM stack mode selection
 - TCP load balancer management (nginx stream)
-- Containerized infrastructure: all lab services in a single rootful Podman container (~60 MB)
+- Containerized infrastructure: lab services in a single rootful Podman container (~60 MB)
 
 ---
 
@@ -36,21 +36,26 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 
 tux2lab runs on your Linux workstation (the **KVM host**) and creates a private
 virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:3000::/64`) with a
-**tux2lab-engine** container that provides all lab services on the gateway IP (`10.28.28.1`):
+**tux2lab-engine** container that provides the lab services on the gateway IP (`10.28.28.1`):
 
-| Service | Software | Purpose |
-|---|---|---|
-| DNS | BIND (named) | Local domain resolution |
-| DHCP | Kea (v4 + v6) | Automatic IP assignment |
-| PXE/TFTP | tftp-hpa + iPXE | Network boot for OS installs |
-| NTP | chrony | Time synchronization |
-| NFS | nfs-server | Shared storage |
-| HTTP/HTTPS | nginx | Boot ISO & kickstart serving |
-| IPv6 RA | radvd | Router advertisements |
+| Service | Software | Purpose | Runs In |
+|---|---|---|---|
+| DNS | BIND (named) | Local domain resolution | Container |
+| DHCP | Kea (v4 + v6) | Automatic IP assignment | Container |
+| PXE/TFTP | tftp-hpa + iPXE | Network boot for OS installs | Container |
+| NTP | chrony | Time synchronization | Container |
+| HTTP/HTTPS | nginx | Boot ISO & kickstart serving | Container |
+| IPv6 RA | radvd | Router advertisements | Container |
+| NFS | nfs-server | Shared storage | Host |
+
+> [!NOTE]
+> NFS is the one service that runs on the KVM host rather than in the container.
+> The kernel NFS server cannot export host-side ISO submounts from inside a
+> container because of mount namespace isolation.
 
 ### Infrastructure Container
 
-All lab services run inside a single **rootful Podman container** (`tux2lab-engine`)
+All lab services except NFS run inside a single **rootful Podman container** (`tux2lab-engine`)
 based on Alpine Linux 3.21 (~60 MB). The container uses `--network=host` to bind directly to the
 lab bridge interface, providing seamless network access for all guest VMs.
 
@@ -378,15 +383,18 @@ tux2lab disable                   Disable lab infrastructure auto-start on boot
 tux2lab health                    Check all lab service health
 tux2lab deploy                    Deploy the lab environment (one-time setup)
 tux2lab rebuild                   Regenerate configs and recreate container
-tux2lab rebuild --pull-image       Also pull latest container image from registry
+tux2lab rebuild --pull-image      Also pull latest container image from registry
 tux2lab destroy                   Permanently destroy the entire lab environment
 tux2lab info                      Show lab deployment details
 tux2lab credentials               Manage lab credentials (password, SSH keys, cert)
 tux2lab logflush                  Clear all service log files
 tux2lab dns [options]             Manage DNS records via dnsbinder
 tux2lab lb create                 Create a TCP load balancer
-tux2lab lb list                   List active load balancers
-tux2lab lb remove                 Remove a load balancer
+tux2lab lb delete                 Delete a load balancer
+tux2lab lb update                 Update backends, ports, or algorithm
+tux2lab lb list                   List all configured load balancers
+tux2lab lb status                 Check health of load balancers
+tux2lab lb restore                Re-apply secondary IPs from registry
 tux2lab ipv6-route enable         Add IPv6 route to lab network
 tux2lab ipv6-route disable        Remove IPv6 route
 tux2lab ipv6-route check          Check IPv6 connectivity and route status
@@ -407,7 +415,7 @@ These tools run on the KVM host and power the provisioning pipeline:
 | Tool | Purpose |
 |---|---|
 | **dnsbinder** | Manages BIND DNS zone records with automatic A/AAAA/CNAME/PTR creation and deletion as VMs are created or destroyed |
-| **ksmanager** | Orchestrates OS provisioning: generates kickstart/cloud-init/AutoYaST/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
+| **ksmanager** | Orchestrates OS provisioning: generates kickstart/cloud-init/preseed/Agama configs, manages iPXE boot entries, DHCP reservations, and golden image workflows |
 | **lbmanager** | Manages nginx TCP stream load balancers: creates VIPs, configures backends, manages DNS records |
 | **prepare-distro-for-ksmanager** | Downloads boot ISOs, registers distributions with ksmanager for PXE provisioning |
 
@@ -428,6 +436,7 @@ tux2lab/
 ├── named-manage/                DNS zone management (dnsbinder)
 ├── lb-manage/                   TCP load balancer management (lbmanager)
 ├── common-utils/                Shared utilities (color output, disk tools)
+├── shared-functions/            Host-side helpers (NFS, bridge firewall, container run)
 └── vendor/                      Vendored virt-manager (no system package needed)
 ```
 
@@ -443,6 +452,7 @@ tux2lab/
 | `/tux2lab-data/nginx/` | Nginx config |
 | `/tux2lab-data/tftpboot/` | iPXE boot files |
 | `/tux2lab-data/vms/` | VM disk images |
+| `/tux2lab-data/golden-images-disk-store/` | Golden image disks |
 
 ---
 
