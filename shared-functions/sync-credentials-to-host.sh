@@ -20,14 +20,18 @@ sync_credentials_to_host() {
             cp "${_lab_config}/ssh-keys/tux2lab_id_rsa.pub" "${_host_ssh_dir}/"
             chmod 600 "${_host_ssh_dir}/tux2lab_id_rsa"
             chmod 644 "${_host_ssh_dir}/tux2lab_id_rsa.pub"
-            # Smart update authorized_keys: replace lab key by domain, preserve others
-            local _auth_file="${_host_ssh_dir}/authorized_keys"
-            touch "$_auth_file"
-            sed -i "/ ${_lab_domain}$/d" "$_auth_file"
-            cat "${_lab_config}/ssh-keys/tux2lab_id_rsa.pub" >> "$_auth_file"
             chown -R "${_admin_user}:$(id -g "$_admin_user")" "${_host_ssh_dir}"
             _changed=true
         fi
+    fi
+
+    # The lab key is published over HTTP for provisioning, so it is never authorized on
+    # the host. Checked on every sync so "tux2lab rebuild" clears older deployments.
+    local _auth_file="${_host_ssh_dir}/authorized_keys"
+    if [[ -f "$_auth_file" ]] && grep -q " ${_lab_domain}$" "$_auth_file"; then
+        sed -i "/ ${_lab_domain}$/d" "$_auth_file"
+        chown "${_admin_user}:$(id -g "$_admin_user")" "$_auth_file"
+        _changed=true
     fi
 
     # SSH client config (marker-based block in ~/.ssh/config.custom)

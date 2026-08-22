@@ -152,14 +152,10 @@ credentials_ssh_keys() {
     mkdir -p "/home/${admin_user}/.ssh"
     cp "${ssh_dir}/tux2lab_id_rsa" "/home/${admin_user}/.ssh/"
     cp "${ssh_dir}/tux2lab_id_rsa.pub" "/home/${admin_user}/.ssh/"
-    # Smart update authorized_keys: replace existing lab key or append if not present
-    local new_pubkey
-    new_pubkey=$(cat "${ssh_dir}/tux2lab_id_rsa.pub")
+    # Lab key is never authorized on the host; strip entries from earlier deployments
     local auth_file="/home/${admin_user}/.ssh/authorized_keys"
-    if [[ -f "$auth_file" ]]; then
-        sed -i "/ ${lab_domain}$/d" "$auth_file"
-    fi
-    echo "$new_pubkey" >> "$auth_file"
+    touch "$auth_file"
+    sed -i "/ ${lab_domain}$/d" "$auth_file"
     chmod 600 "/home/${admin_user}/.ssh/tux2lab_id_rsa"
     chmod 644 "/home/${admin_user}/.ssh/tux2lab_id_rsa.pub" "$auth_file"
     chown -R "${admin_user}:$(id -g "$admin_user")" "/home/${admin_user}/.ssh"
