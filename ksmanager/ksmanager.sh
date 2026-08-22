@@ -3,6 +3,8 @@
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+# Note: strict mode is intentionally omitted. Provisioning artifacts are written under an
+# explicit host lock; an implicit abort could leave DNS/DHCP/iPXE state half-applied.
 
 if [[ -f /tux2lab-data/lab_environment_vars ]]; then
     source /tux2lab-data/lab_environment_vars

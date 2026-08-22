@@ -3,6 +3,8 @@
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
 #----------------------------------------------------------------------------------------#
+# Note: strict mode is intentionally omitted. Zone edits are transactional and guarded
+# by an explicit lock; an implicit abort could leave a zone file half-written.
 
 source /tux2lab/common-utils/color-functions.sh
 
