@@ -253,7 +253,8 @@ collect_credentials() {
     # Generate shadow-compatible hash
     local salt
     salt=$(openssl rand -hex 8 | head -c 16)
-    ADMIN_PASSWORD_HASH=$(openssl passwd -6 -salt "$salt" "$password_plain")
+    # Fed on stdin so the plaintext never appears in the process list
+    ADMIN_PASSWORD_HASH=$(printf '%s\n' "$password_plain" | openssl passwd -6 -salt "$salt" -stdin)
     unset password_plain confirm_password
 
     print_info "Credentials ready for user '${ADMIN_USERNAME}'."

@@ -110,7 +110,8 @@ credentials_password() {
     fi
 
     local hash
-    hash=$(openssl passwd -6 "$new_password")
+    # Fed on stdin so the plaintext never appears in the process list
+    hash=$(printf '%s\n' "$new_password" | openssl passwd -6 -stdin)
     echo -n "$hash" > "${LAB_CONFIG_DIR}/shadow-hash"
     chmod 644 "${LAB_CONFIG_DIR}/shadow-hash"
     # Update lab_environment.json (source of truth for deploy/rebuild)
