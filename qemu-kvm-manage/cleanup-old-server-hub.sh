@@ -263,9 +263,9 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
 
     # Remove old SSL cert/key files (server-hub used <FQDN>-nginx-selfsigned.{key,crt})
     if [[ -n "$lab_infra_server_hostname" ]]; then
-        local old_ssl_key="/etc/pki/tls/private/${lab_infra_server_hostname}-nginx-selfsigned.key"
-        local old_ssl_cert="/etc/pki/tls/certs/${lab_infra_server_hostname}-nginx-selfsigned.crt"
-        local old_ssl_anchor="/etc/pki/ca-trust/source/anchors/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+        old_ssl_key="/etc/pki/tls/private/${lab_infra_server_hostname}-nginx-selfsigned.key"
+        old_ssl_cert="/etc/pki/tls/certs/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+        old_ssl_anchor="/etc/pki/ca-trust/source/anchors/${lab_infra_server_hostname}-nginx-selfsigned.crt"
         if [[ -f "$old_ssl_key" || -f "$old_ssl_cert" || -f "$old_ssl_anchor" ]]; then
             print_task "Removing old server-hub SSL cert/key files..."
             sudo rm -f "$old_ssl_key" "$old_ssl_cert" "$old_ssl_anchor"

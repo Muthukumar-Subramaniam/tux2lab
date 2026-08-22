@@ -1282,7 +1282,7 @@ disk_type_for_the_vm="vda"
 fn_create_host_kickstart_dir() {
     host_kickstart_dir="${ksmanager_hub_dir}/kickstarts/${kickstart_hostname}"
     mkdir -p "${host_kickstart_dir}"
-    rm -rf "${host_kickstart_dir}"/*
+    rm -rf "${host_kickstart_dir:?}"/*
 }
 
 if $golden_image_creation_not_requested; then

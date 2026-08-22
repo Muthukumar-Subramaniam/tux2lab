@@ -1676,8 +1676,8 @@ fn_set_ptr_zone() {
     do
         arr_subnet_var="v_subnet${v_zone_number}"
         arr_ptr_zone_var="v_ptr_zone${v_zone_number}"
-        arr_subnets+=( "$(eval echo \${${arr_subnet_var}})" )
-        arr_ptr_zones+=( "$(eval echo \${${arr_ptr_zone_var}})" )
+        arr_subnets+=( "${!arr_subnet_var}" )
+        arr_ptr_zones+=( "${!arr_ptr_zone_var}" )
     done
 
     for i in "${!arr_subnets[@]}"
@@ -1708,8 +1708,9 @@ fn_get_ipv4_address() {
         # Use a regex pattern for IPv4 validation
         if [[ "$ipv4_provided" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
             # Check if each octet is in the range 0-255
-            for octet in ${BASH_REMATCH[@]:1}; do
-                if (( octet < 0 || octet > 255 )); then
+            # 10# forces base 10 so octets like "08" are not read as octal
+            for octet in "${BASH_REMATCH[@]:1}"; do
+                if (( 10#$octet > 255 )); then
                     return 1
                 fi
             done

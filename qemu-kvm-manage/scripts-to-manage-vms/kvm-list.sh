@@ -59,7 +59,7 @@ done < <(sudo virsh list --all | awk 'NR>2 && $2 != "" {print $2, $3}')
 # Collect data (parallel)
 # ────────────────────────────────────────────────────────────────
 tmp_dir=$(mktemp -d)
-trap "rm -rf $tmp_dir" EXIT
+trap 'rm -rf "$tmp_dir"' EXIT
 
 check_vm() {
     local vm_name=$1

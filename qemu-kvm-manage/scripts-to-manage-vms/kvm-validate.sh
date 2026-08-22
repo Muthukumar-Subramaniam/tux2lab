@@ -362,7 +362,7 @@ fn_validate_vm() {
         case "$check" in
             FQDN*|DNS*)                    section="Identity" ;;
             eth0*|IPv*|*route*|*DAD*|*Manager*|*networkd*|wicked*|Firewall*|Ping*) section="Networking" ;;
-            Root*|EFI*|growpart*)           section="Filesystem" ;;
+            Root\ filesystem*|Root\ disk*|EFI*|growpart*) section="Filesystem" ;;
             SSH\ active|Chrony*|NTP*)   section="Services" ;;
             Mgmt*|Sudo*|SSH\ auth*|SSH\ priv*|Root\ SSH*|SSH\ client*) section="User & Auth" ;;
             CA*|HTTPS*)                    section="CA Certificate" ;;
