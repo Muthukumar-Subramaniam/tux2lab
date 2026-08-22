@@ -175,7 +175,7 @@ for disk in "${DISKS_TO_DELETE[@]}"; do
 done
 
 # Confirm deletion
-print_warning "WARNING: The following disk(s) will be PERMANENTLY DELETED:"
+print_warning "The following disk(s) will be PERMANENTLY DELETED:"
 for disk in "${DISKS_TO_DELETE[@]}"; do
     disk_path="$DETACHED_DIR/$disk"
     disk_size=""
@@ -204,9 +204,9 @@ print_warning "This action CANNOT be undone!"
 # Special confirmation for lab infra server disks
 if [[ ${#lab_infra_disks[@]} -gt 0 ]]; then
     echo ""
-    print_warning "⚠️  WARNING: You are deleting ${#lab_infra_disks[@]} disk(s) from the lab infra server!"
-    print_warning "These disks belonged to: $lab_infra_server_hostname"
-    print_warning "Ensure you have backups before proceeding."
+    print_warning "You are deleting ${#lab_infra_disks[@]} disk(s) from the lab infra server!"
+    print_yellow "  These disks belonged to: $lab_infra_server_hostname
+  Ensure you have backups before proceeding."
     read -rp "Type 'delete-lab-infra-disks' to confirm deletion of lab infra server disks: " lab_confirm
     if [[ "$lab_confirm" != "delete-lab-infra-disks" ]]; then
         print_info "Operation cancelled by user."

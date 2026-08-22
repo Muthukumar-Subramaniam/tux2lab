@@ -47,7 +47,6 @@ _tux2lab_completions() {
     unset _DISTRO_VERSIONS_CONF_LOADED
     source /tux2lab/ksmanager/distro-versions.conf 2>/dev/null || true
     local all_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
-    local rhel_distros="almalinux rocky oraclelinux centos-stream rhel"
 
     # Existing VM names (from filesystem — instant, no virsh overhead)
     local existing_vms
@@ -300,16 +299,6 @@ _tux2lab_completions() {
             return 0
         fi
 
-        # Complete RHEL-based distro names after download-infra-iso
-        if [[ ${COMP_CWORD} -eq 3 ]] && [[ "${distro_subcmd}" == "download-infra-iso" ]]; then
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
-            else
-                COMPREPLY=( $(compgen -W "${rhel_distros}" -- "${cur}") )
-            fi
-            return 0
-        fi
-
         # Complete --version/-v flag after distro name for setup/cleanup
         if [[ "${distro_subcmd}" == "setup" || "${distro_subcmd}" == "cleanup" ]]; then
             # Offer versions after -v/--version
@@ -550,7 +539,7 @@ _tux2lab_completions() {
 
     # ===== DESTROY COMMAND =====
     if [[ "${cmd}" == "destroy" ]]; then
-        local all_opts="--wipe-iso-files-too -h --help"
+        local all_opts="-h --help"
         local opts=""
         for opt in $all_opts; do
             local already_used=false

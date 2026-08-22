@@ -10,8 +10,6 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 
 # ====== FLAG PARSING ======
-wipe_iso_files=false
-
 declare -A _seen_args
 for arg in "$@"; do
     if [[ -n "${_seen_args[$arg]:-}" ]]; then
@@ -22,22 +20,18 @@ for arg in "$@"; do
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
-    tux2lab destroy [OPTIONS]
+    tux2lab destroy
 
 DESCRIPTION:
     Permanently destroy the entire lab environment including all VMs, data,
-    DNS, networking, and the container. This cannot be undone.
-    Downloaded boot ISO files are preserved by default.
+    DNS, networking, downloaded ISO files, and the container.
+    This cannot be undone.
 
 OPTIONS:
-    --wipe-iso-files-too    Also delete downloaded boot ISO files
     -h, --help              Show this help message
 
     Requires typing 'DESTROY-THE-LAB-AND-ALL-ITS-DATA' to confirm."
             exit 0
-            ;;
-        --wipe-iso-files-too)
-            wipe_iso_files=true
             ;;
         *)
             print_error "Unknown argument: $arg"
@@ -68,41 +62,50 @@ if [[ -f "$LAB_ENV_JSON" ]]; then
 fi
 
 # ====== DETECT LAB STATE (for display only, not for early exit) ======
+# Captured before teardown, since afterwards there is nothing left to inspect
+lab_existed=false
+if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null \
+   || [[ -f "${LAB_ENV_JSON}" ]] \
+   || sudo virsh net-info tux2lab &>/dev/null \
+   || ip link show labbr0 &>/dev/null \
+   || compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
+    lab_existed=true
+fi
 
 # ====== HEADER ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
 print_red  "              DESTROY LAB — COMPLETE LAB TEARDOWN"
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
-echo
-print_warning "This operation will PERMANENTLY DESTROY:"
-print_warning "  • The tux2lab-engine container and all services"
-print_warning "  • All virtual machines and their data"
-print_warning "  • Lab network bridge and virtual network"
-print_warning "  • Lab config, SSH keys, SSL certificates"
-print_warning "  • VM disks, golden images, ksmanager data"
-
-if $wipe_iso_files; then
-    print_warning "  • Downloaded boot ISO files (--wipe-iso-files-too)"
-else
-    print_info "  Boot ISO files will be PRESERVED (use --wipe-iso-files-too to remove)"
+# Optional entry, empty when no ISOs have been downloaded
+iso_entry=""
+if [[ -d /tux2lab-data/iso-files ]] && compgen -G "/tux2lab-data/iso-files/*" >/dev/null 2>&1; then
+    iso_size=$(du -sh /tux2lab-data/iso-files 2>/dev/null | cut -f1 || true)
+    iso_entry="
+  • Downloaded ISO files${iso_size:+ (${iso_size})}"
 fi
+
+print_yellow "This operation will PERMANENTLY DESTROY:
+  • The tux2lab-engine container and all services
+  • All virtual machines and their data
+  • Lab network bridge and virtual network
+  • Lab config, SSH keys, SSL certificates
+  • VM disks, golden images, ksmanager data${iso_entry}"
 
 # ====== LIST VMs THAT WILL BE DESTROYED ======
-all_vms=$(sudo virsh list --all --name 2>/dev/null | grep -v "^$" || true)
-if [[ -n "$all_vms" ]]; then
-    echo
-    print_warning "The following VMs will be DESTROYED:"
-    while IFS= read -r vm; do
-        [[ -z "$vm" ]] && continue
-        vm_state=$(sudo virsh domstate "$vm" 2>/dev/null || echo "unknown")
-        print_warning "  - ${vm} (${vm_state})"
-    done <<< "$all_vms"
+# Single virsh call yields name and state together
+vm_list=""
+while IFS='|' read -r vm vm_state; do
+    [[ -z "$vm" ]] && continue
+    vm_list+="
+  - ${vm} (${vm_state})"
+done < <(sudo virsh list --all 2>/dev/null | awk 'NR>2 && NF {name=$2; $1=""; $2=""; sub(/^[ \t]+/,""); sub(/[ \t]+$/,""); print name"|"$0}')
+
+if [[ -n "$vm_list" ]]; then
+    print_yellow "The following VMs will be DESTROYED:${vm_list}"
 fi
 
-echo
 print_red "THIS ACTION CANNOT BE UNDONE."
-echo
 echo -n "Type DESTROY-THE-LAB-AND-ALL-ITS-DATA to confirm: "
 read -r confirmation
 
@@ -277,32 +280,12 @@ if mount | grep -q "/tux2lab-data/os-repos/"; then
 fi
 
 if [[ -d "/tux2lab-data" ]]; then
-    if $wipe_iso_files; then
-        print_task "Wiping /tux2lab-data/ contents (including ISOs)..."
-        if compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
-            sudo rm -rf /tux2lab-data/*
-            print_task_done
-        else
-            print_task_skip
-        fi
+    print_task "Wiping /tux2lab-data/ contents..."
+    if compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
+        sudo rm -rf /tux2lab-data/*
+        print_task_done
     else
-        print_task "Wiping /tux2lab-data/ contents (preserving ISOs)..."
-        has_content=false
-        for item in /tux2lab-data/*; do
-            [[ ! -e "$item" ]] && continue
-            [[ "$(basename "$item")" == "iso-files" ]] && continue
-            has_content=true
-            break
-        done
-        if $has_content; then
-            for item in /tux2lab-data/*; do
-                [[ "$(basename "$item")" == "iso-files" ]] && continue
-                sudo rm -rf "$item"
-            done
-            print_task_done
-        else
-            print_task_skip
-        fi
+        print_task_skip
     fi
 fi
 
@@ -317,20 +300,15 @@ fi
 
 # ====== SUMMARY ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
-# Check if anything was actually present to destroy
 if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null \
    || [[ -f "${LAB_ENV_JSON}" ]] \
    || sudo virsh net-info tux2lab &>/dev/null 2>&1 \
    || ip link show labbr0 &>/dev/null 2>&1; then
     print_warning "Some components could not be fully removed. Run again or check manually."
-elif [[ -d "/tux2lab-data" ]] && compgen -G "/tux2lab-data/*" >/dev/null 2>&1 \
-     && [[ "$(ls /tux2lab-data/ 2>/dev/null | grep -cv '^iso-files$')" -gt 0 ]]; then
+elif $lab_existed; then
     print_success "Lab has been completely destroyed."
 else
     print_info "Lab is already clean — nothing to destroy."
-fi
-if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
-    print_cyan "ISO files preserved at /tux2lab-data/iso-files/"
 fi
 print_cyan "
 If you wish to rebuild your lab:

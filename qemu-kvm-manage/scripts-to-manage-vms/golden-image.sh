@@ -242,7 +242,7 @@ golden_image_cleanup() {
         if [[ "$force" != true ]]; then
             print_warning "The following golden image(s) will be permanently deleted:"
             for f in "${files_to_remove[@]}"; do
-                print_info "  $(basename "$f")"
+                echo "  $(basename "$f")"
             done
             echo -n "Type YES to confirm deletion: "
             read -r confirm
@@ -318,7 +318,7 @@ golden_image_cleanup() {
     if [[ "$force" != true ]]; then
         print_warning "The following golden image(s) will be permanently deleted:"
         for f in "${files_to_remove[@]}"; do
-            print_info "  $(basename "$f")"
+            echo "  $(basename "$f")"
         done
         echo -n "Type YES to confirm deletion: "
         read -r confirm

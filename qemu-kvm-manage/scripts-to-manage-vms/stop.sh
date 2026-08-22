@@ -55,11 +55,13 @@ if [[ "${skip_confirm}" != "true" ]]; then
     # Show running VMs if any
     running_vms_list=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
     if [[ -n "$running_vms_list" ]]; then
-        print_yellow "The following VMs will be shut down:"
+        vm_list=""
         while IFS= read -r vm; do
             [[ -z "$vm" ]] && continue
-            print_yellow "  - $vm"
+            vm_list+="
+  - $vm"
         done <<< "$running_vms_list"
+        print_yellow "The following VMs will be shut down:${vm_list}"
     fi
 
     echo -n "Type CONFIRM to proceed: "
