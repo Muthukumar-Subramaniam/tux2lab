@@ -81,18 +81,18 @@ run_ksmanager() {
     if [[ "$ksmanager_options" == *"--create-golden-image"* ]]; then
         if [[ -z "${EXTRACTED_HOSTNAME}" ]]; then
             print_error "Failed to extract hostname from ksmanager output."
-            print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+            print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
             return 1
         fi
     else
         if [[ "${STACK_MODE}" != "ipv6" ]] && [[ -z "${IPV4_ADDRESS}" ]]; then
             print_error "Failed to extract IPv4 address from ksmanager output."
-            print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+            print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
             return 1
         fi
         if [[ "${STACK_MODE}" != "ipv4" ]] && [[ -z "${IPV6_ADDRESS}" ]]; then
             print_error "Failed to extract IPv6 address from ksmanager output."
-            print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+            print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
             return 1
         fi
     fi
@@ -100,7 +100,7 @@ run_ksmanager() {
     # OS_DISTRO is optional - only validate if it was expected (golden-image mode)
     if [[ "$ksmanager_options" == *"--golden-image"* && -z "${OS_DISTRO}" ]]; then
         print_error "Failed to extract OS distro from ksmanager output."
-        print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+        print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
         return 1
     fi
 

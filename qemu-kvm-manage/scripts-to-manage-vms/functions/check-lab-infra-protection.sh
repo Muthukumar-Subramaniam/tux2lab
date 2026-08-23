@@ -2,7 +2,7 @@
 #
 # check-lab-infra-protection.sh
 # 
-# Prevents reimaging of the lab infrastructure server VM
+# Prevents reimaging anything that uses the lab infrastructure hostname
 #
 # Usage:
 #   source /path/to/check-lab-infra-protection.sh
@@ -23,8 +23,8 @@ check_lab_infra_protection() {
     
     if [[ "$vm_hostname" == "$lab_infra_server_hostname" ]]; then
         print_error "Cannot reimage Lab Infra Server!"
-        print_warning "You are attempting to reimage the lab infrastructure server VM: $lab_infra_server_hostname"
-        print_info "This VM hosts critical services and must not be destroyed."
+        print_warning "'$lab_infra_server_hostname' is the lab infrastructure container, not a VM."
+        print_info "It hosts critical services and must not be destroyed."
         if [[ $total_vms -eq 1 ]]; then
             exit 1
         fi
