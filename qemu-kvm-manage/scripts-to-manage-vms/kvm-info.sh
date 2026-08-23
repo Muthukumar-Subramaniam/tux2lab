@@ -45,7 +45,6 @@ EXAMPLES:
 
 # Parse command-line arguments
 hosts_list=""
-single_host=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -87,10 +86,6 @@ if [[ -n "$hosts_list" ]]; then
         exit 1
     fi
     target_vms=("${VALIDATED_HOSTS[@]}")
-elif [[ -n "$single_host" ]]; then
-    # Validate and normalize single hostname
-    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$single_host" "ALLOW_SELF_REFERENCE"
-    target_vms=("$qemu_kvm_hostname")
 else
     # Get all VMs
     mapfile -t target_vms < <(sudo virsh list --all | awk 'NR>2 && $2 != "" {print $2}')

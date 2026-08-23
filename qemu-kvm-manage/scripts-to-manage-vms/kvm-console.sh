@@ -58,7 +58,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Use argument or prompt for hostname
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg" "ALLOW_SELF_REFERENCE"
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
 # Check if VM exists in 'virsh list --all'
 if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then

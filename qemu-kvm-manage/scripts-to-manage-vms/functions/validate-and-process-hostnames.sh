@@ -40,6 +40,11 @@ validate_and_process_hostnames() {
             fi
             normalized="${vm_name}.${lab_infra_domain_name}"
         fi
+        if [[ "${normalized}" == "${lab_infra_server_hostname}" ]]; then
+            print_error "'${normalized}' is the lab infrastructure container, not a VM."
+            print_info "Use 'tux2lab info' or 'tux2lab health' to inspect lab infrastructure."
+            return 1
+        fi
         validated_hosts+=("$normalized")
     done
     
