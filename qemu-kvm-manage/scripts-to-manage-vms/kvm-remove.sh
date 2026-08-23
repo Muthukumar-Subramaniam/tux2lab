@@ -69,16 +69,7 @@ remove_vm() {
     fi
     print_task_done
     
-    # Special confirmation for lab infra server (always required)
-    if [[ "$vm_name" == "$lab_infra_server_hostname" ]]; then
-        print_warning "VM \"$vm_name\" uses the lab engine hostname: $lab_infra_server_hostname!"
-        read -r -p "If you know what you are doing, confirm by typing 'delete-lab-infra-server': " confirmation
-        if [[ "$confirmation" != "delete-lab-infra-server" ]]; then
-            print_info "Operation cancelled by user."
-            return 3
-        fi
-    elif [[ "$skip_confirmation" == false ]]; then
-        # Regular confirmation for other VMs
+    if [[ "$skip_confirmation" == false ]]; then
         print_warning "This will permanently delete VM \"$vm_name\" and all associated files!"
         read -rp "Are you sure you want to proceed? (YES/NO): " confirmation
         if [[ "$confirmation" != "YES" ]]; then

@@ -106,18 +106,6 @@ done
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to resize the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This operation requires shutting down all lab services temporarily."
-    print_warning "CPU/Memory/Disk changes may affect the performance of lab services."
-    read -r -p "If you understand the impact, confirm by typing 'resize-lab-infra-server': " confirmation
-    if [[ "$confirmation" != "resize-lab-infra-server" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-fi
-
 # Check if VM exists in 'virsh list --all'
 print_task "Checking if VM exists..."
 if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then

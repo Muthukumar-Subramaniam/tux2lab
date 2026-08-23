@@ -80,18 +80,6 @@ done
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to detach disk(s) from the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This operation requires shutting down the lab infra server temporarily."
-    print_warning "Boot disk (vda) cannot be detached and will be automatically excluded."
-    read -r -p "If you understand the impact, confirm by typing 'detach-disk-from-lab-infra': " confirmation
-    if [[ "$confirmation" != "detach-disk-from-lab-infra" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-fi
-
 # Check if VM exists
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
 check_vm_exists "$qemu_kvm_hostname" "reimage"

@@ -105,13 +105,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Prevent reimaging of lab infra server
-    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-lab-infra-protection.sh
-    if ! check_lab_infra_protection "$qemu_kvm_hostname"; then
-        FAILED_VMS+=("$qemu_kvm_hostname")
-        continue
-    fi
-    
     # Confirm reimage operation
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/confirm-reimage-operation.sh
     if ! confirm_reimage_operation "$qemu_kvm_hostname" "golden image"; then

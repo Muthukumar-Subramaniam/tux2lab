@@ -86,18 +86,6 @@ if ! check_vm_exists "$qemu_kvm_hostname" "reimage"; then
     exit 1
 fi
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to remove NIC(s) from the lab infra server: $lab_infra_server_hostname!"
-    print_warning "Removing the primary network interface will break lab connectivity."
-    print_warning "This operation requires shutting down the lab infra server temporarily."
-    read -r -p "If you understand the impact, confirm by typing 'remove-nic-from-lab-infra': " confirmation
-    if [[ "$confirmation" != "remove-nic-from-lab-infra" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-fi
-
 fn_shutdown_or_poweroff() {
     # If force flag is set, try graceful shutdown first, then force if needed
     if [[ "$force_poweroff" == true ]]; then
