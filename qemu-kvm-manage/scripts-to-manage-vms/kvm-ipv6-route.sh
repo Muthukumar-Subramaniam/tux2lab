@@ -11,6 +11,7 @@ source /tux2lab/common-utils/color-functions.sh
 
 # Source lab environment
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
+source /tux2lab/shared-functions/lab-state.sh
 
 # Validate required variables
 if [[ ! -f "${LAB_ENV_JSON}" ]]; then
@@ -334,18 +335,23 @@ fi
 
 case "${1}" in
     enable)
+        fn_require_lab_running
         fn_enable_all
         ;;
     disable)
+        fn_require_lab_running
         fn_disable_all
         ;;
     auto)
+        fn_require_lab_running
         fn_auto_configure
         ;;
     check)
+        fn_require_lab_running
         fn_check_and_report
         ;;
     status)
+        fn_require_lab_running
         fn_show_status
         ;;
     -h|--help)

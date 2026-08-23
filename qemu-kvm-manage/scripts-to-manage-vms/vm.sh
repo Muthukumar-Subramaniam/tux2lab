@@ -11,6 +11,7 @@ set -euo pipefail
 
 # Source color functions
 source /tux2lab/common-utils/color-functions.sh
+source /tux2lab/shared-functions/lab-state.sh
 
 # Script directory - same directory as this script
 SCRIPT_DIR="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
@@ -125,7 +126,11 @@ main() {
         print_error "Script not found: $script_name"
         exit 1
     fi
-    
+
+    # Every VM subcommand talks to libvirt, so stop here rather than let
+    # virsh print connection errors and still exit 0.
+    fn_require_lab_running_unless_help "$@"
+
     # Execute the underlying script with all remaining arguments
     exec "$script_path" "$@"
 }
