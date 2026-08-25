@@ -2,7 +2,7 @@
 #----------------------------------------------------------------------------------------#
 # Script Name : tux2lab-iso-mounts.sh
 # Description : Mount/unmount all ISO files listed in the iso-mounts config
-# Used by     : tux2lab-iso-mounts.service (systemd)
+# Used by     : tux2lab start/stop
 # If you encounter any issues with this script, or have suggestions or feature requests, #
 # please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues      #
 #----------------------------------------------------------------------------------------#

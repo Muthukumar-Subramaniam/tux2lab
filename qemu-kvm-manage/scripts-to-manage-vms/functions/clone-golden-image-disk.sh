@@ -31,6 +31,10 @@ clone_golden_image_disk() {
         # Verify the cloned disk exists and has size
         if [[ -f "${vm_disk_path}" ]] && \
            [[ $(stat -c%s "${vm_disk_path}" 2>/dev/null || echo 0) -gt 0 ]]; then
+            # Resize disk if requested size exceeds golden image default (30G)
+            if [[ "${VM_DISK_SIZE:-30}" -gt 30 ]]; then
+                sudo qemu-img resize "${vm_disk_path}" "${VM_DISK_SIZE}G" &>/dev/null || true
+            fi
             print_task_done
             return 0
         else

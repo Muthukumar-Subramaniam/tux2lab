@@ -1,7 +1,15 @@
+# Manages /etc/hosts entries for tux2lab using a state file and marker block.
+# State file: /tux2lab-data/lab-config/etc-hosts.state
+# All lab entries live between "# BEGIN tux2lab" / "# END tux2lab" markers.
+
+[[ -z "${ETC_HOSTS_STATE:-}" ]] && readonly ETC_HOSTS_STATE="/tux2lab-data/lab-config/etc-hosts.state"
+[[ -z "${ETC_HOSTS_MARKER_BEGIN:-}" ]] && readonly ETC_HOSTS_MARKER_BEGIN="# BEGIN tux2lab"
+[[ -z "${ETC_HOSTS_MARKER_END:-}" ]] && readonly ETC_HOSTS_MARKER_END="# END tux2lab"
+
 [[ -z "${ETC_HOSTS_LOCK_DIR:-}" ]] && readonly ETC_HOSTS_LOCK_DIR="/tux2lab-data/.etc-hosts.lock"
 ETC_HOSTS_LOCK_ACQUIRED=false
 
-fn_acquire_etc_hosts_lock() {
+_acquire_etc_hosts_lock() {
     local retries=200
     local existing_pid=""
 
@@ -18,7 +26,6 @@ fn_acquire_etc_hosts_lock() {
         sleep 0.05
         retries=$((retries - 1))
         if [[ "${retries}" -le 0 ]]; then
-            print_error "Unable to acquire /etc/hosts lock. Please retry."
             return 1
         fi
     done
@@ -27,7 +34,7 @@ fn_acquire_etc_hosts_lock() {
     ETC_HOSTS_LOCK_ACQUIRED=true
 }
 
-fn_release_etc_hosts_lock() {
+_release_etc_hosts_lock() {
     if ! $ETC_HOSTS_LOCK_ACQUIRED; then
         return
     fi
@@ -45,47 +52,80 @@ fn_release_etc_hosts_lock() {
     ETC_HOSTS_LOCK_ACQUIRED=false
 }
 
-update_etc_hosts() {
+# Replace the marker block in /etc/hosts with current state file content
+sync_etc_hosts() {
+    if ! _acquire_etc_hosts_lock; then
+        print_error "Unable to acquire /etc/hosts lock."
+        return 1
+    fi
+
+    # Remove existing marker block
+    if grep -q "${ETC_HOSTS_MARKER_BEGIN}" /etc/hosts 2>/dev/null; then
+        sudo sed -i "/${ETC_HOSTS_MARKER_BEGIN}/,/${ETC_HOSTS_MARKER_END}/d" /etc/hosts
+    fi
+
+    # Append state file content as marker block
+    if [[ -s "${ETC_HOSTS_STATE}" ]]; then
+        {
+            echo "${ETC_HOSTS_MARKER_BEGIN}"
+            cat "${ETC_HOSTS_STATE}"
+            echo "${ETC_HOSTS_MARKER_END}"
+        } | sudo tee -a /etc/hosts >/dev/null
+    fi
+
+    _release_etc_hosts_lock
+}
+
+# Add or update a host entry in state file, then sync
+add_etc_hosts_entry() {
     local hostname="$1"
     local ipv4_address="$2"
     local ipv6_address="$3"
-    local hosts_file="/etc/hosts"
-    local error_msg=""
 
-    if [[ -z "$hostname" || -z "$ipv4_address" || -z "$ipv6_address" ]]; then
-        print_error "update_etc_hosts requires hostname, IPv4 address, and IPv6 address"
+    if [[ -z "$hostname" ]]; then
+        print_error "add_etc_hosts_entry requires hostname."
+        return 1
+    fi
+    if [[ -z "$ipv4_address" && -z "$ipv6_address" ]]; then
+        print_error "add_etc_hosts_entry requires at least one IP address."
         return 1
     fi
 
-    print_task "Updating ${hosts_file} file for ${hostname} (dual-stack)..."
+    touch "${ETC_HOSTS_STATE}"
 
-    # Acquire lock to prevent concurrent /etc/hosts modifications
-    if ! fn_acquire_etc_hosts_lock; then
-        print_task_fail
-        return 1
-    fi
-
-    # Remove any existing entries for this hostname (escape dots for regex)
     local escaped_hostname="${hostname//./\\.}"
-    if grep -q "${hostname}" "$hosts_file"; then
-        if ! error_msg=$(sudo sed -i.bak "/[[:space:]]${escaped_hostname}$/d" "$hosts_file" 2>&1); then
-            fn_release_etc_hosts_lock
-            print_task_fail
-            print_error "$error_msg"
-            return 1
-        fi
+    sed -i "/[[:space:]]${escaped_hostname}$/d" "${ETC_HOSTS_STATE}" 2>/dev/null || true
+
+    [[ -n "$ipv4_address" ]] && printf '%s\t%s\n' "${ipv4_address}" "${hostname}" >> "${ETC_HOSTS_STATE}"
+    [[ -n "$ipv6_address" ]] && printf '%s\t%s\n' "${ipv6_address}" "${hostname}" >> "${ETC_HOSTS_STATE}"
+
+    sync_etc_hosts
+}
+
+# Remove a host entry from state file, then sync
+remove_etc_hosts_entry() {
+    local hostname="$1"
+
+    if [[ ! -f "${ETC_HOSTS_STATE}" ]]; then
+        return 0
     fi
 
-    # Add both IPv4 and IPv6 entries
-    if ! error_msg=$(echo -e "${ipv4_address}\t${hostname}\n${ipv6_address}\t${hostname}" | sudo tee -a "$hosts_file" >/dev/null 2>&1); then
-        fn_release_etc_hosts_lock
-        print_task_fail
-        print_error "Failed to add host entries for ${hostname} to ${hosts_file}."
-        [[ -n "$error_msg" ]] && print_error "$error_msg"
+    local escaped_hostname="${hostname//./\\.}"
+    sed -i "/[[:space:]]${escaped_hostname}$/d" "${ETC_HOSTS_STATE}" 2>/dev/null || true
+
+    sync_etc_hosts
+}
+
+# Remove the entire marker block from /etc/hosts (used by stop/destroy)
+remove_etc_hosts_block() {
+    if ! _acquire_etc_hosts_lock; then
+        print_error "Unable to acquire /etc/hosts lock."
         return 1
     fi
 
-    fn_release_etc_hosts_lock
-    print_task_done
-    return 0
+    if grep -q "${ETC_HOSTS_MARKER_BEGIN}" /etc/hosts 2>/dev/null; then
+        sudo sed -i "/${ETC_HOSTS_MARKER_BEGIN}/,/${ETC_HOSTS_MARKER_END}/d" /etc/hosts
+    fi
+
+    _release_etc_hosts_lock
 }

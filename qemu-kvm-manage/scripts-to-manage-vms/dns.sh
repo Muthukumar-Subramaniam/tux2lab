@@ -10,64 +10,10 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
-# ====== HELP ======
+# Let dnsbinder handle --help directly (no resolvectl needed for help)
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    print_cyan "Domain   : ${lab_infra_domain_name}
-IPv4 Net : ${lab_infra_server_ipv4_subnet}
-IPv6 Net : ${lab_infra_server_ipv6_ula_subnet}
-
-USAGE:
-    tux2lab dns [options] [arguments]
-
-DESCRIPTION:
-    Manage DNS records for the lab infrastructure via dnsbinder.
-    Run without arguments for an interactive menu.
-
-OPTIONS (passed to dnsbinder):
-    -c,    --create              Create a host record (dual-stack: A + AAAA)
-    -d,    --delete              Delete a host record (removes A + AAAA)
-    -dy                          Delete without confirmation
-    -r,    --rename              Rename an existing host record
-    -ry                          Rename without confirmation
-    -cf,   --create-from-file    Create multiple host records from a file
-    -cfy                         Create multiple host records without confirmation
-    -cif,  --create-with-ip-file Create host records with specific IPs from a file
-    -cify                        Create with specific IPs without confirmation
-    -df,   --delete-from-file    Delete multiple host records from a file
-    -dfy                         Delete multiple host records without confirmation
-    -ci,   --create-with-ip      Create a host record with specific IPv4 (auto-generates IPv6)
-    -cc,   --create-cname        Create a CNAME/Alias record
-    -dc,   --delete-cname        Delete a CNAME/Alias record
-    -dcy                         Delete CNAME without confirmation
-    -q,    --query               Lookup any record and display all its relevant records
-    -y,    --yes                 Append to any command to skip confirmation prompts
-    --inline                     Suppress TUI (no screen clear/cursor control) for bulk operations
-    --setup                      Configure DNS domain and server (admin/internal)"
+    sudo /tux2lab/named-manage/dnsbinder.sh --help
     exit 0
-fi
-
-# ====== VALIDATE OPTION ======
-if [[ $# -gt 0 ]]; then
-    valid_options=(-c --create -d --delete -dy -r --rename -ry
-                   -cf --create-from-file -cfy
-                   -cif --create-with-ip-file -cify
-                   -df --delete-from-file -dfy
-                   -ci --create-with-ip -cc --create-cname
-                   -dc --delete-cname -dcy
-                   -q --query
-                   --setup -y --yes --inline)
-    option_is_valid=false
-    for opt in "${valid_options[@]}"; do
-        if [[ "$1" == "$opt" ]]; then
-            option_is_valid=true
-            break
-        fi
-    done
-    if ! $option_is_valid; then
-        print_error "Unknown option: $1"
-        echo "Run 'tux2lab dns --help' for usage information."
-        exit 1
-    fi
 fi
 
 # ====== PREREQUISITE: labbr0 must be up ======
@@ -99,94 +45,12 @@ else
 fi
 
 # ====== INVOKE DNSBINDER ======
-print_info "Invoking dnsbinder utility from lab infra server..."
+print_info "Invoking dnsbinder utility..."
 
 exit_code=0
+sudo /tux2lab/named-manage/dnsbinder.sh "$@" || exit_code=$?
 
-if $lab_infra_server_mode_is_host; then
-    sudo /tux2lab/named-manage/dnsbinder.sh "$@" || exit_code=$?
-else
-    # SSH connection options
-    ssh_opts=(-o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
-    ssh_target="${lab_infra_admin_username}@${lab_infra_server_hostname}"
-
-    # Verify SSH connectivity before proceeding
-    if ! ssh "${ssh_opts[@]}" -o ConnectTimeout=5 "$ssh_target" true &>/dev/null; then
-        print_error "Cannot reach lab infra server via SSH."
-        print_info "Ensure the infra server is running: tux2lab health"
-        exit 1
-    fi
-
-    # Check if this is a file-based operation
-    file_based_option=""
-    file_path=""
-    yes_flag=""
-    inline_flag=""
-
-    # Detect trailing --yes / -y and --inline modifiers
-    for arg in "$@"; do
-        if [[ "$arg" == "--yes" || "$arg" == "-y" ]]; then
-            yes_flag="--yes"
-        elif [[ "$arg" == "--inline" ]]; then
-            inline_flag="--inline"
-        fi
-    done
-
-    if [[ $# -ge 2 ]] && { [[ "$1" == "-cf" ]] || [[ "$1" == "--create-from-file" ]] || [[ "$1" == "-cfy" ]] || [[ "$1" == "-df" ]] || [[ "$1" == "--delete-from-file" ]] || [[ "$1" == "-dfy" ]] || [[ "$1" == "-cif" ]] || [[ "$1" == "--create-with-ip-file" ]] || [[ "$1" == "-cify" ]]; }; then
-        file_based_option="$1"
-        file_path="$2"
-
-        # Validate no unexpected arguments after the file (only --yes/-y/--inline allowed)
-        for arg in "${@:3}"; do
-            if [[ "$arg" != "--yes" && "$arg" != "-y" && "$arg" != "--inline" ]]; then
-                print_error "Unexpected argument: $arg"
-                print_info "'$1' takes only a file argument and optional --yes/--inline flags."
-                exit 1
-            fi
-        done
-
-        # Validate that file exists locally
-        if [[ ! -f "$file_path" ]]; then
-            print_error "File not found: $file_path"
-            exit 1
-        fi
-
-        # Create secure temp file on remote server
-        if ! remote_temp_file=$(ssh "${ssh_opts[@]}" "$ssh_target" "mktemp /tmp/dnsbinder-bulk.XXXXXXXXXX" 2>/dev/null); then
-            print_error "Failed to create temp file on lab infra server."
-            exit 1
-        fi
-        if [[ -z "$remote_temp_file" ]]; then
-            print_error "Failed to create temp file on lab infra server."
-            exit 1
-        fi
-
-        # Ensure remote temp file is cleaned up on exit or interrupt
-        cleanup_remote_temp() {
-            ssh "${ssh_opts[@]}" "$ssh_target" "rm -f '${remote_temp_file}'" >/dev/null 2>&1 || true
-        }
-        trap cleanup_remote_temp EXIT INT TERM
-
-        print_task "Transferring file to lab infra server..."
-        if scp "${ssh_opts[@]}" "$file_path" "${ssh_target}:${remote_temp_file}" >/dev/null 2>&1; then
-            print_task_done
-        else
-            print_task_fail
-            print_error "Failed to transfer file to lab infra server"
-            exit 1
-        fi
-
-        # Execute dnsbinder with remote temp file
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${file_based_option} '${remote_temp_file}' ${yes_flag} ${inline_flag}" || exit_code=$?
-
-        # Cleanup handled by trap, clear it
-        cleanup_remote_temp
-        trap - EXIT INT TERM
-    else
-        # Regular options - forward as-is
-        args_escaped=$(printf '%q ' "$@")
-        ssh "${ssh_opts[@]}" -t "$ssh_target" "sudo /tux2lab/named-manage/dnsbinder.sh ${args_escaped% }" || exit_code=$?
-    fi
-fi
+source /tux2lab/shared-functions/flush-dns-cache.sh
+flush_dns_cache
 
 exit $exit_code

@@ -10,17 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm restart [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames to restart
-  -f, --force          Skip confirmation prompt and force cold restart
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm restart [OPTIONS]
 
-Examples:
-  tux2lab vm restart -H vm1                    # Restart single VM with confirmation
-  tux2lab vm restart -f -H vm1                 # Restart single VM without confirmation
-  tux2lab vm restart -H vm1,vm2,vm3            # Restart multiple VMs with confirmation
-  tux2lab vm restart -f -H vm1,vm2             # Restart multiple VMs without confirmation
+DESCRIPTION:
+    Hard restart (power cycle) one or more VMs. Equivalent to reset button.
+    Use 'reboot' for a graceful OS-level reboot instead.
+
+OPTIONS:
+    -H, --hosts <hosts>     Hostname(s) to restart (comma-separated)
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm restart -H testvm1
+    tux2lab vm restart -f -H testvm1,testvm2,testvm3
 "
 }
 
@@ -134,18 +138,8 @@ fi
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to hard restart the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This will abruptly restart all lab services (DNS, DHCP, NFS, TFTP, Web)."
-    print_warning "All VMs in the lab will experience service interruption."
-    read -r -p "If you understand the impact, confirm by typing 'restart-lab-infra-server': " confirmation
-    if [[ "$confirmation" != "restart-lab-infra-server" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-elif [[ "$force_restart" == false ]]; then
-    # Warning prompt unless force flag is used
+# Warning prompt unless force flag is used
+if [[ "$force_restart" == false ]]; then
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/confirm-vm-operation.sh
     if ! confirm_vm_operation "restart" "perform cold restart on" "This is equivalent to pressing the reset button (may cause data loss)." 1 "$qemu_kvm_hostname"; then
         exit 0

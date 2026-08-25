@@ -10,18 +10,25 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-detach [OPTIONS]
-Options:
-  -H, --host <host>    Hostname of the VM
-  -f, --force          Force power-off without prompt if VM is running
-  -d, --disks <list>   Comma-separated list of disk targets to detach (e.g., vdb,vdc)
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm disk-detach [OPTIONS]
 
-Examples:
-  tux2lab vm disk-detach -H vm1                     # Interactive mode - select disks
-  tux2lab vm disk-detach -f -H vm1                  # Force power-off if running
-  tux2lab vm disk-detach -d vdb,vdc -H vm1          # Detach specific disks
-  tux2lab vm disk-detach -f -d vdb,vdc -H vm1       # Fully automated
+DESCRIPTION:
+    Detach additional disk(s) from a VM and preserve them in detached
+    storage for later re-attachment.
+
+OPTIONS:
+    -H, --host <host>    Hostname of the VM
+    -f, --force          Force power-off without prompt if VM is running
+    -d, --disks <list>   Comma-separated list of disk targets to detach (e.g., vdb,vdc)
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm disk-detach -H testvm1
+    tux2lab vm disk-detach -f -H testvm1
+    tux2lab vm disk-detach -d vdb,vdc -H testvm1
+    tux2lab vm disk-detach -f -d vdb,vdc -H testvm1
 "
 }
 
@@ -72,18 +79,6 @@ done
 
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
-
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to detach disk(s) from the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This operation requires shutting down the lab infra server temporarily."
-    print_warning "Boot disk (vda) cannot be detached and will be automatically excluded."
-    read -r -p "If you understand the impact, confirm by typing 'detach-disk-from-lab-infra': " confirmation
-    if [[ "$confirmation" != "detach-disk-from-lab-infra" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-fi
 
 # Check if VM exists
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh

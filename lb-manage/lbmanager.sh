@@ -17,20 +17,27 @@ if [[ "${UID}" -ne 0 ]]; then
 fi
 
 # ====== ENVIRONMENT ======
-if [[ -f /etc/environment ]]; then
-    source /etc/environment
-fi
-
 readonly LB_HUB_DIR="/tux2lab-data/lb-hub"
 readonly LB_REGISTRY="${LB_HUB_DIR}/lb-registry.json"
-readonly STREAM_CONF_DIR="/etc/nginx/stream.d"
+readonly STREAM_CONF_DIR="/tux2lab-data/nginx/stream.d"
 readonly LOCK_DIR="/tux2lab-data/.lbmanager.lock"
+readonly CONTAINER_NAME="tux2lab-engine"
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
 
-# Determine management interface name
-readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
+# Ensure required directories and registry exist
+mkdir -p "$LB_HUB_DIR" "$STREAM_CONF_DIR"
+[[ -f "$LB_REGISTRY" ]] || echo '{"load_balancers":[]}' > "$LB_REGISTRY"
 
-# Domain from dnsbinder
-readonly DOMAIN="${dnsbinder_domain:-}"
+# Read config from lab environment
+if [[ -f "$LAB_ENV_JSON" ]]; then
+    readonly MGMT_INTERFACE=$(jq -r '.network.bridge_interface' "$LAB_ENV_JSON")
+    readonly DOMAIN=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
+    readonly DNS_SERVER=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON")
+else
+    readonly MGMT_INTERFACE="${mgmt_interface_name:-eth0}"
+    readonly DOMAIN="${dnsbinder_domain:-}"
+    readonly DNS_SERVER="127.0.0.1"
+fi
 
 lock_acquired=false
 
@@ -83,30 +90,39 @@ trap 'fn_cleanup; exit 130' INT TERM HUP QUIT
 
 # ====== VALIDATION FUNCTIONS ======
 
-# Strip domain suffix if user provides FQDN (e.g., k8s-cp.lab.internal → k8s-cp)
-fn_strip_domain() {
+# Normalize user input to FQDN, validate hostname format
+fn_to_fqdn() {
     local input="$1"
-    if [[ -n "$DOMAIN" ]] && [[ "$input" == *".${DOMAIN}" ]]; then
-        echo "${input%.${DOMAIN}}"
-    else
-        echo "$input"
+    if [[ -z "$input" ]]; then
+        print_error "Hostname cannot be empty."
+        return 1
     fi
-}
 
-fn_validate_name() {
-    local name="$1"
-    if [[ -z "$name" ]]; then
-        print_error "Load balancer name cannot be empty."
+    local hostname
+    if [[ "$input" == *".${DOMAIN}" ]]; then
+        hostname="${input%.${DOMAIN}}"
+        if [[ "$hostname" == *.* ]]; then
+            print_error "Invalid hostname format. Expected: hostname.${DOMAIN}"
+            return 1
+        fi
+    elif [[ "$input" == *.* ]]; then
+        print_error "Invalid domain. Expected domain: ${DOMAIN}"
+        return 1
+    else
+        hostname="$input"
+    fi
+
+    if [[ ! "$hostname" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+        print_error "Invalid hostname '${hostname}'. Use only lowercase letters, numbers, and hyphens."
         return 1
     fi
-    if [[ ! "$name" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
-        print_error "Invalid name '${name}'. Must be lowercase alphanumeric with hyphens, cannot start or end with a hyphen."
+
+    if [[ ${#hostname} -gt 63 ]]; then
+        print_error "Hostname '${hostname}' exceeds 63 characters."
         return 1
     fi
-    if [[ ${#name} -gt 63 ]]; then
-        print_error "Name '${name}' exceeds 63 characters."
-        return 1
-    fi
+
+    echo "${hostname}.${DOMAIN}"
 }
 
 fn_validate_port() {
@@ -152,10 +168,15 @@ fn_validate_backends() {
             print_error "Empty backend entry found in list."
             return 1
         fi
-        if ! getent hosts "${backend}.${DOMAIN}" &>/dev/null; then
-            print_error "Backend '${backend}' does not resolve (${backend}.${DOMAIN})."
-            print_info "Create a DNS record first: dnsbinder -c ${backend}"
-            return 1
+        if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${backend}" 2>/dev/null | grep -q '^[0-9]'; then
+            print_task "Creating DNS record for ${backend}..."
+            if /tux2lab/named-manage/dnsbinder.sh -c "$backend" &>/dev/null; then
+                print_task_done
+            else
+                print_task_fail
+                print_error "Failed to create DNS record for backend '${backend}'."
+                return 1
+            fi
         fi
     done
 }
@@ -252,63 +273,65 @@ fn_update_lb_in_registry() {
 }
 
 # ====== DNS FUNCTIONS ======
-fn_create_dns_record() {
-    local name="$1"
+source /tux2lab/shared-functions/flush-dns-cache.sh
 
-    if getent hosts "${name}.${DOMAIN}" &>/dev/null; then
+fn_create_dns_record() {
+    local fqdn="$1"
+
+    if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | grep -q '^[0-9]'; then
         local resolved_ip
-        resolved_ip=$(getent ahostsv4 "${name}.${DOMAIN}" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
-        local infra_ip="${dnsbinder_server_ipv4_address:-}"
+        resolved_ip=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | head -1)
+        local infra_ip
+        infra_ip=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON" 2>/dev/null || echo "")
 
         if [[ -n "$infra_ip" ]] && [[ "$resolved_ip" == "$infra_ip" ]]; then
-            print_warning "Existing record for ${name}.${DOMAIN} points to infra server (${infra_ip})."
+            print_warning "Existing record for ${fqdn} points to infra server (${infra_ip})."
             print_info "Removing stale record and creating a dedicated LB record..."
-            /tux2lab/named-manage/dnsbinder.sh -dcy "$name" &>/dev/null || true
-            /tux2lab/named-manage/dnsbinder.sh -dc "$name" &>/dev/null || true
+            /tux2lab/named-manage/dnsbinder.sh -dcy "$fqdn" &>/dev/null || true
+            /tux2lab/named-manage/dnsbinder.sh -dc "$fqdn" &>/dev/null || true
         else
-            print_task "DNS record for ${name}.${DOMAIN}..."
+            print_task "DNS record for ${fqdn}..."
             print_task_skip
             print_info "Already exists with IP ${resolved_ip}"
             return 0
         fi
     fi
 
-    print_task "Creating DNS A/AAAA record for ${name}.${DOMAIN}..."
-    if /tux2lab/named-manage/dnsbinder.sh -c "$name" &>/dev/null; then
+    print_task "Creating DNS record for ${fqdn}..."
+    if /tux2lab/named-manage/dnsbinder.sh -c "$fqdn" &>/dev/null; then
         print_task_done
     else
         print_task_fail
-        print_error "Failed to create DNS record for ${name}"
+        print_error "Failed to create DNS record for ${fqdn}"
         return 1
     fi
 }
 
 fn_delete_dns_record() {
-    local name="$1"
-    print_task "Deleting DNS record for ${name}.${DOMAIN}..."
-    if ! getent hosts "${name}.${DOMAIN}" &>/dev/null; then
+    local fqdn="$1"
+    print_task "Deleting DNS record for ${fqdn}..."
+    if ! dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${fqdn}" 2>/dev/null | grep -q '^[0-9]'; then
         print_task_skip
         return 0
     fi
 
-    if /tux2lab/named-manage/dnsbinder.sh -dy "$name" &>/dev/null; then
+    if /tux2lab/named-manage/dnsbinder.sh -dy "$fqdn" &>/dev/null; then
         print_task_done
     else
         print_task_fail
-        print_error "Failed to delete DNS record for ${name}"
+        print_error "Failed to delete DNS record for ${fqdn}"
         return 1
     fi
 }
 
 fn_resolve_ip() {
-    local name="$1"
-    local fqdn="${name}.${DOMAIN}"
+    local fqdn="$1"
     local ipv4="" ipv6=""
     local retries=10
 
     while [[ $retries -gt 0 ]]; do
-        ipv4=$(getent ahostsv4 "$fqdn" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
-        ipv6=$(getent ahostsv6 "$fqdn" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+        ipv4=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "$fqdn" 2>/dev/null | head -1)
+        ipv6=$(dig @"${DNS_SERVER}" +short +time=1 +tries=1 AAAA "$fqdn" 2>/dev/null | head -1)
         [[ -n "$ipv4" ]] && [[ -n "$ipv6" ]] && break
         sleep 0.5
         retries=$((retries - 1))
@@ -332,6 +355,24 @@ fn_check_ip_on_interface() {
     local ip="$1"
     local interface="$2"
     ip addr show dev "$interface" 2>/dev/null | grep -qw "$ip"
+}
+
+# A freshly added IPv6 address stays "tentative" until DAD completes and cannot be bound.
+fn_wait_for_ip_ready() {
+    local ipv4="$1" ipv6="$2" interface="$3"
+    local retries=20 ipv4_ready ipv6_ready
+
+    while [[ $retries -gt 0 ]]; do
+        ipv4_ready=false
+        ipv6_ready=false
+        ip addr show dev "$interface" | grep -qw "$ipv4" && ipv4_ready=true
+        ip -6 addr show dev "$interface" | grep "$ipv6" | grep -qv "tentative" && ipv6_ready=true
+        $ipv4_ready && $ipv6_ready && return 0
+        sleep 0.5
+        retries=$((retries - 1))
+    done
+
+    return 1
 }
 
 fn_add_secondary_ip() {
@@ -368,6 +409,15 @@ fn_add_secondary_ip() {
             print_error "Failed to add IPv6 ${ipv6}/${ipv6_prefix} to ${interface}"
             return 1
         fi
+    fi
+
+    print_task "Waiting for ${ipv6} to pass DAD..."
+    if fn_wait_for_ip_ready "$ipv4" "$ipv6" "$interface"; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Address ${ipv6} did not become available on ${interface}."
+        return 1
     fi
 }
 
@@ -432,10 +482,10 @@ fn_generate_nginx_config() {
     local upstream_servers=""
     IFS=',' read -ra backend_list <<< "$backends_csv"
     for backend in "${backend_list[@]}"; do
-        upstream_servers="${upstream_servers}    server ${backend}.${DOMAIN}:${target_port} max_fails=3 fail_timeout=30s;\n"
+        upstream_servers="${upstream_servers}    server ${backend}:${target_port} max_fails=3 fail_timeout=30s;\n"
     done
 
-    print_task "Generating nginx stream config ${config_file}..."
+    print_task "Generating nginx stream config for ${name}..."
 
     cat > "$config_file" <<EOF
 # Managed by tux2lab lbmanager — do not edit manually
@@ -458,8 +508,8 @@ server {
     proxy_timeout 10m;
     proxy_connect_timeout 5s;
 
-    access_log /var/log/nginx/${name}_access.log ${log_format_name};
-    error_log  /var/log/nginx/${name}_error.log info;
+    access_log /tux2lab-data/logs/nginx/${name}_access.log ${log_format_name};
+    error_log  /tux2lab-data/logs/nginx/${name}_error.log info;
 }
 EOF
 
@@ -470,7 +520,7 @@ fn_remove_nginx_config() {
     local name="$1"
     local config_file="${STREAM_CONF_DIR}/${name}.conf"
 
-    print_task "Removing nginx config ${config_file}..."
+    print_task "Removing nginx config for ${name}..."
     if [[ -f "$config_file" ]]; then
         rm -f "$config_file"
         print_task_done
@@ -481,18 +531,20 @@ fn_remove_nginx_config() {
 
 fn_validate_nginx() {
     print_task "Validating nginx configuration..."
-    if nginx -t &>/dev/null; then
+    local _nginx_output
+    if _nginx_output=$(podman exec "$CONTAINER_NAME" nginx -t -c /tux2lab-data/nginx/nginx.conf 2>&1); then
         print_task_done
     else
         print_task_fail
-        print_error "nginx configuration validation failed. Rolling back."
+        print_error "nginx configuration validation failed:"
+        printf '%s\n' "$_nginx_output" | sed 's/^/    /'
         return 1
     fi
 }
 
 fn_reload_nginx() {
     print_task "Reloading nginx..."
-    if systemctl reload nginx &>/dev/null; then
+    if podman exec "$CONTAINER_NAME" nginx -c /tux2lab-data/nginx/nginx.conf -s reload &>/dev/null; then
         print_task_done
     else
         print_task_fail
@@ -504,6 +556,7 @@ fn_reload_nginx() {
 # ====== SUBCOMMAND: CREATE ======
 fn_create() {
     local name="" port="" target_port="" backends="" algorithm="round-robin" yes_flag=false
+    local algorithm_specified=false
     local prev_arg=""
 
     for arg in "$@"; do
@@ -512,7 +565,7 @@ fn_create() {
             --port)        port="$arg" ;;
             --target-port) target_port="$arg" ;;
             --backends)    backends="$arg" ;;
-            --algorithm)   algorithm="$arg" ;;
+            --algorithm)   algorithm="$arg"; algorithm_specified=true ;;
         esac
         prev_arg="$arg"
         [[ "$arg" == "-y" || "$arg" == "--yes" ]] && yes_flag=true
@@ -531,7 +584,7 @@ fn_create() {
     if [[ -z "$backends" ]]; then
         read -rp "Enter backend hostnames (comma-separated): " backends
     fi
-    if [[ "$algorithm" == "round-robin" ]] && ! $yes_flag; then
+    if ! $algorithm_specified && ! $yes_flag; then
         local algo_input
         read -rp "Enter algorithm [round-robin/least-conn/ip-hash] (default: round-robin): " algo_input
         if [[ -n "$algo_input" ]]; then
@@ -540,20 +593,19 @@ fn_create() {
     fi
 
     # Strip domain suffix if user provides FQDNs
-    name=$(fn_strip_domain "$name")
+    name=$(fn_to_fqdn "$name")
 
     # Strip domain from each backend
     if [[ -n "$backends" ]]; then
         local stripped_backends=()
         IFS=',' read -ra raw_backends <<< "$backends"
         for b in "${raw_backends[@]}"; do
-            stripped_backends+=("$(fn_strip_domain "$b")")
+            stripped_backends+=("$(fn_to_fqdn "$b")")
         done
         backends=$(IFS=','; echo "${stripped_backends[*]}")
     fi
 
     # Validate all inputs
-    fn_validate_name "$name"
     fn_validate_port "$port" "Listen port"
     fn_validate_port "$target_port" "Target port"
     fn_validate_algorithm "$algorithm"
@@ -586,7 +638,7 @@ fn_create() {
     fi
 
     # Step 2: Resolve IP addresses
-    print_task "Resolving IP addresses for ${name}.${DOMAIN}..."
+    print_task "Resolving IP addresses for ${name}..."
     local ip_pair
     if ! ip_pair=$(fn_resolve_ip "$name"); then
         print_task_fail
@@ -613,6 +665,18 @@ fn_create() {
         exit 1
     fi
 
+    # Wait for IPv6 DAD to complete before nginx binds
+    print_task "Waiting for addresses to be ready..."
+    if fn_wait_for_ip_ready "$ipv4" "$ipv6" "$MGMT_INTERFACE"; then
+        print_task_done
+    else
+        print_task_fail
+        print_error "Addresses not ready on ${MGMT_INTERFACE}."
+        fn_remove_secondary_ip "$ipv4" "$ipv6" "$MGMT_INTERFACE"
+        fn_delete_dns_record "$name"
+        exit 1
+    fi
+
     # Step 5: Generate nginx config
     fn_generate_nginx_config "$name" "$port" "$target_port" "$algorithm" "$ipv4" "$ipv6" "$backends"
 
@@ -628,11 +692,17 @@ fn_create() {
     # Step 7: Register in state
     fn_add_lb_to_registry "$name" "$port" "$target_port" "$algorithm" "$ipv4" "$ipv6" "$MGMT_INTERFACE" "$backends"
 
-    # Step 8: Reload nginx
+    # Step 8: Update /etc/hosts
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+    add_etc_hosts_entry "$name" "$ipv4" "$ipv6"
+
+    # Step 9: Reload nginx
     fn_reload_nginx
 
+    flush_dns_cache
+
     print_success "Load balancer '${name}' created successfully!"
-    print_notify "  Endpoint : ${name}.${DOMAIN}:${port}"
+    print_notify "  Endpoint : ${name}:${port}"
     print_notify "  IPv4     : ${ipv4}:${port}"
     print_notify "  IPv6     : [${ipv6}]:${port}"
 }
@@ -651,7 +721,7 @@ fn_delete() {
     done
 
     # Strip domain suffix if FQDN provided
-    [[ -n "$name" ]] && name=$(fn_strip_domain "$name")
+    [[ -n "$name" ]] && name=$(fn_to_fqdn "$name")
 
     # Interactive: select from list if no name given
     if [[ -z "$name" ]]; then
@@ -716,8 +786,9 @@ fn_delete() {
 
     print_info "Deleting load balancer: ${name}"
 
-    # Step 1: Remove nginx config
+    # Step 1: Remove nginx config and logs
     fn_remove_nginx_config "$name"
+    rm -f "/tux2lab-data/logs/nginx/${name}_access.log" "/tux2lab-data/logs/nginx/${name}_error.log" 2>/dev/null
 
     # Step 2: Validate nginx (ensure remaining config is still valid)
     fn_validate_nginx || true
@@ -728,13 +799,19 @@ fn_delete() {
     # Step 4: Delete DNS record
     fn_delete_dns_record "$name"
 
-    # Step 5: Remove from registry
+    # Step 5: Remove from /etc/hosts
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+    remove_etc_hosts_entry "$name"
+
+    # Step 6: Remove from registry
     print_task "Removing from registry..."
     fn_remove_lb_from_registry "$name"
     print_task_done
 
-    # Step 6: Reload nginx
+    # Step 7: Reload nginx
     fn_reload_nginx
+
+    flush_dns_cache
 
     print_success "Load balancer '${name}' deleted successfully!"
 }
@@ -757,17 +834,17 @@ fn_update() {
     done
 
     # Strip domain suffix if FQDN provided
-    [[ -n "$name" ]] && name=$(fn_strip_domain "$name")
+    [[ -n "$name" ]] && name=$(fn_to_fqdn "$name")
     [[ -n "$add_backends" ]] && {
         local _stripped=()
         IFS=',' read -ra _raw <<< "$add_backends"
-        for _b in "${_raw[@]}"; do _stripped+=("$(fn_strip_domain "$_b")"); done
+        for _b in "${_raw[@]}"; do _stripped+=("$(fn_to_fqdn "$_b")"); done
         add_backends=$(IFS=','; echo "${_stripped[*]}")
     }
     [[ -n "$remove_backends" ]] && {
         local _stripped=()
         IFS=',' read -ra _raw <<< "$remove_backends"
-        for _b in "${_raw[@]}"; do _stripped+=("$(fn_strip_domain "$_b")"); done
+        for _b in "${_raw[@]}"; do _stripped+=("$(fn_to_fqdn "$_b")"); done
         remove_backends=$(IFS=','; echo "${_stripped[*]}")
     }
 
@@ -943,26 +1020,40 @@ fn_list() {
         return 0
     fi
 
-    printf "${MAKE_IT_CYAN}%-20s %-16s %-25s %-8s %-12s %-12s %s${RESET_COLOR}\n" \
-        "NAME" "IPv4" "IPv6" "PORT" "TARGET PORT" "ALGORITHM" "BACKENDS"
-    printf "%-20s %-16s %-25s %-8s %-12s %-12s %s\n" \
-        "----" "----" "----" "----" "-----------" "---------" "--------"
-
+    # Collect data first to calculate column widths
+    local names=() ipv4s=() ipv6s=() ports=() tports=() algos=() bcounts=()
     while IFS= read -r lb_name; do
         local lb_json
         lb_json=$(fn_get_lb "$lb_name")
-        local ipv4 ipv6 port target_port algorithm backends_count
-        ipv4=$(echo "$lb_json" | jq -r '.ipv4')
-        ipv6=$(echo "$lb_json" | jq -r '.ipv6')
-        port=$(echo "$lb_json" | jq -r '.port')
-        target_port=$(echo "$lb_json" | jq -r '.target_port')
-        algorithm=$(echo "$lb_json" | jq -r '.algorithm')
-        backends_count=$(echo "$lb_json" | jq '.backends | length')
-
-        printf "%-20s %-16s %-25s %-8s %-12s %-12s %s\n" \
-            "$lb_name" "$ipv4" "$ipv6" "$port" "$target_port" "$algorithm" "${backends_count} backend(s)"
+        names+=("${lb_name}")
+        ipv4s+=("$(echo "$lb_json" | jq -r '.ipv4')")
+        ipv6s+=("$(echo "$lb_json" | jq -r '.ipv6')")
+        ports+=("$(echo "$lb_json" | jq -r '.port')")
+        tports+=("$(echo "$lb_json" | jq -r '.target_port')")
+        algos+=("$(echo "$lb_json" | jq -r '.algorithm')")
+        bcounts+=("$(echo "$lb_json" | jq '.backends | length') backend(s)")
     done < <(jq -r '.load_balancers[].name' "$LB_REGISTRY")
 
+    # Determine max widths
+    local w_name=4 w_ipv4=4 w_ipv6=4
+    for i in "${!names[@]}"; do
+        (( ${#names[$i]} > w_name )) && w_name=${#names[$i]}
+        (( ${#ipv4s[$i]} > w_ipv4 )) && w_ipv4=${#ipv4s[$i]}
+        (( ${#ipv6s[$i]} > w_ipv6 )) && w_ipv6=${#ipv6s[$i]}
+    done
+    w_name=$((w_name + 2))
+    w_ipv4=$((w_ipv4 + 2))
+    w_ipv6=$((w_ipv6 + 2))
+
+    printf "${MAKE_IT_CYAN}%-${w_name}s %-${w_ipv4}s %-${w_ipv6}s %-8s %-12s %-12s %s${RESET_COLOR}\n" \
+        "NAME" "IPv4" "IPv6" "PORT" "TARGET PORT" "ALGORITHM" "BACKENDS"
+    printf "%-${w_name}s %-${w_ipv4}s %-${w_ipv6}s %-8s %-12s %-12s %s\n" \
+        "----" "----" "----" "----" "-----------" "---------" "--------"
+
+    for i in "${!names[@]}"; do
+        printf "%-${w_name}s %-${w_ipv4}s %-${w_ipv6}s %-8s %-12s %-12s %s\n" \
+            "${names[$i]}" "${ipv4s[$i]}" "${ipv6s[$i]}" "${ports[$i]}" "${tports[$i]}" "${algos[$i]}" "${bcounts[$i]}"
+    done
 }
 
 # ====== SUBCOMMAND: STATUS ======
@@ -978,7 +1069,7 @@ fn_status() {
     done
 
     # Strip domain suffix if FQDN provided
-    [[ -n "$name" ]] && name=$(fn_strip_domain "$name")
+    [[ -n "$name" ]] && name=$(fn_to_fqdn "$name")
 
     local count
     count=$(fn_get_lb_count)
@@ -1016,8 +1107,8 @@ fn_status() {
         print_info "Load Balancer: ${lb_name} (${ipv4}:${port})"
 
         # Check 1: DNS record
-        print_task "DNS record (${lb_name}.${DOMAIN})..."
-        if getent hosts "${lb_name}.${DOMAIN}" &>/dev/null; then
+        print_task "DNS record (${lb_name})..."
+        if dig @"${DNS_SERVER}" +short +time=1 +tries=1 A "${lb_name}" 2>/dev/null | grep -q '^[0-9]'; then
             print_task_done
             total_pass=$((total_pass + 1))
         else
@@ -1046,7 +1137,7 @@ fn_status() {
         fi
 
         # Check 4: nginx config exists
-        print_task "Nginx config (${STREAM_CONF_DIR}/${lb_name}.conf)..."
+        print_task "Nginx config (${lb_name})..."
         if [[ -f "${STREAM_CONF_DIR}/${lb_name}.conf" ]]; then
             print_task_done
             total_pass=$((total_pass + 1))
@@ -1085,8 +1176,8 @@ fn_status() {
 
         while IFS= read -r backend; do
             if command -v nc &>/dev/null; then
-                print_task "Backend ${backend}.${DOMAIN}:${target_port}..."
-                if nc -z -w 2 "${backend}.${DOMAIN}" "$target_port" &>/dev/null; then
+                print_task "Backend ${backend}:${target_port}..."
+                if nc -z -w 2 "${backend}" "$target_port" &>/dev/null; then
                     print_task_done
                     total_pass=$((total_pass + 1))
                 else
@@ -1115,8 +1206,6 @@ fn_restore() {
 
     print_info "Restoring ${count} load balancer(s)..."
 
-    local needs_reload=false
-
     while IFS= read -r lb_name; do
         local lb_json
         lb_json=$(fn_get_lb "$lb_name")
@@ -1135,15 +1224,16 @@ fn_restore() {
         # Ensure nginx config exists
         if [[ ! -f "${STREAM_CONF_DIR}/${lb_name}.conf" ]]; then
             fn_generate_nginx_config "$lb_name" "$port" "$target_port" "$algorithm" "$ipv4" "$ipv6" "$backends"
-            needs_reload=true
         fi
     done < <(jq -r '.load_balancers[].name' "$LB_REGISTRY")
 
-    # Reload nginx once if any configs were regenerated
-    if $needs_reload; then
-        fn_validate_nginx
-        fn_reload_nginx
+    # Always reload nginx to ensure stream configs are active
+    if ! fn_validate_nginx; then
+        print_error "Load balancer restore aborted: nginx configuration is invalid."
+        print_info "Load balancers are NOT listening. Re-run once resolved: tux2lab lb restore"
+        return 1
     fi
+    fn_reload_nginx
 
     print_success "All load balancers restored."
 }

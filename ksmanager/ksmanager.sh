@@ -1,0 +1,1992 @@
+#!/usr/bin/env bash
+#----------------------------------------------------------------------------------------#
+# If you encounter any issues with this script, or have suggestions or feature requests, #
+# please open an issue at: https://github.com/Muthukumar-Subramaniam/tux2lab/issues   #
+#----------------------------------------------------------------------------------------#
+# Note: strict mode is intentionally omitted. Provisioning artifacts are written under an
+# explicit host lock; an implicit abort could leave DNS/DHCP/iPXE state half-applied.
+
+if [[ -f /tux2lab-data/lab_environment_vars ]]; then
+    source /tux2lab-data/lab_environment_vars
+fi
+if [[ -z "${mgmt_super_user:-}" && -n "${lab_infra_admin_username:-}" ]]; then
+    mgmt_super_user="${lab_infra_admin_username}"
+fi
+source /tux2lab/common-utils/color-functions.sh
+source /tux2lab/ksmanager/distro-versions.conf
+source /tux2lab/shared-functions/flush-dns-cache.sh
+
+# ====== HELP ======
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    print_cyan "USAGE:
+    ksmanager <hostname> [options]
+
+DESCRIPTION:
+    Kickstart Manager — provisions PXE boot configurations for lab VMs.
+    Creates iPXE configs, kickstart/autoinst files, DHCP reservations,
+    and DNS records for the specified hostname.
+
+OPTIONS:
+    --create-golden-image   Create a golden image for the specified distro
+    --remove-host           Remove all provisioning artifacts for a host
+    --qemu-kvm              Invoked via tux2lab vm deploy (internal)
+    --golden-image          Invoked for golden image builds (internal)
+    --distro <name>         Specify distribution (e.g., alma, rocky, ubuntu)
+    --version <ver>         Specify version (e.g., 10, 24.04)
+    --mac <address>         Specify MAC address for DHCP reservation
+    --ipv4-only             Create IPv4-only VM (no AAAA record, no IPv6 config)
+    --ipv6-only             Create IPv6-only VM (AAAA only; temp IPv4 for PXE boot)
+    --dual-stack             Force dual-stack (override auto-detected single-stack)
+    -h, --help              Show this help message"
+    exit 0
+fi
+
+if [[ -z "$mgmt_super_user" ]]; then
+    print_error "Critical: mgmt_super_user is not defined."
+    print_error "Ensure lab is deployed: tux2lab deploy"
+    exit 1
+fi
+
+if [[ "$USER" != "$mgmt_super_user" ]]; then
+    print_error "Access denied. Only infra management super user '${mgmt_super_user}' is authorized to run this tool."
+    print_error "If you are already ${mgmt_super_user}, do not elevate with sudo."
+    exit 1
+fi
+
+if [[ -z "${dnsbinder_server_ipv4_address}" ]]; then
+    print_error "Critical: dnsbinder_server_ipv4_address is not defined."
+    print_error "Ensure lab is deployed: tux2lab deploy"
+    exit 1
+fi
+
+ipv4_domain="${dnsbinder_domain}"
+ipv4_network_cidr="${dnsbinder_network_cidr}"
+ipv4_netmask="${dnsbinder_netmask}"
+ipv4_prefix="${dnsbinder_cidr_prefix}"
+ipv4_gateway="${dnsbinder_gateway}"
+ipv4_nameserver="${dnsbinder_server_ipv4_address}"
+ipv4_nfsserver="${dnsbinder_server_ipv4_address}"
+lab_infra_server_hostname="${dnsbinder_server_fqdn}"
+
+# IPv6 variables (if dual-stack configured)
+ipv6_gateway="${dnsbinder_ipv6_gateway}"
+ipv6_prefix="${dnsbinder_ipv6_prefix}"
+ipv6_ula_subnet="${dnsbinder_ipv6_ula_subnet}"
+ipv6_address=""  # Will be queried from DNS
+ipv6_nameserver="${dnsbinder_server_ipv6_address}"
+##rhel_activation_key=$(cat /tux2lab/rhel-activation-key.base64 | base64 -d)
+time_of_last_update=$(date +"%Y-%m-%d_%H-%M-%S_%Z")
+dnsbinder_script='/tux2lab/named-manage/dnsbinder.sh'
+ksmanager_main_dir='/tux2lab/ksmanager'
+ksmanager_hub_dir="/tux2lab-data/ksmanager-hub"
+ipxe_web_dir="/tux2lab-data/ipxe"
+shadow_password_super_mgmt_user="${lab_admin_shadow_password:-}"
+subnets_to_allow_ssh_pub_access=""
+for i in $(seq ${dnsbinder_first24_subnet##*.} ${dnsbinder_last24_subnet##*.}); do
+    subnets_to_allow_ssh_pub_access+=" ${dnsbinder_first24_subnet%.*}.$i.*"
+done
+subnets_to_allow_ssh_pub_access="${subnets_to_allow_ssh_pub_access# }"
+
+mkdir -p "${ksmanager_hub_dir}"
+mkdir -p "${ipxe_web_dir}"
+
+mac_cache_file="${ksmanager_hub_dir}/mac-address-cache"
+hosts_json_file="${ksmanager_hub_dir}/hosts.json"
+mac_cache_lock_dir="${ksmanager_hub_dir}/.mac-address-cache.lock"
+host_lock_root_dir="${ksmanager_hub_dir}/.host-locks"
+shared_artifacts_lock_dir="${ksmanager_hub_dir}/.shared-artifacts.lock"
+current_host_lock_dir=""
+current_host_name=""
+mac_lock_acquired=false
+host_lock_acquired=false
+shared_lock_acquired=false
+
+mkdir -p "${host_lock_root_dir}"
+
+fn_acquire_mac_cache_lock() {
+    local retries=200
+    local existing_pid=""
+
+    while ! mkdir "${mac_cache_lock_dir}" 2>/dev/null; do
+        if [[ -f "${mac_cache_lock_dir}/pid" ]]; then
+            existing_pid=$(cat "${mac_cache_lock_dir}/pid" 2>/dev/null)
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+                rm -f "${mac_cache_lock_dir}/pid"
+                rmdir "${mac_cache_lock_dir}" 2>/dev/null || true
+                continue
+            fi
+        fi
+
+        sleep 0.05
+        retries=$((retries - 1))
+        if [[ "${retries}" -le 0 ]]; then
+            print_error "Unable to acquire mac-address-cache lock. Please retry."
+            return 1
+        fi
+    done
+
+    printf '%s\n' "$$" > "${mac_cache_lock_dir}/pid"
+    mac_lock_acquired=true
+}
+
+fn_release_mac_cache_lock() {
+    local lock_pid=""
+
+    if ! $mac_lock_acquired; then
+        return
+    fi
+
+    if [[ -f "${mac_cache_lock_dir}/pid" ]]; then
+        lock_pid=$(cat "${mac_cache_lock_dir}/pid" 2>/dev/null)
+    fi
+
+    if [[ "${lock_pid}" = "$$" ]]; then
+        rm -f "${mac_cache_lock_dir}/pid"
+        rmdir "${mac_cache_lock_dir}" 2>/dev/null || true
+    fi
+
+    mac_lock_acquired=false
+}
+
+fn_copy_mac_cache_snapshot_locked() {
+    local snapshot_file="$1"
+    local snapshot_ok=false
+
+    if ! fn_acquire_mac_cache_lock; then
+        return 1
+    fi
+
+    if [[ -f "${mac_cache_file}" ]]; then
+        if cp "${mac_cache_file}" "${snapshot_file}"; then
+            snapshot_ok=true
+        fi
+    else
+        if : > "${snapshot_file}"; then
+            snapshot_ok=true
+        fi
+    fi
+
+    fn_release_mac_cache_lock
+
+    if ! $snapshot_ok; then
+        return 1
+    fi
+}
+
+fn_acquire_host_lock() {
+    local host_name="$1"
+    local safe_host_name=""
+    local retries=400
+    local existing_pid=""
+
+    safe_host_name=$(printf '%s' "${host_name}" | tr -c 'a-zA-Z0-9_.-' '_')
+    current_host_lock_dir="${host_lock_root_dir}/${safe_host_name}.lock"
+    current_host_name="${host_name}"
+
+    while ! mkdir "${current_host_lock_dir}" 2>/dev/null; do
+        if [[ -f "${current_host_lock_dir}/pid" ]]; then
+            existing_pid=$(cat "${current_host_lock_dir}/pid" 2>/dev/null)
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+                rm -f "${current_host_lock_dir}/pid"
+                rmdir "${current_host_lock_dir}" 2>/dev/null || true
+                continue
+            fi
+        fi
+
+        sleep 0.05
+        retries=$((retries - 1))
+        if [[ "${retries}" -le 0 ]]; then
+            print_error "Unable to acquire host lock for '${host_name}'. Please retry."
+            current_host_lock_dir=""
+            return 1
+        fi
+    done
+
+    printf '%s\n' "$$" > "${current_host_lock_dir}/pid"
+    host_lock_acquired=true
+}
+
+fn_release_host_lock() {
+    local lock_pid=""
+
+    if ! $host_lock_acquired; then
+        return
+    fi
+
+    if [[ -f "${current_host_lock_dir}/pid" ]]; then
+        lock_pid=$(cat "${current_host_lock_dir}/pid" 2>/dev/null)
+    fi
+
+    if [[ -n "${current_host_lock_dir}" ]] && [[ -d "${current_host_lock_dir}" ]] && [[ "${lock_pid}" = "$$" ]]; then
+        rm -f "${current_host_lock_dir}/pid"
+        rmdir "${current_host_lock_dir}" 2>/dev/null || true
+    fi
+
+    current_host_lock_dir=""
+    current_host_name=""
+    host_lock_acquired=false
+}
+
+fn_acquire_shared_artifacts_lock() {
+    local retries=400
+    local existing_pid=""
+
+    while ! mkdir "${shared_artifacts_lock_dir}" 2>/dev/null; do
+        if [[ -f "${shared_artifacts_lock_dir}/pid" ]]; then
+            existing_pid=$(cat "${shared_artifacts_lock_dir}/pid" 2>/dev/null)
+            if [[ -n "${existing_pid}" ]] && ! kill -0 "${existing_pid}" 2>/dev/null; then
+                rm -f "${shared_artifacts_lock_dir}/pid"
+                rmdir "${shared_artifacts_lock_dir}" 2>/dev/null || true
+                continue
+            fi
+        fi
+
+        sleep 0.05
+        retries=$((retries - 1))
+        if [[ "${retries}" -le 0 ]]; then
+            print_error "Unable to acquire shared artifact lock. Please retry."
+            return 1
+        fi
+    done
+
+    printf '%s\n' "$$" > "${shared_artifacts_lock_dir}/pid"
+    shared_lock_acquired=true
+}
+
+fn_release_shared_artifacts_lock() {
+    local lock_pid=""
+
+    if ! $shared_lock_acquired; then
+        return
+    fi
+
+    if [[ -f "${shared_artifacts_lock_dir}/pid" ]]; then
+        lock_pid=$(cat "${shared_artifacts_lock_dir}/pid" 2>/dev/null)
+    fi
+
+    if [[ -d "${shared_artifacts_lock_dir}" ]] && [[ "${lock_pid}" = "$$" ]]; then
+        rm -f "${shared_artifacts_lock_dir}/pid"
+        rmdir "${shared_artifacts_lock_dir}" 2>/dev/null || true
+    fi
+
+    shared_lock_acquired=false
+}
+
+fn_release_all_locks() {
+    fn_release_mac_cache_lock
+    fn_release_shared_artifacts_lock
+    fn_release_host_lock
+}
+
+trap 'fn_release_all_locks' EXIT
+trap 'fn_release_all_locks; trap - INT; kill -s INT $$' INT
+trap 'fn_release_all_locks; trap - TERM; kill -s TERM $$' TERM
+trap 'fn_release_all_locks; trap - HUP; kill -s HUP $$' HUP
+trap 'fn_release_all_locks; trap - QUIT; kill -s QUIT $$' QUIT
+
+fn_chown_if_exists() {
+    local target_path="$1"
+    if [[ -e "${target_path}" ]]; then
+        chown -R "${mgmt_super_user}:$(id -g "${mgmt_super_user}")" "${target_path}"
+    fi
+}
+
+fn_wait_for_dns_a_record() {
+    local hostname="$1"
+    local max_retries="${2:-10}"
+    local sleep_seconds=0.5
+    local retry_count=0
+
+    while [[ ${retry_count} -lt ${max_retries} ]]; do
+        if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${hostname}" | grep -q '^[0-9]'; then
+            return 0
+        fi
+        sleep "${sleep_seconds}"
+        ((retry_count++))
+    done
+
+    return 1
+}
+
+fn_wait_for_dns_aaaa_record() {
+    local hostname="$1"
+    local max_retries="${2:-10}"
+    local sleep_seconds=0.5
+    local retry_count=0
+
+    while [[ ${retry_count} -lt ${max_retries} ]]; do
+        if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${hostname}" | grep -q ':'; then
+            return 0
+        fi
+        sleep "${sleep_seconds}"
+        ((retry_count++))
+    done
+
+    return 1
+}
+
+# Determine dnsbinder flag based on stack_mode
+fn_get_dnsbinder_create_flag() {
+    case "${stack_mode}" in
+        ipv4) echo "-c4" ;;
+        ipv6) echo "-c6" ;;
+        *)    echo "-c" ;;
+    esac
+}
+
+# Wait for DNS record based on stack_mode
+fn_wait_for_dns_record() {
+    local hostname="$1"
+    local retries="${2:-10}"
+    if [[ "${stack_mode}" == "ipv6" ]]; then
+        fn_wait_for_dns_aaaa_record "${hostname}" "${retries}"
+    else
+        fn_wait_for_dns_a_record "${hostname}" "${retries}"
+    fi
+}
+
+# Check if DNS record already exists based on stack_mode
+# Check if ANY DNS record exists for this hostname (A, AAAA, or CNAME)
+fn_dns_record_exists() {
+    local hostname="$1"
+    dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${hostname}" | grep -q '^[0-9]' && return 0
+    dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${hostname}" | grep -q ':' && return 0
+    return 1
+}
+
+fn_check_and_create_host_record() {
+    while :
+    do
+        # shellcheck disable=SC2162
+        if [[ -z "${1}" ]]
+        then
+            print_info "Create kickstart host profiles for PXE boot."
+            print_info "Points to keep in mind while entering the hostname:"
+            print_info "- Use only lowercase letters, numbers, and hyphens (-)."
+            print_info "- Must not start or end with a hyphen."
+            read -r -p "Please enter the hostname for which kickstarts are required: " kickstart_hostname
+        else
+            kickstart_hostname="${1}"
+        fi
+
+        # Validate and normalize hostname to FQDN
+        if [[ "${kickstart_hostname}" == *.${ipv4_domain} ]]; then
+            local stripped_hostname="${kickstart_hostname%.${ipv4_domain}}"
+            # Verify the stripped part doesn't contain dots (ensure it's just hostname.domain, not host.something.domain)
+            if [[ "${stripped_hostname}" == *.* ]]; then
+                print_error "Invalid hostname. Expected format: hostname.${ipv4_domain}"
+                exit 1
+            fi
+            # Validate the hostname part
+            if [[ ! "${stripped_hostname}" =~ ^[a-z0-9-]+$ || "${stripped_hostname}" =~ ^- || "${stripped_hostname}" =~ -$ ]]; then
+                print_error "Invalid hostname. Use only lowercase letters, numbers, and hyphens."
+                print_info "Hostname must not start or end with a hyphen."
+                exit 1
+            fi
+            # Keep as FQDN
+        elif [[ "${kickstart_hostname}" == *.* ]]; then
+            print_error "Invalid domain. Expected domain: ${ipv4_domain}"
+            exit 1
+        else
+            # Bare hostname provided - validate and convert to FQDN
+            if [[ ! "${kickstart_hostname}" =~ ^[a-z0-9-]+$ || "${kickstart_hostname}" =~ ^- || "${kickstart_hostname}" =~ -$ ]]; then
+                print_error "Invalid hostname. Use only lowercase letters, numbers, and hyphens."
+                print_info "Hostname must not start or end with a hyphen."
+                exit 1
+            fi
+            kickstart_hostname="${kickstart_hostname}.${ipv4_domain}"
+        fi
+
+        break
+    done
+
+    # Extract short hostname for use with tools that need it
+    kickstart_short_hostname="${kickstart_hostname%%.*}"
+
+    print_info "Checking DNS record for \"${kickstart_hostname}\"..."
+    if ! fn_dns_record_exists "${kickstart_hostname}"
+    then
+        print_info "No DNS record found for \"${kickstart_hostname}\"."
+        local _dnsbinder_flag
+        _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
+        
+        if $invoked_with_qemu_kvm; then
+            sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
+
+            if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
+                print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
+                exit 1
+            fi
+
+            # For --ipv6-only PXE: create temp IPv4 record for PXE boot
+            if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image; then
+                pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+                print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
+                sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
+                if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                    print_error "Failed to create temporary PXE bootstrap record."
+                    exit 1
+                fi
+            fi
+
+            flush_dns_cache
+        else
+            while :
+            do
+                read -r -p "Enter (y) to create a DNS record for \"${kickstart_hostname}\" or (n) to exit: " v_confirmation
+
+                if [[ "${v_confirmation}" == "y" ]]
+                then
+                    sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
+
+                    if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
+                        print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
+                        exit 1
+                    fi
+                    flush_dns_cache
+                    break
+
+                elif [[ "${v_confirmation}" == "n" ]]
+                then
+                    print_info "Operation cancelled by user."
+                    exit
+                else
+                    print_warning "Invalid input. Please enter 'y' or 'n'."
+                    continue
+                fi
+            done
+        fi
+    else
+        print_info "DNS record found for \"${kickstart_hostname}\"."
+        local ipv4=$(dig @"${dnsbinder_server_ipv4_address}" +short A "${kickstart_hostname}" | head -1)
+        local ipv6=$(dig @"${dnsbinder_server_ipv4_address}" +short AAAA "${kickstart_hostname}" | head -1)
+        [[ -n "${ipv4}" ]] && print_info "${kickstart_hostname} has address ${ipv4}"
+        [[ -n "${ipv6}" ]] && print_info "${kickstart_hostname} has IPv6 address ${ipv6}"
+
+        # If stack mode was explicitly changed, recreate DNS to match
+        if $stack_mode_explicit; then
+            local needs_recreate=false
+            case "${stack_mode}" in
+                ipv4) [[ -n "${ipv6}" ]] && needs_recreate=true ;;
+                ipv6) [[ -n "${ipv4}" ]] && needs_recreate=true ;;
+                dual) [[ -z "${ipv4}" || -z "${ipv6}" ]] && needs_recreate=true ;;
+            esac
+            if $needs_recreate; then
+                print_info "Stack mode changed to '${stack_mode}' — recreating DNS record..."
+                sudo "${dnsbinder_script}" -dy "${kickstart_hostname}"
+                # Clean up stale PXE bootstrap record from previous ipv6-only PXE install
+                _old_bootstrap="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+                if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${_old_bootstrap}" | grep -q '^[0-9]'; then
+                    sudo "${dnsbinder_script}" -dy "${_old_bootstrap}"
+                    print_info "Removed stale PXE bootstrap record ${_old_bootstrap}"
+                fi
+                local _dnsbinder_flag
+                _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
+                sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
+                if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
+                    print_error "Failed to recreate DNS record for \"${kickstart_hostname}\"."
+                    exit 1
+                fi
+                # For --ipv6-only PXE: create temp IPv4 record
+                if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image; then
+                    pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+                    print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
+                    sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
+                    if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                        print_error "Failed to create temporary PXE bootstrap record."
+                        exit 1
+                    fi
+                fi
+                flush_dns_cache
+            fi
+        fi
+
+        # For --ipv6-only PXE: ensure bootstrap record exists (even without recreation)
+        if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image && [[ -z "${pxe_bootstrap_hostname:-}" ]]; then
+            pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
+            if ! dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${pxe_bootstrap_hostname}" | grep -q '^[0-9]'; then
+                print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
+                sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
+                if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                    print_error "Failed to create temporary PXE bootstrap record."
+                    exit 1
+                fi
+                flush_dns_cache
+            fi
+        fi
+    fi
+}
+
+fn_remove_hosts_json_entry() {
+    local remove_hostname="$1"
+    local temp_hosts_json="${hosts_json_file}.tmp.$$"
+
+    if [[ -f "$hosts_json_file" ]]; then
+        jq --arg hostname "$remove_hostname" \
+            '[.[] | select(.hostname != $hostname)]' \
+            "$hosts_json_file" > "$temp_hosts_json" && \
+            mv "$temp_hosts_json" "$hosts_json_file"
+        rm -f "$temp_hosts_json"
+    fi
+}
+
+golden_image_creation_not_requested=true
+
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--create-golden-image" ]]; then
+    golden_image_creation_not_requested=false
+        break
+    fi
+done
+
+# Check for --remove-host flag
+remove_host_requested=false
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--remove-host" ]]; then
+        remove_host_requested=true
+        break
+    fi
+done
+
+# If --remove-host is requested, handle cleanup and exit
+if $remove_host_requested; then
+    if [[ -z "${1}" ]] || [[ "${1}" == "--remove-host" ]]; then
+        print_error "Hostname is required with --remove-host flag."
+        print_info "Usage: sudo ksmanager hostname --remove-host"
+        exit 1
+    fi
+    
+    # Extract hostname from arguments (skip --remove-host)
+    for arg in "$@"; do
+        if [[ "$arg" != "--remove-host" ]]; then
+            cleanup_hostname="$arg"
+            break
+        fi
+    done
+    
+    # Validate and normalize hostname to FQDN
+    if [[ "${cleanup_hostname}" == *.${ipv4_domain} ]]; then
+        stripped_hostname="${cleanup_hostname%.${ipv4_domain}}"
+        if [[ "${stripped_hostname}" == *.* ]]; then
+            print_error "Invalid hostname. Expected format: hostname.${ipv4_domain}"
+            exit 1
+        fi
+        if [[ ! "${stripped_hostname}" =~ ^[a-z0-9-]+$ || "${stripped_hostname}" =~ ^- || "${stripped_hostname}" =~ -$ ]]; then
+            print_error "Invalid hostname. Use only lowercase letters, numbers, and hyphens."
+            exit 1
+        fi
+    elif [[ "${cleanup_hostname}" == *.* ]]; then
+        print_error "Invalid domain. Expected domain: ${ipv4_domain}"
+        exit 1
+    else
+        if [[ ! "${cleanup_hostname}" =~ ^[a-z0-9-]+$ || "${cleanup_hostname}" =~ ^- || "${cleanup_hostname}" =~ -$ ]]; then
+            print_error "Invalid hostname. Use only lowercase letters, numbers, and hyphens."
+            exit 1
+        fi
+        cleanup_hostname="${cleanup_hostname}.${ipv4_domain}"
+    fi
+    
+    print_info "Removing host '${cleanup_hostname}' from all ksmanager databases..."
+    
+    if ! fn_acquire_host_lock "${cleanup_hostname}"; then
+        exit 1
+    fi
+
+    # 1. Snapshot and remove cache row atomically under lock
+    if [[ -f "${mac_cache_file}" ]]; then
+        if ! fn_acquire_mac_cache_lock; then
+            fn_release_host_lock
+            exit 1
+        fi
+
+        cached_info=$(awk -v host="${cleanup_hostname}" '$1 == host {print $2" "$3" "$4; exit}' "${mac_cache_file}" 2>/dev/null)
+        read -r cached_mac cached_ip cached_ipv6 <<< "$cached_info"
+
+        if [[ -n "$cached_mac" ]]; then
+            ipxe_cfg_mac="${cached_mac//:/-}"
+            ipxe_cfg_mac=$(printf '%s' "${ipxe_cfg_mac}" | tr '[:upper:]' '[:lower:]')
+            awk -v host="${cleanup_hostname}" '$1 != host' "${mac_cache_file}" > "${mac_cache_file}.tmp.$$" && \
+                mv "${mac_cache_file}.tmp.$$" "${mac_cache_file}"
+            rm -f "${mac_cache_file}.tmp.$$"
+            print_info "Removed from MAC address cache"
+        else
+            print_info "No MAC address cache entry found"
+        fi
+
+        fn_remove_hosts_json_entry "${cleanup_hostname}"
+
+        fn_release_mac_cache_lock
+    else
+        print_info "No MAC address cache entry found"
+    fi
+    
+    # 2. Remove kickstart directory
+    if [[ -d "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}" ]]; then
+        rm -rf "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}"
+        print_info "Removed kickstart files"
+    else
+        print_info "No kickstart files found"
+    fi
+    
+    # 3. Remove iPXE config file
+    if [[ -n "$ipxe_cfg_mac" ]]; then
+        if [[ -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe" ]]; then
+            rm -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe"
+            print_info "Removed iPXE config file (${ipxe_cfg_mac}.ipxe)"
+        else
+            print_info "No iPXE config file found"
+        fi
+    else
+        print_info "No iPXE config (no MAC address found)"
+    fi
+    
+    # 4. Remove golden boot network config
+    if [[ -n "$ipxe_cfg_mac" ]]; then
+        if [[ -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}" ]]; then
+            rm -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}"
+            print_info "Removed golden boot network config"
+        else
+            print_info "No golden boot network config found"
+        fi
+    else
+        print_info "No golden boot config (no MAC address found)"
+    fi
+    
+    # 5. Remove KEA DHCP reservation
+    if curl -s -o /dev/null http://127.0.0.1:8000/ 2>/dev/null && [[ -n "$cached_mac" ]]; then
+        kea_api_url="http://127.0.0.1:8000/"
+        kea_api_auth="kea-api:kea-api-password"
+        
+        # Delete DHCPv4 lease by MAC address
+        curl -s -X POST -H "Content-Type: application/json" \
+            -u "$kea_api_auth" \
+            -d "{
+                  \"command\": \"lease4-del\",
+                  \"service\": [ \"dhcp4\" ],
+                  \"arguments\": {
+                    \"identifier-type\": \"hw-address\",
+                    \"identifier\": \"${cached_mac}\",
+                    \"subnet-id\": 1
+                  }
+                }" \
+            "$kea_api_url" &>/dev/null
+        
+        # Delete DHCPv4 lease by IP address
+        if [[ -n "$cached_ip" ]]; then
+            curl -s -X POST -H "Content-Type: application/json" \
+                -u "$kea_api_auth" \
+                -d "{
+                      \"command\": \"lease4-del\",
+                      \"service\": [ \"dhcp4\" ],
+                      \"arguments\": {
+                        \"ip-address\": \"${cached_ip}\",
+                        \"subnet-id\": 1
+                      }
+                    }" \
+                "$kea_api_url" &>/dev/null
+        fi
+        
+        # Delete DHCPv6 lease by IP address (if IPv6 exists in cache)
+        if [[ -n "$cached_ipv6" ]]; then
+            curl -s -X POST -H "Content-Type: application/json" \
+                -u "$kea_api_auth" \
+                -d "{
+                      \"command\": \"lease6-del\",
+                      \"service\": [ \"dhcp6\" ],
+                      \"arguments\": {
+                        \"ip-address\": \"${cached_ipv6}\",
+                        \"subnet-id\": 1
+                      }
+                    }" \
+                "$kea_api_url" &>/dev/null
+        fi
+        
+        # Rebuild KEA DHCPv4 config without this host
+        kea_cache_file="${ksmanager_hub_dir}/mac-address-cache"
+        kea_dhcp4_config_file="/tux2lab-data/kea/kea-dhcp4.conf"
+        kea_dhcp6_config_file="/tux2lab-data/kea/kea-dhcp6.conf"
+        kea_temp_config_timestamp=$(date +"%Y%m%d_%H%M%S_%Z")
+        kea_config_temp_dir="${ksmanager_hub_dir}/kea_dhcp_temp_configs_with_reservation"
+        kea_dhcp4_tmp_config="${kea_config_temp_dir}/kea-dhcp4.conf_${kea_temp_config_timestamp}"
+        kea_dhcp6_tmp_config="${kea_config_temp_dir}/kea-dhcp6.conf_${kea_temp_config_timestamp}"
+        kea_cache_snapshot="${kea_config_temp_dir}/mac-address-cache.snapshot.$$"
+        
+        mkdir -p "$kea_config_temp_dir"
+
+        if ! fn_copy_mac_cache_snapshot_locked "${kea_cache_snapshot}"; then
+            print_error "Could not snapshot MAC cache for KEA rebuild. Aborting KEA reservation refresh."
+            fn_release_host_lock
+            exit 1
+        fi
+        
+        # Rebuild DHCPv4 reservations
+        if ! kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file"); then
+            print_error "Failed to read KEA DHCPv4 config: ${kea_dhcp4_config_file}"
+            fn_release_host_lock
+            exit 1
+        fi
+        
+        kea_dhcp4_reservations_json=""
+        while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+            kea_v4=""
+            for _f in $kea_remaining_fields; do
+                [[ "$_f" == *.* ]] && kea_v4="$_f" && break
+            done
+            [[ -z "$kea_v4" ]] && continue
+            kea_dhcp4_reservations_json+="{
+              \"hostname\": \"$kea_hostname\",
+              \"hw-address\": \"$kea_hw_address\",
+              \"ip-address\": \"$kea_v4\"
+            },"
+        done < "$kea_cache_snapshot"
+        
+        kea_dhcp4_reservations_json="[${kea_dhcp4_reservations_json%,}]"
+        
+        kea_dhcp4_new_config=$(echo "$kea_dhcp4_existing_config" | \
+            jq --argjson reservations "$kea_dhcp4_reservations_json" \
+              '.Dhcp4.subnet4[0].reservations = $reservations')
+        
+        cat > "$kea_dhcp4_tmp_config" <<EOF
+{
+  "command": "config-set",
+  "service": [ "dhcp4" ],
+  "arguments": $kea_dhcp4_new_config
+}
+EOF
+        
+        # Rebuild DHCPv6 reservations
+        if ! kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file"); then
+            print_error "Failed to read KEA DHCPv6 config: ${kea_dhcp6_config_file}"
+            fn_release_host_lock
+            exit 1
+        fi
+        
+        kea_dhcp6_reservations_json=""
+        while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+            kea_v6=""
+            for _f in $kea_remaining_fields; do
+                [[ "$_f" == *:* ]] && kea_v6="$_f" && break
+            done
+            if [[ -n "$kea_v6" ]]; then
+                kea_dhcp6_reservations_json+="{
+                  \"hostname\": \"$kea_hostname\",
+                  \"hw-address\": \"$kea_hw_address\",
+                  \"ip-addresses\": [ \"${kea_v6}\" ]
+                },"
+            fi
+        done < "$kea_cache_snapshot"
+        
+        kea_dhcp6_reservations_json="[${kea_dhcp6_reservations_json%,}]"
+        
+        kea_dhcp6_new_config=$(echo "$kea_dhcp6_existing_config" | \
+            jq --argjson reservations "$kea_dhcp6_reservations_json" \
+              '.Dhcp6.subnet6[0].reservations = $reservations')
+        
+        cat > "$kea_dhcp6_tmp_config" <<EOF
+{
+  "command": "config-set",
+  "service": [ "dhcp6" ],
+  "arguments": $kea_dhcp6_new_config
+}
+EOF
+        
+        # Push DHCPv4 config
+        if ! curl -s -X POST -H "Content-Type: application/json" \
+            -u "$kea_api_auth" \
+            -d @"$kea_dhcp4_tmp_config" \
+            "$kea_api_url" &>/dev/null; then
+            print_error "Failed to push KEA DHCPv4 config update"
+            rm -f "${kea_cache_snapshot}"
+            fn_release_host_lock
+            exit 1
+        fi
+        
+        # Push DHCPv6 config
+        if ! curl -s -X POST -H "Content-Type: application/json" \
+            -u "$kea_api_auth" \
+            -d @"$kea_dhcp6_tmp_config" \
+            "$kea_api_url" &>/dev/null; then
+            print_error "Failed to push KEA DHCPv6 config update"
+            rm -f "${kea_cache_snapshot}"
+            fn_release_host_lock
+            exit 1
+        fi
+
+        rm -f "${kea_cache_snapshot}"
+        
+        print_info "Removed KEA DHCP reservations (IPv4 and IPv6)"
+    fi
+    
+    # 6. Remove DNS record (check both A and AAAA for stack-aware deletion)
+    if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${cleanup_hostname}" | grep -q '^[0-9]' || \
+       dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${cleanup_hostname}" | grep -q ':'; then
+        sudo "${dnsbinder_script}" -dy "${cleanup_hostname}"
+        
+        # Verify deletion with retry mechanism (max 1 second)
+        retry_count=0
+        max_retries=2
+        record_deleted=false
+        
+        while [[ ${retry_count} -lt ${max_retries} ]]; do
+            if ! dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${cleanup_hostname}" | grep -q '^[0-9]'; then
+                record_deleted=true
+                break
+            fi
+            sleep 0.5
+            ((retry_count++))
+        done
+        
+        if ${record_deleted}; then
+            print_info "Removed DNS record"
+            flush_dns_cache
+        else
+            print_warning "DNS record may not have been removed properly"
+        fi
+    else
+        print_info "No DNS record found"
+    fi
+    
+    # Also remove any -ipv4 PXE bootstrap record (created for --ipv6-only VMs)
+    _cleanup_short="${cleanup_hostname%%.*}"
+    _cleanup_domain="${cleanup_hostname#*.}"
+    _bootstrap_hostname="${_cleanup_short}-ipv4.${_cleanup_domain}"
+    if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${_bootstrap_hostname}" | grep -q '^[0-9]'; then
+        sudo "${dnsbinder_script}" -dy "${_bootstrap_hostname}"
+        print_info "Removed PXE bootstrap record ${_bootstrap_hostname}"
+    fi
+    
+    fn_release_host_lock
+    print_success "Host '${cleanup_hostname}' has been removed from all ksmanager databases."
+    exit 0
+fi
+
+# Parse flags early (before any state changes like DNS creation)
+invoked_with_qemu_kvm=false
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--qemu-kvm" ]]; then
+        invoked_with_qemu_kvm=true
+        break
+    fi
+done
+
+invoked_with_golden_image=false
+for input_argument in "$@"; do
+    if [[ "$input_argument" == "--golden-image" ]]; then
+        invoked_with_golden_image=true
+        break
+    fi
+done
+
+# Parse --distro, --version, --mac, and --ipv4-only/--ipv6-only flags
+distro_from_flag=""
+version_from_flag=""
+mac_from_flag=""
+stack_mode="dual"
+stack_mode_explicit=false
+prev_arg=""
+for arg in "$@"; do
+    if [[ "$prev_arg" == "--distro" ]]; then
+        distro_from_flag="$arg"
+    fi
+    if [[ "$prev_arg" == "--version" ]]; then
+        version_from_flag="$arg"
+    fi
+    if [[ "$prev_arg" == "--mac" ]]; then
+        mac_from_flag="$arg"
+    fi
+    if [[ "$arg" == "--ipv4-only" ]]; then
+        if $stack_mode_explicit; then
+            print_error "Cannot combine --ipv4-only, --ipv6-only, and --dual-stack. Use only one."
+            exit 1
+        fi
+        stack_mode="ipv4"
+        stack_mode_explicit=true
+    fi
+    if [[ "$arg" == "--ipv6-only" ]]; then
+        if $stack_mode_explicit; then
+            print_error "Cannot combine --ipv4-only, --ipv6-only, and --dual-stack. Use only one."
+            exit 1
+        fi
+        stack_mode="ipv6"
+        stack_mode_explicit=true
+    fi
+    if [[ "$arg" == "--dual-stack" ]]; then
+        if $stack_mode_explicit; then
+            print_error "Cannot combine --ipv4-only, --ipv6-only, and --dual-stack. Use only one."
+            exit 1
+        fi
+        stack_mode="dual"
+        stack_mode_explicit=true
+    fi
+    prev_arg="$arg"
+done
+
+# Auto-detect stack_mode from hosts.json if not explicitly set
+if ! $stack_mode_explicit && [[ -f "$hosts_json_file" ]]; then
+    local_hostname="${1:-}"
+    [[ -n "$local_hostname" ]] && local_hostname="${local_hostname%.${ipv4_domain}}"
+    [[ -n "$local_hostname" && "$local_hostname" != *"."* ]] && local_hostname="${local_hostname}.${ipv4_domain}"
+    if [[ -n "$local_hostname" ]]; then
+        stored_stack=$(jq -r --arg h "$local_hostname" '.[] | select(.hostname == $h) | .stack_mode // "dual"' "$hosts_json_file" 2>/dev/null | head -1)
+        if [[ -n "$stored_stack" && "$stored_stack" != "null" ]]; then
+            stack_mode="$stored_stack"
+        fi
+    fi
+fi
+
+# Version will be set after distro selection (from flag or interactive menu)
+version="${version_from_flag}"
+
+fn_select_os_distro() {
+    # Check if --distro flag was provided
+    if [[ -n "${distro_from_flag}" ]]; then
+        case "${distro_from_flag}" in
+            alma|almalinux) 
+                os_distribution="almalinux"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            rocky) 
+                os_distribution="rocky"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            oracle|oraclelinux) 
+                os_distribution="oraclelinux"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            centos|centos-stream) 
+                os_distribution="centos-stream"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            rhel|redhat) 
+                os_distribution="rhel"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            ubuntu-lts|ubuntu) 
+                os_distribution="ubuntu-lts"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            debian) 
+                os_distribution="debian"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            opensuse-leap|opensuse|suse) 
+                os_distribution="opensuse-leap"
+                print_info "OS distribution selected via --distro flag: ${os_distribution}"
+                ;;
+            *)
+                print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
+                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    while true; do
+    # If distro not set via flag, show interactive distro selection menu
+    if [[ -z "${os_distribution}" ]]; then
+        # Build list of distros that have at least one PXE-ready version
+        local ready_distro_keys=()
+        local -A ready_distro_versions=()
+        for key in "${DISTRO_KEYS[@]}"; do
+            local ready_vers=""
+            for ver in ${DISTRO_AVAILABLE_VERSIONS[$key]}; do
+                if [[ "$key" == "debian" ]]; then
+                    [[ -f "/tux2lab-data/os-repos/${key}/${ver}-netboot/vmlinuz" ]] && ready_vers+="${ver} "
+                elif mountpoint -q "/tux2lab-data/os-repos/${key}/${ver}" 2>/dev/null; then
+                    ready_vers+="${ver} "
+                fi
+            done
+            if [[ -n "$ready_vers" ]]; then
+                ready_distro_keys+=("$key")
+                ready_distro_versions[$key]="${ready_vers% }"
+            fi
+        done
+
+        if [[ ${#ready_distro_keys[@]} -eq 0 ]]; then
+            print_error "No OS distributions are prepared for PXE installation."
+            print_info "Use 'tux2lab distro setup <distro> -v <version>' to prepare a distro."
+            print_info "Use 'tux2lab distro list' to see available distros and their status."
+            exit 1
+        fi
+
+        # Auto-select if only one distro is PXE-ready
+        if [[ ${#ready_distro_keys[@]} -eq 1 ]]; then
+            os_distribution="${ready_distro_keys[0]}"
+            print_info "Auto-selected ${DISTRO_DISPLAY_NAMES[$os_distribution]} (only PXE-ready distro)"
+        else
+            local menu="Please select the OS distribution to install:\n"
+            for i in "${!ready_distro_keys[@]}"; do
+                local key="${ready_distro_keys[$i]}"
+                local name="${DISTRO_DISPLAY_NAMES[$key]}"
+                local versions="${ready_distro_versions[$key]}"
+                printf -v line "  %d)  %-32s (versions: %s)\n" $((i+1)) "${name}" "${versions}"
+                menu+="${line}"
+            done
+            menu+="  q)  Quit"
+            
+            print_notify "$menu"
+            echo -n "Enter option number: "
+            read distro_choice
+
+            if [[ "${distro_choice}" == "q" || "${distro_choice}" == "Q" ]]; then
+                print_info "Operation cancelled by user."; exit 130
+            elif [[ "${distro_choice}" =~ ^[0-9]+$ ]] && (( distro_choice >= 1 && distro_choice <= ${#ready_distro_keys[@]} )); then
+                os_distribution="${ready_distro_keys[$((distro_choice-1))]}"
+            else
+                print_error "Invalid option. Please try again."; continue
+            fi
+        fi
+    fi
+
+    # Select version (if not set via --version flag)
+    if [[ -z "${version}" ]]; then
+        # Get only PXE-ready versions for this distro
+        local available_versions=()
+        for ver in ${DISTRO_AVAILABLE_VERSIONS[$os_distribution]}; do
+            if [[ "${os_distribution}" == "debian" ]]; then
+                [[ -f "/tux2lab-data/os-repos/${os_distribution}/${ver}-netboot/vmlinuz" ]] && available_versions+=("$ver")
+            elif mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${ver}" 2>/dev/null; then
+                available_versions+=("$ver")
+            fi
+        done
+
+        if [[ ${#available_versions[@]} -eq 0 ]]; then
+            print_error "No versions of ${DISTRO_DISPLAY_NAMES[$os_distribution]} are prepared for PXE installation."
+            print_info "Use 'tux2lab distro setup ${os_distribution} -v <version>' to prepare a version."
+            if [[ -n "${distro_from_flag}" ]]; then
+                exit 1
+            fi
+            os_distribution=""
+            continue
+        fi
+
+        # Auto-select if only one version is PXE-ready
+        if [[ ${#available_versions[@]} -eq 1 ]]; then
+            version="${available_versions[0]}"
+            print_info "Auto-selected version ${version} (only PXE-ready version for ${DISTRO_DISPLAY_NAMES[$os_distribution]})"
+        else
+            while true; do
+                echo "Available versions for ${DISTRO_DISPLAY_NAMES[$os_distribution]}: ${available_versions[*]}"
+                echo -n "Enter the version: "
+                read version_choice
+
+                if [[ "${version_choice}" == "q" || "${version_choice}" == "Q" ]]; then
+                    print_info "Operation cancelled by user."; exit 130
+                elif fn_is_valid_version "$os_distribution" "$version_choice"; then
+                    version="$version_choice"
+                    break
+                else
+                    print_error "Invalid version '${version_choice}'. Please try again."
+                fi
+            done
+        fi
+    else
+        # Validate the version from --version flag
+        if ! fn_is_valid_version "$os_distribution" "$version"; then
+            print_error "Invalid version '${version}' for ${os_distribution}."
+            print_info "Available versions: ${DISTRO_AVAILABLE_VERSIONS[$os_distribution]}"
+            exit 1
+        fi
+        # Check if the version is PXE-ready
+        if [[ "${os_distribution}" == "debian" ]]; then
+            if [[ ! -f "/tux2lab-data/os-repos/${os_distribution}/${version}-netboot/vmlinuz" ]]; then
+                print_error "${DISTRO_DISPLAY_NAMES[$os_distribution]} ${version} is not prepared for PXE installation."
+                print_info "Use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it."
+                exit 1
+            fi
+        elif ! mountpoint -q "/tux2lab-data/os-repos/${os_distribution}/${version}" 2>/dev/null; then
+            print_error "${DISTRO_DISPLAY_NAMES[$os_distribution]} ${version} is not prepared for PXE installation."
+            print_info "Use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it."
+            exit 1
+        fi
+    fi
+    
+    break
+    done
+
+    print_info "OS distribution selected: ${os_distribution} ${version}"
+}
+
+fn_select_os_distro
+
+if $golden_image_creation_not_requested; then
+    fn_check_and_create_host_record "${1}"
+
+    # Extract IPs based on stack_mode
+    if [[ "${stack_mode}" != "ipv6" ]]; then
+        ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    fi
+    if [[ "${stack_mode}" != "ipv4" ]] && [[ -n "${ipv6_gateway}" ]]; then
+        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    fi
+
+    # For --ipv6-only PXE: get temp IPv4 from bootstrap record
+    if [[ "${stack_mode}" == "ipv6" ]] && [[ -n "${pxe_bootstrap_hostname:-}" ]]; then
+        pxe_bootstrap_ipv4=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${pxe_bootstrap_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+        ipv4_address="${pxe_bootstrap_ipv4}"
+    fi
+fi
+
+# Function to validate MAC address
+fn_validate_mac() {
+    local mac_address_of_host="${1}"
+    
+    # Regex for MAC address (allowing both colon and hyphen-separated)
+    if [[ "${mac_address_of_host}" =~ ^([a-fA-F0-9]{2}([-:]?)){5}[a-fA-F0-9]{2}$ ]]
+    then
+        return 0  # Valid MAC address
+    else
+        return 1  # Invalid MAC address
+    fi
+}
+
+fn_convert_mac_for_ipxe_cfg() {
+    # Convert MAC address to required format to append with ipxe.cfg file
+    ipxe_cfg_mac_address="${mac_address_of_host//:/-}"
+    ipxe_cfg_mac_address=$(printf '%s' "${ipxe_cfg_mac_address}" | tr '[:upper:]' '[:lower:]')
+}
+
+fn_cache_the_mac() {
+    print_task "Caching MAC address..."
+    local temp_cache_file="${mac_cache_file}.tmp.$$"
+
+    if ! fn_acquire_mac_cache_lock; then
+        print_task_fail
+        exit 1
+    fi
+
+    # Build cache line: hostname mac [ipv4] [ipv6]
+    # PXE ipv6-only: needs temp IPv4 for DHCP during install + IPv6 for permanent
+    # Golden ipv6-only: only IPv6 (no PXE involved)
+    local cache_fields="${kickstart_hostname} ${mac_address_of_host}"
+    if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image && [[ -n "${ipv4_address}" ]]; then
+        cache_fields+=" ${ipv4_address} ${ipv6_address}"
+    elif [[ "${stack_mode}" == "ipv6" ]]; then
+        cache_fields+=" ${ipv6_address}"
+    elif [[ "${stack_mode}" == "ipv4" ]]; then
+        cache_fields+=" ${ipv4_address}"
+    else
+        cache_fields+=" ${ipv4_address}"
+        [[ -n "${ipv6_address}" ]] && cache_fields+=" ${ipv6_address}"
+    fi
+
+    touch "${mac_cache_file}"
+    if awk -v host="${kickstart_hostname}" '$1 != host' "${mac_cache_file}" > "${temp_cache_file}" && \
+       printf '%s\n' "${cache_fields}" >> "${temp_cache_file}" && \
+       mv "${temp_cache_file}" "${mac_cache_file}"; then
+        fn_release_mac_cache_lock
+        print_task_done
+    else
+        rm -f "${temp_cache_file}"
+        fn_release_mac_cache_lock
+        print_task_fail
+        print_error "Failed to cache MAC address."
+        exit 1
+    fi
+}
+
+# Loop until a valid MAC address is provided
+
+fn_get_mac_address() {
+    while :
+    do
+        echo -n "Enter the MAC address of the VM \"${kickstart_hostname}\": "
+        read mac_address_of_host
+            # Call the function to validate the MAC address
+            if fn_validate_mac "${mac_address_of_host}"
+            then
+                break
+            else
+            print_error "Invalid MAC address provided. Please try again."
+            fi
+    done
+}
+
+fn_check_and_create_mac_if_required() {
+
+# If MAC address was provided via --mac flag, use it directly
+if [[ -n "${mac_from_flag}" ]]; then
+    print_info "Using MAC address provided via --mac flag: ${mac_from_flag}"
+    mac_address_of_host="${mac_from_flag}"
+    # Validate the provided MAC address
+    if ! fn_validate_mac "${mac_address_of_host}"; then
+        print_error "Invalid MAC address provided via --mac flag: ${mac_address_of_host}"
+        exit 1
+    fi
+    fn_convert_mac_for_ipxe_cfg
+    fn_cache_the_mac
+    return
+fi
+
+print_info "Looking up MAC address for host \"${kickstart_hostname}\" from cache..."
+
+if [[ ! -f "${mac_cache_file}" ]]; then
+    touch  "${mac_cache_file}"
+fi
+
+if awk -v host="${kickstart_hostname}" '$1 == host {found=1} END{exit !found}' "${mac_cache_file}"
+then
+    mac_address_of_host=$(awk -v host="${kickstart_hostname}" '$1 == host {print $2; exit}' "${mac_cache_file}")
+
+    print_info "MAC Address ${mac_address_of_host} found for ${kickstart_hostname} in cache."
+    while :
+    do
+        if $invoked_with_qemu_kvm; then
+            fn_convert_mac_for_ipxe_cfg
+            break
+        fi
+        
+        read -p "Has the MAC Address ${mac_address_of_host} been changed for ${kickstart_hostname} (y/N)? : " confirmation 
+
+        if [[ "${confirmation}" =~ ^[Nn]$ ]] 
+        then
+            fn_convert_mac_for_ipxe_cfg
+            break
+
+        elif [[ -z "${confirmation}" ]]
+        then
+            fn_convert_mac_for_ipxe_cfg
+            break
+
+        elif [[ "${confirmation}" =~ ^[Yy]$ ]]
+        then
+            fn_get_mac_address
+            fn_convert_mac_for_ipxe_cfg
+            fn_cache_the_mac
+            break
+        else
+            print_warning "Invalid input."
+        fi
+    done
+else
+    print_info "MAC address for \"${kickstart_hostname}\" not found in cache."
+    if $invoked_with_qemu_kvm; then
+        print_error "MAC address not found in cache and --mac flag not provided for QEMU/KVM mode."
+        print_error "QEMU/KVM scripts must provide MAC address via --mac flag."
+        exit 1
+    else
+        fn_get_mac_address
+        fn_convert_mac_for_ipxe_cfg
+        fn_cache_the_mac
+    fi
+fi
+}
+
+if $golden_image_creation_not_requested; then
+    fn_check_and_create_mac_if_required
+fi
+
+# Initialize variables for QEMU/KVM
+disk_type_for_the_vm="vda"
+
+fn_create_host_kickstart_dir() {
+    host_kickstart_dir="${ksmanager_hub_dir}/kickstarts/${kickstart_hostname}"
+    mkdir -p "${host_kickstart_dir}"
+    rm -rf "${host_kickstart_dir:?}"/*
+}
+
+if $golden_image_creation_not_requested; then
+    :
+fi
+
+mount_dir="/tux2lab-data/os-repos/${os_distribution}/${version}"
+
+# Debian uses netboot-only (no ISO mount) — check for netboot files instead
+if [[ "${os_distribution}" == "debian" ]]; then
+    while [[ ! -f "/tux2lab-data/os-repos/${os_distribution}/${version}-netboot/vmlinuz" ]]; do
+        print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
+        print_info "Please use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it for PXE-boot."
+        if $invoked_with_qemu_kvm; then
+            print_error "Cannot proceed with unprepared OS distribution in automation mode."
+            exit 1
+        fi
+        fn_select_os_distro
+    done
+else
+    while ! mountpoint -q "${mount_dir}"; do
+        print_warning "${os_distribution} is not yet prepared for PXE-boot environment."
+        print_info "Please use 'tux2lab distro setup ${os_distribution} -v ${version}' to prepare it for PXE-boot."
+        if $invoked_with_qemu_kvm; then
+            print_error "Cannot proceed with unprepared OS distribution in automation mode."
+            exit 1
+        fi
+        fn_select_os_distro
+    done
+fi
+
+if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
+    # Codename mapping centralized in distro-versions.conf
+    ubuntu_codename="${UBUNTU_CODENAMES[${version}]:-}"
+elif [[ "${os_distribution}" == "debian" ]]; then
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
+    # Codename mapping centralized in distro-versions.conf
+    debian_codename="${DEBIAN_CODENAMES[${version}]:-}"
+elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
+    opensuse_version_number="${version}"
+else
+    redhat_based_distro_name="${os_distribution}"
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
+fi
+
+if ! $golden_image_creation_not_requested; then
+    fn_check_and_create_host_record "${os_distribution}-${version//\./-}-golden-image"
+    ipv4_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    
+    # Query DNS for IPv6 address (if dual-stack configured)
+    if [[ -n "${ipv6_gateway}" ]]; then
+        ipv6_address=$(dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${kickstart_hostname}" 2>/dev/null | awk 'NR==1 {gsub(/[[:space:]]/, ""); print}' || true)
+    fi
+    
+    fn_check_and_create_mac_if_required
+fi
+
+if ! fn_acquire_host_lock "${kickstart_hostname}"; then
+    exit 1
+fi
+
+if ! $golden_image_creation_not_requested || ! $invoked_with_golden_image; then
+    fn_create_host_kickstart_dir
+fi
+
+if ! $invoked_with_golden_image; then
+    if [[ "${os_distribution}" == "opensuse-leap" ]]; then
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"; then
+            print_error "Failed to copy Agama profile for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
+    elif [[ "${os_distribution}" == "ubuntu-lts" ]]; then 
+        if ! rsync -a -q --delete --exclude='eth0-*.yaml' "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy kickstart template for ${os_distribution}-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
+        rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-ks/eth0-${stack_mode}.yaml" "${host_kickstart_dir}/${os_distribution}-${version}-ks/eth0.yaml"
+    elif [[ "${os_distribution}" == "debian" ]]; then
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/debian-${version}-preseed.cfg" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy preseed template for debian-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
+    else
+        if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/redhat-based-${version}-ks.cfg" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy kickstart template for redhat-based-${version}"
+            fn_release_host_lock
+            exit 1
+        fi
+        # RHEL: replace url/repo with rhsm subscription-manager directive
+        if [[ "${os_distribution}" == "rhel" ]]; then
+            rhel_sub_file="/tux2lab-data/lab-config/rhel-subscription.conf"
+            if [[ -f "$rhel_sub_file" ]]; then
+                source "$rhel_sub_file"
+                ks_file="${host_kickstart_dir}/redhat-based-${version}-ks.cfg"
+                sed -i '/^url --url=/d' "$ks_file"
+                sed -i '/^repo --name="appstream"/d' "$ks_file"
+                sed -i "s|^# Installation source (online repos)|# Installation source (Red Hat Subscription Manager)\nrhsm --organization=${RHEL_ORG_ID} --activation-key=${RHEL_ACTIVATION_KEY}|" "$ks_file"
+            else
+                print_error "RHEL subscription credentials not found."
+                print_info "Run 'tux2lab distro setup rhel -v ${version}' to configure them."
+                fn_release_host_lock
+                exit 1
+            fi
+        fi
+    fi
+    if ! $golden_image_creation_not_requested; then
+        if ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.service" "${host_kickstart_dir}"/ || \
+           ! rsync -a -q "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.sh" "${host_kickstart_dir}"/; then
+            print_error "Failed to copy golden-boot templates"
+            fn_release_host_lock
+            exit 1
+        fi
+    fi
+fi
+
+if ! $invoked_with_golden_image; then
+
+    print_task "Generating kickstart profile and iPXE configs..."
+    if ! fn_acquire_shared_artifacts_lock; then
+        fn_release_host_lock
+        exit 1
+    fi
+
+    if mkdir -p "${ksmanager_hub_dir}"/golden-boot-mac-configs; then
+        print_task_done
+    else
+        fn_release_shared_artifacts_lock
+        print_task_fail
+        print_error "Failed to generate kickstart profile."
+        fn_release_host_lock
+        exit 1
+    fi
+fi
+
+if $invoked_with_golden_image; then
+
+    print_task "Generating golden boot network config..."
+    if ! fn_acquire_shared_artifacts_lock; then
+        fn_release_host_lock
+        exit 1
+    fi
+
+    if rsync -a -q "${ksmanager_main_dir}"/golden-boot-templates/network-config-for-mac-address "${ksmanager_hub_dir}"/golden-boot-mac-configs/network-config-"${ipxe_cfg_mac_address}"; then
+        print_task_done
+    else
+        fn_release_shared_artifacts_lock
+        print_task_fail
+        print_error "Failed to generate network config."
+        fn_release_host_lock
+        exit 1
+    fi
+fi
+
+fn_generate_post_install_script() {
+    local post_install_template=""
+    local post_install_target="${host_kickstart_dir}/post-install.sh"
+    local addons_dir="${ksmanager_main_dir}/addons-for-kickstarts"
+
+    # Select the appropriate template based on distro family
+    if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-ubuntu.sh.template"
+    elif [[ "${os_distribution}" == "debian" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-debian.sh.template"
+    elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-opensuse.sh.template"
+    else
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-redhat.sh.template"
+    fi
+
+    if [[ ! -f "${post_install_template}" ]]; then
+        print_error "Post-install template not found: ${post_install_template}"
+        return 1
+    fi
+
+    cp -f "${post_install_template}" "${post_install_target}"
+
+    # Expand EMBED_CONTENT markers with actual file contents
+    fn_embed_file_content() {
+        local target_file="$1"
+        local marker="$2"
+        local source_file="$3"
+        local tmp_file="${target_file}.tmp_embed.$$"
+
+        if [[ ! -f "${source_file}" ]]; then
+            print_warning "Embed source not found: ${source_file} — skipping marker ${marker}"
+            return 0
+        fi
+
+        awk -v marker="EMBED_CONTENT:${marker}" -v source="${source_file}" '
+        $0 == marker {
+            while ((getline line < source) > 0) print line
+            close(source)
+            next
+        }
+        { print }
+        ' "${target_file}" > "${tmp_file}" && mv "${tmp_file}" "${target_file}"
+    }
+
+    fn_embed_file_content "${post_install_target}" "authorized_keys" "/tux2lab-data/lab-config/ssh-keys/authorized_keys"
+    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa.pub" "/tux2lab-data/lab-config/ssh-keys/tux2lab_id_rsa.pub"
+    fn_embed_file_content "${post_install_target}" "tux2lab_id_rsa" "/tux2lab-data/lab-config/ssh-keys/tux2lab_id_rsa"
+    fn_embed_file_content "${post_install_target}" "PS1-env-variable-normal-user" "${addons_dir}/PS1-env-variable-normal-user"
+    fn_embed_file_content "${post_install_target}" "PS1-env-variable-root-user" "${addons_dir}/PS1-env-variable-root-user"
+    fn_embed_file_content "${post_install_target}" "motd.txt" "${addons_dir}/motd.txt"
+    fn_embed_file_content "${post_install_target}" "ca-cert" "/tux2lab-data/lab-config/certs/tux2lab-nginx-selfsigned.crt"
+    fn_embed_file_content "${post_install_target}" "tux2lab-sync.service" "${addons_dir}/tux2lab-sync.service"
+    fn_embed_file_content "${post_install_target}" "tux2lab-sync.timer" "${addons_dir}/tux2lab-sync.timer"
+    fn_embed_file_content "${post_install_target}" "tux2lab-golden-boot.service" "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.service"
+    fn_embed_file_content "${post_install_target}" "tux2lab-golden-boot.sh" "${ksmanager_main_dir}/golden-boot-templates/tux2lab-golden-boot.sh"
+
+    chmod 644 "${post_install_target}"
+}
+
+if ! $invoked_with_golden_image; then
+    fn_generate_post_install_script
+fi
+
+fn_set_environment() {
+    local input_dir_or_file="${1}"
+    local working_file=
+
+    fn_replace_token_in_file() {
+        local target_file="$1"
+        local token="$2"
+        local replacement="$3"
+        local tmp_file="${target_file}.tmp_replace.$$"
+
+        # Use awk-based replacement to avoid sed delimiter/escaping pitfalls
+        # with runtime values such as CIDR blocks (e.g., 10.28.28.0/22).
+        if awk -v token="${token}" -v replacement="${replacement}" '
+            BEGIN {
+                gsub(/\\/, "\\\\", replacement)
+                gsub(/&/, "\\&", replacement)
+            }
+            {
+                gsub(token, replacement)
+                print
+            }
+        ' "${target_file}" > "${tmp_file}"; then
+            mv "${tmp_file}" "${target_file}"
+        else
+            rm -f "${tmp_file}"
+            return 1
+        fi
+    }
+
+    fn_update_dynamic_parameters() {
+
+        local working_file="${1}"
+
+        fn_replace_token_in_file "${working_file}" "get_ipv4_network_cidr" "${ipv4_network_cidr}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_address" "${ipv4_address}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_netmask" "${ipv4_netmask}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_prefix" "${ipv4_prefix}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_gateway" "${ipv4_gateway}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_nameserver" "${ipv4_nameserver}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_nfsserver" "${ipv4_nfsserver}"
+        fn_replace_token_in_file "${working_file}" "get_ipv4_domain" "${ipv4_domain}"
+        
+        # IPv6 replacements (always replace — empty values for ipv4-only VMs)
+        fn_replace_token_in_file "${working_file}" "get_ipv6_address" "${ipv6_address}"
+        fn_replace_token_in_file "${working_file}" "get_ipv6_gateway" "${ipv6_gateway:-}"
+        fn_replace_token_in_file "${working_file}" "get_ipv6_prefix" "${ipv6_prefix:-}"
+        # Always replace IPv6 nameserver if configured
+        fn_replace_token_in_file "${working_file}" "get_ipv6_nameserver" "${ipv6_nameserver:-}"
+        fn_replace_token_in_file "${working_file}" "get_hostname" "${kickstart_short_hostname}"
+
+        # Debian preseed workaround: the directive name 'netcfg/get_hostname' contains
+        # the token 'get_hostname' which gets mangled by the global replacement above.
+        # Restore the directive name after token replacement.
+        if [[ "${os_distribution}" == "debian" && "${working_file}" == *preseed.cfg ]]; then
+            fn_replace_token_in_file "${working_file}" "netcfg/${kickstart_short_hostname}" "netcfg/get_hostname"
+        fi
+        fn_replace_token_in_file "${working_file}" "get_lab_infra_server_hostname" "${lab_infra_server_hostname}"
+        fn_replace_token_in_file "${working_file}" "get_time_of_last_update" "${time_of_last_update}"
+        fn_replace_token_in_file "${working_file}" "get_mgmt_super_user" "${mgmt_super_user}"
+        fn_replace_token_in_file "${working_file}" "get_os_name_and_version" "${os_name_and_version}"
+        fn_replace_token_in_file "${working_file}" "get_disk_type_for_the_vm" "${disk_type_for_the_vm}"
+        fn_replace_token_in_file "${working_file}" "get_golden_image_creation_not_requested" "${golden_image_creation_not_requested}"
+        fn_replace_token_in_file "${working_file}" "get_redhat_based_distro_name" "${redhat_based_distro_name}"
+        fn_replace_token_in_file "${working_file}" "get_os_distribution" "${os_distribution}"
+        fn_replace_token_in_file "${working_file}" "get_version" "${version}"
+        fn_replace_token_in_file "${working_file}" "get_repo_url" "${REPO_URLS[${os_distribution}:${version}]:-}"
+        fn_replace_token_in_file "${working_file}" "get_appstream_repo_url" "${APPSTREAM_REPO_URLS[${os_distribution}:${version}]:-}"
+        fn_replace_token_in_file "${working_file}" "get_opensuse_version_number" "${opensuse_version_number}"
+        fn_replace_token_in_file "${working_file}" "get_ubuntu_codename" "${ubuntu_codename:-}"
+        fn_replace_token_in_file "${working_file}" "get_debian_codename" "${debian_codename:-}"
+        fn_replace_token_in_file "${working_file}" "get_subnets_to_allow_ssh_pub_access" "${subnets_to_allow_ssh_pub_access}"
+
+        fn_replace_token_in_file "${working_file}" "get_stack_mode" "${stack_mode}"
+
+        awk -v val="$shadow_password_super_mgmt_user" '
+        {
+                gsub(/get_shadow_password_super_mgmt_user/, val)
+        }
+        1
+        ' "${working_file}" > "${working_file}"_tmp_ksmanager && mv "${working_file}"_tmp_ksmanager "${working_file}"
+    }
+
+    if [[ -d "${input_dir_or_file}" ]]
+    then
+        while IFS= read -r -d '' working_file; do
+            fn_update_dynamic_parameters "${working_file}"
+        done < <(find "${input_dir_or_file}" -type f -print0)
+
+    elif [[ -f "${input_dir_or_file}" ]]
+    then
+        working_file="${input_dir_or_file}"
+        fn_update_dynamic_parameters "${working_file}"
+    fi
+}
+
+if ! $invoked_with_golden_image; then
+
+    fn_set_environment "${host_kickstart_dir}"
+
+    # openSUSE: fix profile.json after token replacement for ipv4-only (empty IPv6 tokens)
+    if [[ "${os_distribution}" == "opensuse-leap" ]] && [[ "${stack_mode}" == "ipv4" ]]; then
+        _profile="${host_kickstart_dir}/${os_distribution}-${version}-profile.json"
+        jq '(.network.connections[0].addresses) |= map(select(startswith("/") | not)) |
+            .network.connections[0].method6 = "disabled" |
+            del(.network.connections[0].gateway6) |
+            (.network.connections[0].nameservers) |= map(select(contains(":") | not))' "$_profile" > "${_profile}.tmp" && mv "${_profile}.tmp" "$_profile"
+    fi
+
+    mac_based_ipxe_cfg_file="${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
+
+    if [[ -z "${redhat_based_distro_name}" ]]; then
+        local_ipxe_template="ipxe-template-${os_distribution}.ipxe"
+        if [[ "${os_distribution}" == "opensuse-leap" ]]; then
+            local_ipxe_template="ipxe-template-opensuse-leap-16.ipxe"
+        fi
+        if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/${local_ipxe_template}"  "${mac_based_ipxe_cfg_file}"; then
+            print_error "Failed to copy iPXE template for ${os_distribution}"
+            fn_release_host_lock
+            exit 1
+        fi
+    else
+        if ! rsync -a -q "${ksmanager_main_dir}/ipxe-templates/ipxe-template-redhat-based.ipxe"  "${mac_based_ipxe_cfg_file}"; then
+            print_error "Failed to copy iPXE template for redhat-based"
+            fn_release_host_lock
+            exit 1
+        fi
+    fi
+
+    fn_set_environment "${mac_based_ipxe_cfg_file}"
+
+fi
+
+if $invoked_with_golden_image; then
+    print_task "Setting environment variables in network config..."
+    fn_set_environment "${ksmanager_hub_dir}"/golden-boot-mac-configs/network-config-"${ipxe_cfg_mac_address}"
+    # Strip irrelevant fields based on stack mode
+    _net_cfg="${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac_address}"
+    if [[ "${stack_mode}" == "ipv4" ]]; then
+        sed -i '/^IPv6_/d' "${_net_cfg}"
+    elif [[ "${stack_mode}" == "ipv6" ]]; then
+        sed -i '/^IPv4_ADDRESS=/d; /^IPv4_CIDR=/d; /^IPv4_GATEWAY=/d; /^IPv4_DNS_SERVER=/d' "${_net_cfg}"
+    fi
+    print_task_done
+fi
+
+print_task "Finalizing configuration files..."
+fn_chown_if_exists "${mac_cache_file}"
+fn_chown_if_exists "${host_kickstart_dir}"
+fn_chown_if_exists "${ksmanager_hub_dir}/addons-for-kickstarts"
+fn_chown_if_exists "${ksmanager_hub_dir}/golden-boot-mac-configs"
+fn_chown_if_exists "${ipxe_web_dir}/${ipxe_cfg_mac_address}.ipxe"
+
+if $shared_lock_acquired; then
+    fn_release_shared_artifacts_lock
+fi
+print_task_done
+
+fn_update_kea_dhcp_reservations() {
+  print_task "Updating KEA DHCP reservations..."
+  local kea_cache_file="${ksmanager_hub_dir}/mac-address-cache"
+  local kea_dhcp4_config_file="/tux2lab-data/kea/kea-dhcp4.conf"
+  local kea_dhcp6_config_file="/tux2lab-data/kea/kea-dhcp6.conf"
+  local kea_api_url="http://127.0.0.1:8000/"
+  local kea_api_auth="kea-api:kea-api-password"
+  local kea_temp_config_timestamp=$(date +"%Y%m%d_%H%M%S_%Z")
+  local kea_config_temp_dir="${ksmanager_hub_dir}/kea_dhcp_temp_configs_with_reservation"
+  local kea_dhcp4_tmp_config="${kea_config_temp_dir}/kea-dhcp4.conf_${kea_temp_config_timestamp}"
+  local kea_dhcp6_tmp_config="${kea_config_temp_dir}/kea-dhcp6.conf_${kea_temp_config_timestamp}"
+
+  mkdir -p "$kea_config_temp_dir"
+  find "$kea_config_temp_dir" -type f -name "kea-dhcp*.conf_*" -delete
+
+    local kea_cache_snapshot="${kea_config_temp_dir}/mac-address-cache.snapshot.$$"
+
+    if ! fn_acquire_mac_cache_lock; then
+        print_task_fail
+        exit 1
+    fi
+
+    if [[ -f "${kea_cache_file}" ]]; then
+        if ! cp "${kea_cache_file}" "${kea_cache_snapshot}"; then
+            fn_release_mac_cache_lock
+            print_task_fail
+            print_error "Failed to create KEA cache snapshot."
+            exit 1
+        fi
+    else
+        if ! : > "${kea_cache_snapshot}"; then
+            fn_release_mac_cache_lock
+            print_task_fail
+            print_error "Failed to create KEA cache snapshot."
+            exit 1
+        fi
+    fi
+
+    fn_release_mac_cache_lock
+
+  # ===== DHCPv4 Reservations =====
+  # Read existing Kea DHCPv4 config
+  local kea_dhcp4_existing_config
+  if ! kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file"); then
+    print_task_fail
+    print_error "Failed to read KEA DHCPv4 config: ${kea_dhcp4_config_file}"
+    exit 1
+  fi
+
+  # Build JSON array of DHCPv4 reservations from cache file
+  local kea_dhcp4_reservations_json=""
+  while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+    local kea_v4=""
+    for _f in $kea_remaining_fields; do
+      [[ "$_f" == *.* ]] && kea_v4="$_f" && break
+    done
+    if [[ -n "$kea_v4" ]]; then
+      kea_dhcp4_reservations_json+="{
+        \"hostname\": \"$kea_hostname\",
+        \"hw-address\": \"$kea_hw_address\",
+        \"ip-address\": \"$kea_v4\"
+      },"
+    fi
+    done < "$kea_cache_snapshot"
+
+  kea_dhcp4_reservations_json="[${kea_dhcp4_reservations_json%,}]"
+
+  # Insert DHCPv4 reservations into config JSON
+  local kea_dhcp4_new_config
+  kea_dhcp4_new_config=$(echo "$kea_dhcp4_existing_config" | \
+    jq --argjson reservations "$kea_dhcp4_reservations_json" \
+      '.Dhcp4.subnet4[0].reservations = $reservations')
+
+  # Wrap into config-set command for DHCPv4
+  cat > "$kea_dhcp4_tmp_config" <<EOF
+{
+  "command": "config-set",
+  "service": [ "dhcp4" ],
+  "arguments": $kea_dhcp4_new_config
+}
+EOF
+
+  # ===== DHCPv6 Reservations =====
+  # Read existing Kea DHCPv6 config
+  local kea_dhcp6_existing_config
+  if ! kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file"); then
+    print_task_fail
+    print_error "Failed to read KEA DHCPv6 config: ${kea_dhcp6_config_file}"
+    exit 1
+  fi
+
+  # Build JSON array of DHCPv6 reservations from cache file
+  local kea_dhcp6_reservations_json=""
+  while read -r kea_hostname kea_hw_address kea_remaining_fields; do
+    local kea_v6=""
+    for _f in $kea_remaining_fields; do
+      [[ "$_f" == *:* ]] && kea_v6="$_f" && break
+    done
+    if [[ -n "$kea_v6" ]]; then
+      kea_dhcp6_reservations_json+="{
+        \"hostname\": \"$kea_hostname\",
+        \"hw-address\": \"$kea_hw_address\",
+        \"ip-addresses\": [ \"${kea_v6}\" ]
+      },"
+    fi
+    done < "$kea_cache_snapshot"
+
+  kea_dhcp6_reservations_json="[${kea_dhcp6_reservations_json%,}]"
+
+  # Insert DHCPv6 reservations into config JSON
+  local kea_dhcp6_new_config
+  kea_dhcp6_new_config=$(echo "$kea_dhcp6_existing_config" | \
+    jq --argjson reservations "$kea_dhcp6_reservations_json" \
+      '.Dhcp6.subnet6[0].reservations = $reservations')
+
+  # Wrap into config-set command for DHCPv6
+  cat > "$kea_dhcp6_tmp_config" <<EOF
+{
+  "command": "config-set",
+  "service": [ "dhcp6" ],
+  "arguments": $kea_dhcp6_new_config
+}
+EOF
+
+  # ===== Delete old DHCPv4 leases =====
+  # Delete old DHCPv4 lease by MAC (safe if none exists)
+  curl -s -X POST -H "Content-Type: application/json" \
+    -u "$kea_api_auth" \
+    -d "{
+          \"command\": \"lease4-del\",
+          \"service\": [ \"dhcp4\" ],
+          \"arguments\": {
+            \"identifier-type\": \"hw-address\",
+            \"identifier\": \"${mac_address_of_host}\",
+            \"subnet-id\": 1
+          }
+        }" \
+  "$kea_api_url" &>/dev/null
+
+  # Delete DHCPv4 lease by IP (safe if none exists)
+  curl -s -X POST -H "Content-Type: application/json" \
+    -u "$kea_api_auth" \
+    -d "{
+          \"command\": \"lease4-del\",
+          \"service\": [ \"dhcp4\" ],
+          \"arguments\": {
+            \"ip-address\": \"${ipv4_address}\",
+            \"subnet-id\": 1
+          }
+        }" \
+   "$kea_api_url" &>/dev/null
+
+  # ===== Delete old DHCPv6 leases =====
+  curl -s -X POST -H "Content-Type: application/json" \
+    -u "$kea_api_auth" \
+    -d "{
+          \"command\": \"lease6-del\",
+          \"service\": [ \"dhcp6\" ],
+          \"arguments\": {
+            \"ip-address\": \"${ipv6_address}\",
+            \"subnet-id\": 1
+          }
+        }" \
+   "$kea_api_url" &>/dev/null
+
+  # ===== Push new configs dynamically =====
+  # Push DHCPv4 config (--fail ensures non-zero exit on HTTP 4xx/5xx)
+  if ! curl -sf -X POST -H "Content-Type: application/json" \
+    -u "$kea_api_auth" \
+    -d @"$kea_dhcp4_tmp_config" \
+    "$kea_api_url" &>/dev/null; then
+    rm -f "${kea_cache_snapshot}"
+    print_task_fail
+    print_error "Failed to update KEA DHCPv4 reservations (API unreachable or authentication failed)."
+    exit 1
+  fi
+
+  # Push DHCPv6 config (--fail ensures non-zero exit on HTTP 4xx/5xx)
+  if curl -sf -X POST -H "Content-Type: application/json" \
+    -u "$kea_api_auth" \
+    -d @"$kea_dhcp6_tmp_config" \
+    "$kea_api_url" &>/dev/null; then
+        rm -f "${kea_cache_snapshot}"
+    print_task_done
+  else
+        rm -f "${kea_cache_snapshot}"
+    print_task_fail
+    print_error "Failed to update KEA DHCPv6 reservations (API unreachable or authentication failed)."
+    exit 1
+  fi
+}
+
+if curl -s -o /dev/null http://127.0.0.1:8000/ 2>/dev/null; then
+    fn_update_kea_dhcp_reservations
+fi
+
+_summary="Configuration Summary:
+  ${MAKE_IT_CYAN}✓ Hostname         :${RESET_COLOR} ${kickstart_hostname}
+  ${MAKE_IT_CYAN}✓ MAC Address      :${RESET_COLOR} ${mac_address_of_host}
+  ${MAKE_IT_CYAN}✓ Stack Mode       :${RESET_COLOR} ${stack_mode}"
+
+if [[ "${stack_mode}" != "ipv6" ]]; then
+    _summary+="
+  ${MAKE_IT_CYAN}✓ IPv4 Address     :${RESET_COLOR} ${ipv4_address}
+  ${MAKE_IT_CYAN}✓ IPv4 Gateway     :${RESET_COLOR} ${ipv4_gateway}
+  ${MAKE_IT_CYAN}✓ IPv4 Network     :${RESET_COLOR} ${ipv4_network_cidr}
+  ${MAKE_IT_CYAN}✓ IPv4 DNS         :${RESET_COLOR} ${ipv4_nameserver}"
+fi
+
+if [[ "${stack_mode}" != "ipv4" ]] && [[ -n "${ipv6_address}" ]]; then
+    _summary+="
+  ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${ipv6_address}
+  ${MAKE_IT_CYAN}✓ IPv6 Gateway     :${RESET_COLOR} ${ipv6_gateway}
+  ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${ipv6_ula_subnet}
+  ${MAKE_IT_CYAN}✓ IPv6 DNS         :${RESET_COLOR} ${ipv6_nameserver}"
+fi
+
+_summary+="
+  ${MAKE_IT_CYAN}✓ Domain           :${RESET_COLOR} ${ipv4_domain}
+  ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${lab_infra_server_hostname}
+  ${MAKE_IT_CYAN}✓ Requested OS     :${RESET_COLOR} ${os_name_and_version}"
+
+echo -e "$_summary"
+
+# Determine provision method from invocation flags
+provision_method="pxe"
+if ! $golden_image_creation_not_requested; then
+    provision_method="create-golden-image"
+elif $invoked_with_golden_image; then
+    provision_method="golden-image"
+fi
+
+# Build JSON record — only include fields relevant to the stack mode
+provision_json=$(jq -n \
+    --arg hostname "$kickstart_hostname" \
+    --arg mac_address "$mac_address_of_host" \
+    --arg os "${os_name_and_version:-}" \
+    --arg os_distribution "${os_distribution:-}" \
+    --arg version "${version:-}" \
+    --arg provision_method "$provision_method" \
+    --arg stack_mode "$stack_mode" \
+    --arg disk_type "${disk_type_for_the_vm:-}" \
+    --arg ipv4_domain "$ipv4_domain" \
+    --arg lab_infra_server "$lab_infra_server_hostname" \
+    --arg provisioned_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    '{
+        hostname: $hostname,
+        mac_address: $mac_address,
+        os: $os,
+        os_distribution: $os_distribution,
+        version: $version,
+        provision_method: $provision_method,
+        stack_mode: $stack_mode,
+        disk_type: $disk_type,
+        domain: $ipv4_domain,
+        lab_infra_server: $lab_infra_server,
+        provisioned_at: $provisioned_at
+    }')
+
+if [[ "${stack_mode}" != "ipv6" ]]; then
+    provision_json=$(echo "$provision_json" | jq \
+        --arg ipv4_address "$ipv4_address" \
+        --arg ipv4_prefix "$ipv4_prefix" \
+        --arg ipv4_netmask "$ipv4_netmask" \
+        --arg ipv4_gateway "$ipv4_gateway" \
+        --arg ipv4_nameserver "$ipv4_nameserver" \
+        --arg ipv4_network_cidr "$ipv4_network_cidr" \
+        '. + {ipv4_address: $ipv4_address, ipv4_prefix: $ipv4_prefix, ipv4_netmask: $ipv4_netmask, ipv4_gateway: $ipv4_gateway, ipv4_nameserver: $ipv4_nameserver, ipv4_network_cidr: $ipv4_network_cidr}')
+fi
+
+if [[ "${stack_mode}" != "ipv4" ]]; then
+    provision_json=$(echo "$provision_json" | jq \
+        --arg ipv6_address "$ipv6_address" \
+        --arg ipv6_prefix "$ipv6_prefix" \
+        --arg ipv6_gateway "$ipv6_gateway" \
+        --arg ipv6_nameserver "$ipv6_nameserver" \
+        '. + {ipv6_address: $ipv6_address, ipv6_prefix: $ipv6_prefix, ipv6_gateway: $ipv6_gateway, ipv6_nameserver: $ipv6_nameserver}')
+fi
+
+if [[ -n "${pxe_bootstrap_hostname:-}" ]]; then
+    provision_json=$(echo "$provision_json" | jq --arg p "${pxe_bootstrap_hostname}" '. + {pxe_bootstrap_hostname: $p}')
+fi
+
+# Write per-host provision-result.json sidecar
+# Ensure the kickstart directory exists (golden-image path skips fn_create_host_kickstart_dir)
+if [[ -z "${host_kickstart_dir:-}" ]]; then
+    host_kickstart_dir="${ksmanager_hub_dir}/kickstarts/${kickstart_hostname}"
+fi
+mkdir -p "${host_kickstart_dir}"
+
+if [[ -d "${host_kickstart_dir}" ]] && [[ -n "$provision_json" ]]; then
+    provision_result_tmp="${host_kickstart_dir}/provision-result.json.tmp.$$"
+    printf '%s\n' "$provision_json" > "$provision_result_tmp" && \
+        mv "$provision_result_tmp" "${host_kickstart_dir}/provision-result.json"
+    rm -f "$provision_result_tmp"
+    fn_chown_if_exists "${host_kickstart_dir}/provision-result.json"
+fi
+
+# Update central hosts.json registry
+if [[ -n "$provision_json" ]]; then
+    print_task "Updating provisioning registry..."
+    if fn_acquire_mac_cache_lock; then
+        hosts_json_tmp="${hosts_json_file}.tmp.$$"
+        if [[ -f "$hosts_json_file" ]]; then
+            jq --arg hostname "$kickstart_hostname" --argjson new_entry "$provision_json" \
+                '[.[] | select(.hostname != $hostname)] + [$new_entry]' \
+                "$hosts_json_file" > "$hosts_json_tmp" && \
+                mv "$hosts_json_tmp" "$hosts_json_file"
+        else
+            printf '[%s]\n' "$provision_json" > "$hosts_json_tmp" && \
+                mv "$hosts_json_tmp" "$hosts_json_file"
+        fi
+        rm -f "$hosts_json_tmp"
+        fn_chown_if_exists "$hosts_json_file"
+        fn_release_mac_cache_lock
+    fi
+    print_task_done
+fi
+
+if ! $invoked_with_golden_image; then
+    print_info "Kickstart configs ready for '${kickstart_hostname}'."
+else
+    print_info "Golden boot configs ready for '${kickstart_hostname}'."
+fi
+
+fn_release_host_lock
+
+exit

@@ -10,17 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm stop [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames to stop
-  -f, --force          Skip confirmation prompt and force power-off
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm stop [OPTIONS]
 
-Examples:
-  tux2lab vm stop -H vm1                    # Stop single VM with confirmation
-  tux2lab vm stop -f -H vm1                 # Stop single VM without confirmation
-  tux2lab vm stop -H vm1,vm2,vm3            # Stop multiple VMs with confirmation
-  tux2lab vm stop -f -H vm1,vm2             # Stop multiple VMs without confirmation
+DESCRIPTION:
+    Force power off one or more VMs (equivalent to pulling the power cord).
+    Use 'shutdown' for a graceful ACPI shutdown instead.
+
+OPTIONS:
+    -H, --hosts <hosts>     Hostname(s) to stop (comma-separated)
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm stop -H testvm1
+    tux2lab vm stop -f -H testvm1,testvm2,testvm3
 "
 }
 
@@ -145,18 +149,8 @@ fi
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to forcefully power off the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This will immediately stop all lab services (DNS, DHCP, NFS, TFTP, Web)."
-    print_warning "All VMs in the lab will lose connectivity to these services."
-    read -r -p "If you understand the impact, confirm by typing 'stop-lab-infra-server': " confirmation
-    if [[ "$confirmation" != "stop-lab-infra-server" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-elif [[ "$force_stop" == false ]]; then
-    # Warning prompt unless force flag is used
+# Warning prompt unless force flag is used
+if [[ "$force_stop" == false ]]; then
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/confirm-vm-operation.sh
     if ! confirm_vm_operation "stop" "forcefully power off" "This is equivalent to pulling the power plug (may cause data loss)." 1 "$qemu_kvm_hostname"; then
         exit 0

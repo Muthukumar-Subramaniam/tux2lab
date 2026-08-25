@@ -10,17 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm reboot [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames to reboot
-  -f, --force          Skip confirmation prompt and force graceful reboot
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm reboot [OPTIONS]
 
-Examples:
-  tux2lab vm reboot -H vm1                    # Reboot single VM with confirmation
-  tux2lab vm reboot -f -H vm1                 # Reboot single VM without confirmation
-  tux2lab vm reboot -H vm1,vm2,vm3            # Reboot multiple VMs with confirmation
-  tux2lab vm reboot -f -H vm1,vm2             # Reboot multiple VMs without confirmation
+DESCRIPTION:
+    Gracefully reboot one or more VMs via ACPI signal. The guest OS performs
+    a clean reboot. Use 'restart' for a hard power cycle instead.
+
+OPTIONS:
+    -H, --hosts <hosts>     Hostname(s) to reboot (comma-separated)
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm reboot -H testvm1
+    tux2lab vm reboot -f -H testvm1,testvm2,testvm3
 "
 }
 
@@ -133,18 +137,8 @@ fi
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to reboot the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This will restart all lab services (DNS, DHCP, NFS, TFTP, Web)."
-    print_warning "All VMs in the lab will experience temporary service interruption."
-    read -r -p "If you understand the impact, confirm by typing 'reboot-lab-infra-server': " confirmation
-    if [[ "$confirmation" != "reboot-lab-infra-server" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-elif [[ "$force_reboot" == false ]]; then
-    # Warning prompt unless force flag is used
+# Warning prompt unless force flag is used
+if [[ "$force_reboot" == false ]]; then
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/confirm-vm-operation.sh
     if ! confirm_vm_operation "reboot" "send graceful reboot signal to" "Guest OS will attempt to reboot cleanly (requires guest tools)." 1 "$qemu_kvm_hostname"; then
         exit 0

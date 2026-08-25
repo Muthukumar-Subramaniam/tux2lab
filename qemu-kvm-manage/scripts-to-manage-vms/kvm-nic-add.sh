@@ -10,20 +10,27 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm nic-add [OPTIONS]
-Options:
-  -H, --host <name>    Name of the VM to add NICs to (will prompt if not given)
-  -f, --force          Force power-off without prompt if VM is running
-  -c, --count <num>    Number of NICs to add (1-10, default: 1)
-  -n, --network <name> Network/bridge to attach to (default: tux2lab)
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm nic-add [OPTIONS]
 
-Examples:
-  tux2lab vm nic-add -H vm1                      # Interactive mode - add 1 NIC
-  tux2lab vm nic-add -f -H vm1                   # Force power-off if running
-  tux2lab vm nic-add -c 2 -H vm1                 # Add 2 NICs
-  tux2lab vm nic-add -n br0 -H vm1               # Add NIC to specific bridge
-  tux2lab vm nic-add -f -c 3 -n tux2lab -H vm2   # Fully automated
+DESCRIPTION:
+    Add one or more network interfaces to a VM.
+    VM must be shut off for NIC attachment.
+
+OPTIONS:
+    -H, --host <name>    Name of the VM to add NICs to (will prompt if not given)
+    -f, --force          Force power-off without prompt if VM is running
+    -c, --count <num>    Number of NICs to add (1-10, default: 1)
+    -n, --network <name> Network/bridge to attach to (default: tux2lab)
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm nic-add -H testvm1
+    tux2lab vm nic-add -f -H testvm1
+    tux2lab vm nic-add -c 2 -H testvm1
+    tux2lab vm nic-add -n br0 -H testvm1
+    tux2lab vm nic-add -f -c 3 -n tux2lab -H testvm1
 "
 }
 
@@ -85,11 +92,6 @@ done
 
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
-
-# Lab infra server info (low risk operation)
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_info "Adding NIC to lab infra server: $lab_infra_server_hostname"
-fi
 
 # Check if VM exists
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh

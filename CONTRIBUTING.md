@@ -32,7 +32,11 @@ Documentation improvements are always welcome. If you find areas in the document
 
 To keep the codebase clean and easy to maintain, please follow these guidelines:
 - Run `shellcheck` on all modified shell scripts before submitting.
-- Use `set -euo pipefail` at the top of all scripts.
+- Apply shell strict mode according to the script's role:
+  - **Standalone entry points** (CLI subcommands, setup scripts): `set -euo pipefail` near the top, after sourcing `color-functions.sh` so error output is available.
+  - **Sourced libraries** (`shared-functions/`, `qemu-kvm-manage/scripts-to-manage-vms/functions/`, `common-utils/color-functions.sh`, `tux2lab-completion.bash`): no `set` at all. These run in the caller's shell, and strict mode would leak into it.
+  - **Reporting tools** (`health.sh`, `kvm-validate.sh`): `set -uo pipefail` without `-e`, so every check runs to completion. State the reason in a comment.
+  - **Transactional tools** (`ksmanager.sh`, `dnsbinder.sh`): no `-e`. These hold locks and edit zone files and DHCP reservations in place; an implicit abort could leave shared state half-written. They handle errors explicitly at each branch and release locks via EXIT/INT/TERM/HUP/QUIT traps. Do not add `-e` to these.
 - Write clear and self-explanatory comments in your code.
 - Maintain consistent formatting and naming conventions throughout the codebase.
 - Follow existing patterns in the codebase (color-functions sourcing, error handling style).

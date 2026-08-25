@@ -10,39 +10,58 @@ set -euo pipefail
 
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
-source /tux2lab/ks-manage/distro-versions.conf
+source /tux2lab/shared-functions/lab-state.sh
+source /tux2lab/ksmanager/distro-versions.conf
 
 readonly GOLDEN_IMAGE_DIR="/tux2lab-data/golden-images-disk-store"
 readonly SCRIPT_DIR="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
 
 show_golden_image_help() {
     print_cyan "USAGE:
-    tux2lab golden-image <subcommand> [options]
+    tux2lab golden-image <command> [<distro> -v <version>] [options]
+    tux2lab golden-image -h
 
-SUBCOMMANDS:
-    build [distro] [OPTIONS]    Build a golden image by installing a VM via PXE boot
-    rebuild [distro] [OPTIONS]  Remove and rebuild an existing golden image
+DESCRIPTION:
+    Manage golden image disks for fast OS provisioning. A golden image is a
+    pre-installed OS disk that can be cloned in seconds to deploy new VMs,
+    instead of running a full PXE installation each time.
+
+    Build creates a temporary VM via PXE boot, installs the OS with all
+    post-install configuration, then extracts the disk as a reusable template.
+    If the distro is not yet set up, it will be prepared automatically.
+
+COMMANDS:
     list                        List all available golden images
-    cleanup [distro] [OPTIONS]  Remove golden image(s)
+    build                       Build a golden image by installing a VM via PXE boot
+    rebuild                     Remove and rebuild (or build if none exists)
+    cleanup                     Remove golden image(s) to free disk space
+    -h, --help                  Show this help message
 
-BUILD/REBUILD/CLEANUP OPTIONS:
-    -v, --version <ver>     Specify OS version number
+ARGUMENTS:
+    <distro>                    OS distribution identifier (see below)
+    -v, --version <version>     OS version number (see below)
+                                If omitted, an interactive menu is displayed.
+    -f, --force                 Skip confirmation prompt (cleanup only)
 
-CLEANUP OPTIONS:
-    -f, --force             Skip confirmation prompt
-
-OPTIONS:
-    -h, --help              Show this help message
+SUPPORTED DISTROS AND VERSIONS:
+    almalinux                   10, 9, 8
+    rocky                       10, 9, 8
+    oraclelinux                 10, 9, 8
+    centos-stream               10, 9, 8
+    rhel                        10, 9, 8
+    ubuntu-lts                  26.04, 24.04, 22.04
+    debian                      13, 12, 11
+    opensuse-leap               16.0
 
 EXAMPLES:
     tux2lab golden-image list
-    tux2lab golden-image build                             # Interactive mode
-    tux2lab golden-image build almalinux --version 10      # Non-interactive mode
-    tux2lab golden-image build almalinux -v 10             # Short form
-    tux2lab golden-image rebuild almalinux -v 9            # Rebuild existing golden image
+    tux2lab golden-image build                              # Interactive mode
+    tux2lab golden-image build almalinux -v 10              # Non-interactive mode
+    tux2lab golden-image build almalinux --version 10       # Long form
+    tux2lab golden-image rebuild almalinux -v 10            # Rebuild or build if none exists
     tux2lab golden-image cleanup                            # Interactive cleanup
-    tux2lab golden-image cleanup almalinux --version 10    # Remove specific golden image
-    tux2lab golden-image cleanup rocky -v 9 --force        # Remove without confirmation"
+    tux2lab golden-image cleanup almalinux -v 10            # Remove specific golden image
+    tux2lab golden-image cleanup almalinux -v 10 --force    # Remove without confirmation"
 }
 
 # ====== LIST ======
@@ -66,9 +85,10 @@ golden_image_list() {
         return 0
     fi
 
-    printf "\n  %-28s %-12s %-22s %-30s\n" "DISTRO" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
-    printf "  %-28s %-12s %-22s %-30s\n" "------" "-------" "---------------------" "-------"
+    printf "\r${MAKE_IT_CYAN}[INFO] Reading golden image disk info...${RESET_COLOR}"
 
+    # Collect entries, then sort by display name and version numerically
+    local -a entries=()
     for qcow2_file in "${GOLDEN_IMAGE_DIR}"/*.qcow2; do
         local filename
         filename=$(basename "$qcow2_file" .qcow2)
@@ -89,19 +109,29 @@ golden_image_list() {
         done
 
         local display_name="${DISTRO_DISPLAY_NAMES[$distro]:-$distro}"
-        local disk_size virtual_size size
-        disk_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^disk size:/ {print $3, $4; exit}' || true)
+        local img_info disk_size virtual_size size
+        img_info=$(sudo qemu-img info "$qcow2_file" 2>/dev/null || true)
+        disk_size=$(awk '/^disk size:/ {print $3, $4; exit}' <<< "$img_info")
         disk_size="${disk_size:-?}"
-        virtual_size=$(sudo qemu-img info "$qcow2_file" 2>/dev/null | awk '/^virtual size:/ {print $3, $4; exit}' || true)
+        virtual_size=$(awk '/^virtual size:/ {print $3, $4; exit}' <<< "$img_info")
         virtual_size="${virtual_size:-?}"
         size="${disk_size} / ${virtual_size}"
         local created
         created=$(stat -c '%y' "$qcow2_file" 2>/dev/null | cut -d'.' -f1)
         created="${created:-unknown}"
 
-        printf "  %-28s %-12s %-22s %-30s\n" "$display_name" "$version" "$size" "$created"
+        # Store as tab-delimited for sorting
+        entries+=("${display_name}	${distro}	${version}	${size}	${created}")
     done
-    echo
+
+    # Clear the info message and print header + sorted entries
+    printf "\r\033[K"
+    printf "  ${MAKE_IT_CYAN}%-20s %-16s %-12s %-22s %-30s${RESET_COLOR}\n" "DISTRO" "DISTRO-ID" "VERSION" "SIZE (DISK / VIRTUAL)" "CREATED"
+    printf "  ${MAKE_IT_CYAN}%-20s %-16s %-12s %-22s %-30s${RESET_COLOR}\n" "------" "---------" "-------" "---------------------" "-------"
+    # Sort by display name (col 1), then version numerically (col 3)
+    printf '%s\n' "${entries[@]}" | sort -t$'\t' -k1,1f -k3,3V | while IFS=$'\t' read -r d_name d_id d_ver d_size d_created; do
+        printf "  ${MAKE_IT_GREEN}%-20s %-16s %-12s %-22s %-30s${RESET_COLOR}\n" "$d_name" "$d_id" "$d_ver" "$d_size" "$d_created"
+    done
 }
 
 # ====== CLEANUP ======
@@ -170,7 +200,7 @@ golden_image_cleanup() {
     if [[ -n "$cleanup_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$cleanup_distro]:-}" ]]; then
             print_error "Unknown distribution: $cleanup_distro"
-            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
             exit 1
         fi
         if [[ -z "$cleanup_version" ]]; then
@@ -213,7 +243,7 @@ golden_image_cleanup() {
         if [[ "$force" != true ]]; then
             print_warning "The following golden image(s) will be permanently deleted:"
             for f in "${files_to_remove[@]}"; do
-                print_info "  $(basename "$f")"
+                echo "  $(basename "$f")"
             done
             echo -n "Type YES to confirm deletion: "
             read -r confirm
@@ -289,7 +319,7 @@ golden_image_cleanup() {
     if [[ "$force" != true ]]; then
         print_warning "The following golden image(s) will be permanently deleted:"
         for f in "${files_to_remove[@]}"; do
-            print_info "  $(basename "$f")"
+            echo "  $(basename "$f")"
         done
         echo -n "Type YES to confirm deletion: "
         read -r confirm
@@ -371,7 +401,7 @@ golden_image_rebuild() {
     if [[ -n "$rebuild_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$rebuild_distro]:-}" ]]; then
             print_error "Unknown distribution: $rebuild_distro"
-            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
             exit 1
         fi
         if [[ -z "$rebuild_version" ]]; then
@@ -400,9 +430,8 @@ golden_image_rebuild() {
             [[ -e "$f" ]] && matched_files+=("$f")
         done
         if [[ ${#matched_files[@]} -eq 0 ]]; then
-            print_error "No existing golden image found for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}."
-            print_info "Use 'tux2lab golden-image build' to create a new one."
-            exit 1
+            print_info "No existing golden image for ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}. Building new one..."
+            exec "${SCRIPT_DIR}/kvm-build-golden-image.sh" "$rebuild_distro" --version "$rebuild_version"
         fi
 
         print_info "Rebuilding golden image: ${DISTRO_DISPLAY_NAMES[$rebuild_distro]} ${rebuild_version}"
@@ -421,7 +450,7 @@ golden_image_rebuild() {
     # Interactive mode: pick from existing images
     if [[ ! -d "$GOLDEN_IMAGE_DIR" ]] || ! ls "${GOLDEN_IMAGE_DIR}"/*.qcow2 &>/dev/null; then
         print_info "No golden images found. Nothing to rebuild."
-        print_info "Use 'tux2lab golden-image build' to create a new one."
+        print_info "Use 'tux2lab golden-image build <distro> -v <version>' to create one."
         return 0
     fi
 
@@ -506,9 +535,11 @@ shift
 
 case "$subcommand" in
     build|create)
+        fn_require_lab_running_unless_help "$@"
         golden_image_build "$@"
         ;;
     rebuild)
+        fn_require_lab_running_unless_help "$@"
         golden_image_rebuild "$@"
         ;;
     list)

@@ -11,6 +11,7 @@ set -euo pipefail
 
 # Source color functions
 source /tux2lab/common-utils/color-functions.sh
+source /tux2lab/shared-functions/lab-state.sh
 
 # Script directory - same directory as this script
 SCRIPT_DIR="/tux2lab/qemu-kvm-manage/scripts-to-manage-vms"
@@ -28,16 +29,19 @@ show_version() {
 
 # Display usage information
 show_usage() {
-    show_version
-    echo ""
     print_cyan "USAGE:
     tux2lab vm <subcommand> [options] [arguments]
 
+DESCRIPTION:
+    Manage the full lifecycle of KVM virtual machines. Deploy from golden images
+    or PXE boot, reimage, resize CPU/memory/disk, add/remove NICs and disks,
+    create and revert snapshots, validate post-install configuration, and control
+    power state. Supports multi-VM operations, per-VM stack mode (dual/IPv4/IPv6),
+    and custom resource specifications.
+
 VM DEPLOYMENT:
-    install-golden          Deploy VM(s) from golden image
-    install-pxe             Deploy VM(s) using PXE boot
-    reimage-golden          Reinstall VM(s) from golden image
-    reimage-pxe             Reinstall VM(s) using PXE boot
+    install                 Deploy VM(s) [--via-golden (default) | --via-pxe]
+    reimage                 Reinstall VM(s) [--via-golden (default) | --via-pxe]
 
 VM OPERATIONS:
     list                    List all VMs and their status
@@ -49,7 +53,7 @@ VM OPERATIONS:
     shutdown                Gracefully shutdown VM(s)
     restart                 Hard restart (reset) VM(s)
     reboot                  Gracefully reboot VM(s)
-    remove                  Delete VM(s) and its data
+    remove                  Delete VM(s) and their data
 
 VM CONFIGURATION:
     resize                  Resize VM resources (CPU, memory, disk)
@@ -99,7 +103,7 @@ main() {
         start|stop|shutdown|restart|reboot|remove|list|console|resize|info|validate)
             script_name="kvm-${subcommand}.sh"
             ;;
-        install-pxe|install-golden|reimage-pxe|reimage-golden)
+        install|reimage)
             script_name="kvm-${subcommand}.sh"
             ;;
         disk-add|disk-resize|disk-attach|disk-detach|disk-delete|nic-add|nic-remove)
@@ -122,7 +126,11 @@ main() {
         print_error "Script not found: $script_name"
         exit 1
     fi
-    
+
+    # Every VM subcommand talks to libvirt, so stop here rather than let
+    # virsh print connection errors and still exit 0.
+    fn_require_lab_running_unless_help "$@"
+
     # Execute the underlying script with all remaining arguments
     exec "$script_path" "$@"
 }

@@ -11,15 +11,22 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/snapshot-utils.s
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm snapshot-info [OPTIONS]
-Options:
-  -H, --hosts <list>       Comma-separated list of VM hostnames
-  -n, --name <snapshot>    Snapshot name (e.g., 20260515-143022_pre-update)
-  -h, --help               Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm snapshot-info [OPTIONS]
 
-Examples:
-  tux2lab vm snapshot-info -H vm1 -n 20260515-143022_pre-update
-  tux2lab vm snapshot-info -H vm1,vm2 -n 20260515-143022_baseline
+DESCRIPTION:
+    Show detailed information about a specific snapshot including
+    size and description.
+
+OPTIONS:
+    -H, --hosts <list>       Comma-separated list of VM hostnames
+    -n, --name <snapshot>    Snapshot name (e.g., 20260515-143022_pre-update)
+    -h, --help               Show this help message
+
+EXAMPLES:
+    tux2lab vm snapshot-info -H testvm1 -n 20260515-143022_pre-update
+    tux2lab vm snapshot-info -H testvm1,testvm2 -n 20260515-143022_baseline
 "
 }
 

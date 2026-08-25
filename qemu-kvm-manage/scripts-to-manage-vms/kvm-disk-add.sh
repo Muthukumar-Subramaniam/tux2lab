@@ -10,19 +10,26 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-add [OPTIONS]
-Options:
-  -H, --host <host>    Hostname of the VM to add disks to
-  -f, --force          Force power-off without prompt if VM is running
-  -n, --count <num>    Number of disks to add (1-10, default: prompt)
-  -s, --size <size>    Disk size in GiB (1-100, default: prompt)
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm disk-add [OPTIONS]
 
-Examples:
-  tux2lab vm disk-add -H vm1                        # Interactive mode with prompts
-  tux2lab vm disk-add -f -H vm1                     # Force power-off if running
-  tux2lab vm disk-add -n 2 -s 10 -H vm1             # Add 2x10 GiB disks
-  tux2lab vm disk-add -f -n 3 -s 20 -H vm1          # Fully automated: 3x20 GiB disks
+DESCRIPTION:
+    Add one or more additional storage disks to a VM.
+    VM must be shut off for disk attachment.
+
+OPTIONS:
+    -H, --host <host>    Hostname of the VM to add disks to
+    -f, --force          Force power-off without prompt if VM is running
+    -n, --count <num>    Number of disks to add (1-10, default: prompt)
+    -s, --size <size>    Disk size in GiB (1-100, default: prompt)
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm disk-add -H testvm1
+    tux2lab vm disk-add -f -H testvm1
+    tux2lab vm disk-add -n 2 -s 10 -H testvm1
+    tux2lab vm disk-add -f -n 3 -s 20 -H testvm1
 "
 }
 
@@ -96,11 +103,6 @@ fi
 
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
-
-# Lab infra server info (low risk operation)
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_info "Adding disk to lab infra server: $lab_infra_server_hostname"
-fi
 
 # Check if VM exists
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh

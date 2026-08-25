@@ -10,18 +10,25 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm nic-remove [OPTIONS]
-Options:
-  -H, --host <name>    Name of the VM to remove NICs from (will prompt if not given)
-  -f, --force          Force power-off without prompt if VM is running
-  -m, --macs <list>    Comma-separated list of MAC addresses to remove
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm nic-remove [OPTIONS]
 
-Examples:
-  tux2lab vm nic-remove -H vm1                              # Interactive mode - select NICs
-  tux2lab vm nic-remove -f -H vm1                           # Force power-off if running
-  tux2lab vm nic-remove -m 52:54:00:aa:bb:cc -H vm1        # Remove specific NIC
-  tux2lab vm nic-remove -f -m 52:54:00:11:22:33 -H vm2     # Fully automated
+DESCRIPTION:
+    Remove network interface(s) from a VM by MAC address.
+    VM must be shut off.
+
+OPTIONS:
+    -H, --host <name>    Name of the VM to remove NICs from (will prompt if not given)
+    -f, --force          Force power-off without prompt if VM is running
+    -m, --macs <list>    Comma-separated list of MAC addresses to remove
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm nic-remove -H testvm1
+    tux2lab vm nic-remove -f -H testvm1
+    tux2lab vm nic-remove -m 52:54:00:aa:bb:cc -H testvm1
+    tux2lab vm nic-remove -f -m 52:54:00:11:22:33 -H testvm1
 "
 }
 
@@ -77,18 +84,6 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.s
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-vm-exists.sh
 if ! check_vm_exists "$qemu_kvm_hostname" "reimage"; then
     exit 1
-fi
-
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to remove NIC(s) from the lab infra server: $lab_infra_server_hostname!"
-    print_warning "Removing the primary network interface will break lab connectivity."
-    print_warning "This operation requires shutting down the lab infra server temporarily."
-    read -r -p "If you understand the impact, confirm by typing 'remove-nic-from-lab-infra': " confirmation
-    if [[ "$confirmation" != "remove-nic-from-lab-infra" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
 fi
 
 fn_shutdown_or_poweroff() {

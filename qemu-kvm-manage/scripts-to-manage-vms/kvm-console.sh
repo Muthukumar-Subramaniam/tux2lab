@@ -13,16 +13,19 @@ vm_hostname_arg=""
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm console [-H hostname]
+    print_cyan "USAGE:
+    tux2lab vm console [-H hostname]
 
-Options:
-  -H, --host           Name of the VM to access console (optional, will prompt if not given)
-  -h, --help           Show this help message
+DESCRIPTION:
+    Attach to a VM's serial console via virsh. Useful for monitoring PXE installs,
+    debugging boot issues, or accessing VMs without SSH. Press Ctrl+] to detach.
 
-Examples:
-  tux2lab vm console -H vm1               # Access console of VM
-  
-Note: Press Ctrl+] to exit the console.
+OPTIONS:
+    -H, --host <hostname>   VM to connect to (prompts interactively if omitted)
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm console -H testvm1
 "
 }
 
@@ -55,7 +58,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Use argument or prompt for hostname
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg" "ALLOW_SELF_REFERENCE"
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
 # Check if VM exists in 'virsh list --all'
 if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then

@@ -45,14 +45,10 @@ options {
 # END public-dns-servers-as-forwarders
 
 	managed-keys-directory "/var/named/dynamic";
-	geoip-directory "/usr/share/GeoIP";
 
 	pid-file "/run/named/named.pid";
 	session-keyfile "/run/named/session.key";
 
-	/* https://fedoraproject.org/wiki/Changes/CryptoPolicy */
-	include "/etc/crypto-policies/back-ends/bind.config";
-	
 	/* Hide BIND version for security */
 	version "not disclosed";
 	
@@ -68,11 +64,11 @@ options {
 
 logging {
 	channel default_debug {
-		file "data/named.run";
+		file "/tux2lab-data/logs/named/named.run";
 		severity dynamic;
 	};
 	channel query_log {
-		file "data/query.log" versions 3 size 10m;
+		file "/tux2lab-data/logs/named/query.log" versions 3 size 10m;
 		severity info;
 		print-time yes;
 		print-category yes;
@@ -82,10 +78,7 @@ logging {
 
 zone "." IN {
 	type hint;
-	file "/var/named/named.root";
+	file "/tux2lab-data/named/named.root";
 };
-
-include "/etc/named.rfc1912.zones";
-include "/etc/named.root.key";
 
 # Zones managed by dnsbinder will be appended below

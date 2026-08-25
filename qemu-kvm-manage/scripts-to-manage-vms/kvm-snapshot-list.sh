@@ -11,14 +11,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/snapshot-utils.s
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm snapshot-list [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm snapshot-list [OPTIONS]
 
-Examples:
-  tux2lab vm snapshot-list -H vm1
-  tux2lab vm snapshot-list -H vm1,vm2,vm3
+DESCRIPTION:
+    List all snapshots for one or more VMs with creation timestamps
+    and labels.
+
+OPTIONS:
+    -H, --hosts <list>   Comma-separated list of VM hostnames
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm snapshot-list -H testvm1
+    tux2lab vm snapshot-list -H testvm1,testvm2,testvm3
 "
 }
 

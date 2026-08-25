@@ -10,18 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm disk-delete [OPTIONS]
-Options:
-  -d, --disks <list>   Comma-separated list of disk files to delete from detached storage
-  -h, --help           Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm disk-delete [OPTIONS]
 
-Examples:
-  tux2lab vm disk-delete                         # Interactive mode - select disks
-  tux2lab vm disk-delete -d disk1.qcow2,disk2.qcow2  # Delete specific disks
+DESCRIPTION:
+    Permanently delete disk files from detached storage.
+    This cannot be undone.
 
-WARNING:
-  This permanently deletes disk files from detached storage.
-  Deleted disks cannot be recovered!
+OPTIONS:
+    -d, --disks <list>   Comma-separated list of disk files to delete from detached storage
+    -h, --help           Show this help message
+
+EXAMPLES:
+    tux2lab vm disk-delete
+    tux2lab vm disk-delete -d disk1.qcow2,disk2.qcow2
 "
 }
 
@@ -80,9 +83,6 @@ fi
 # Get disks to delete (from argument or prompt)
 DISKS_TO_DELETE=()
 
-# Escape dots in hostname for regex matching
-escaped_infra_hostname="${lab_infra_server_hostname//./\\.}"
-
 if [[ -n "$disks_arg" ]]; then
     # Parse comma-separated disk list
     IFS=',' read -ra DISKS_TO_DELETE <<< "$disks_arg"
@@ -117,19 +117,10 @@ else
             disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
         fi
         
-        # Highlight lab infra server disks
-        if [[ "$disk" =~ ^${escaped_infra_hostname}_vd[b-z]\.qcow2$ ]]; then
-            if [[ -n "$disk_size" ]]; then
-                print_yellow "  $((i+1))) $disk ($disk_size) [LAB INFRA SERVER]"
-            else
-                print_yellow "  $((i+1))) $disk [LAB INFRA SERVER]"
-            fi
+        if [[ -n "$disk_size" ]]; then
+            echo "  $((i+1))) $disk ($disk_size)"
         else
-            if [[ -n "$disk_size" ]]; then
-                echo "  $((i+1))) $disk ($disk_size)"
-            else
-                echo "  $((i+1))) $disk"
-            fi
+            echo "  $((i+1))) $disk"
         fi
     done
     echo "  q) Quit"
@@ -163,16 +154,8 @@ else
     fi
 fi
 
-# Check if any selected disks belong to lab infra server
-lab_infra_disks=()
-for disk in "${DISKS_TO_DELETE[@]}"; do
-    if [[ "$disk" =~ ^${escaped_infra_hostname}_vd[b-z]\.qcow2$ ]]; then
-        lab_infra_disks+=("$disk")
-    fi
-done
-
 # Confirm deletion
-print_warning "WARNING: The following disk(s) will be PERMANENTLY DELETED:"
+print_warning "The following disk(s) will be PERMANENTLY DELETED:"
 for disk in "${DISKS_TO_DELETE[@]}"; do
     disk_path="$DETACHED_DIR/$disk"
     disk_size=""
@@ -180,36 +163,14 @@ for disk in "${DISKS_TO_DELETE[@]}"; do
         disk_size=$(sudo qemu-img info "$disk_path" | awk '/virtual size/ {print $3, $4}')
     fi
     
-    # Highlight lab infra server disks
-    if [[ "$disk" =~ ^${escaped_infra_hostname}_vd[b-z]\.qcow2$ ]]; then
-        if [[ -n "$disk_size" ]]; then
-            print_yellow "  - $disk ($disk_size) [LAB INFRA SERVER]"
-        else
-            print_yellow "  - $disk [LAB INFRA SERVER]"
-        fi
+    if [[ -n "$disk_size" ]]; then
+        echo "  - $disk ($disk_size)"
     else
-        if [[ -n "$disk_size" ]]; then
-            echo "  - $disk ($disk_size)"
-        else
-            echo "  - $disk"
-        fi
+        echo "  - $disk"
     fi
 done
 
 print_warning "This action CANNOT be undone!"
-
-# Special confirmation for lab infra server disks
-if [[ ${#lab_infra_disks[@]} -gt 0 ]]; then
-    echo ""
-    print_warning "⚠️  WARNING: You are deleting ${#lab_infra_disks[@]} disk(s) from the lab infra server!"
-    print_warning "These disks belonged to: $lab_infra_server_hostname"
-    print_warning "Ensure you have backups before proceeding."
-    read -rp "Type 'delete-lab-infra-disks' to confirm deletion of lab infra server disks: " lab_confirm
-    if [[ "$lab_confirm" != "delete-lab-infra-disks" ]]; then
-        print_info "Operation cancelled by user."
-        exit 0
-    fi
-fi
 
 read -rp "Type 'DELETE' in uppercase to confirm permanent deletion: " confirm
 if [[ "$confirm" != "DELETE" ]]; then

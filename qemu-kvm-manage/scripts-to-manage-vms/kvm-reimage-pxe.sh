@@ -10,15 +10,25 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 DIR_PATH_SCRIPTS_TO_MANAGE_VMS='/tux2lab/qemu-kvm-manage/scripts-to-manage-vms'
 
 ATTACH_CONSOLE="no"
-CLEAN_INSTALL="no"
+RESET_SPECS="no"
 FORCE_REIMAGE="false"
 OS_DISTRO=""
 VERSION_TYPE=""
 HOSTNAMES=()
-SUPPORTS_CLEAN_INSTALL="yes"
+SUPPORTS_RESET_SPECS="yes"
 SUPPORTS_FORCE="yes"
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
+SUPPORTS_STACK="yes"
+SUPPORTS_MIN_RESOURCES="pxe"
+STACK_MODE="dual"
+STACK_MODE_EXPLICIT=false
+VM_CPUS="2"
+VM_CPUS_SPECIFIED=false
+VM_MEMORY="2"
+VM_MEMORY_SPECIFIED=false
+VM_DISK_SIZE="30"
+VM_DISK_SIZE_SPECIFIED=false
 
 # Function to show help
 fn_show_help() {
@@ -26,22 +36,28 @@ fn_show_help() {
 Options:
   -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
   -c, --console        Attach console during reimage (single VM only)
-  -C, --clean-install  Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)
+  --reset-specs-to-default     Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
   -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
+                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
+  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
+  --ipv4-only          Reimage as IPv4-only VM
+  --ipv6-only          Reimage as IPv6-only VM (temp IPv4 for PXE boot)
+  --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)
+  --cpu <n>             Number of vCPUs (default: 2)
+  --memory <n>        RAM in GiB (power of 2, default: 2)
+  --root-disk-size <GiB>  Root disk size in GiB (default: 30)
   -f, --force          Skip confirmation prompt
   -h, --help           Show this help message
 
 Examples:
   tux2lab vm reimage-pxe -H vm1                                   # Reimage single VM
   tux2lab vm reimage-pxe -H vm1 --console                         # Reimage and attach console
-  tux2lab vm reimage-pxe -H vm1 --clean-install                   # Reimage with default specs
+  tux2lab vm reimage-pxe -H vm1 --reset-specs-to-default                   # Reimage with default specs
   tux2lab vm reimage-pxe -H vm1 --distro almalinux                # Reimage with AlmaLinux (will prompt for version)
   tux2lab vm reimage-pxe -H vm1 -d rocky -v 9                     # Reimage with Rocky Linux 9
   tux2lab vm reimage-pxe -f -H vm1                                # Reimage without confirmation
   tux2lab vm reimage-pxe -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04   # Reimage multiple with Ubuntu 26.04
-  tux2lab vm reimage-pxe -H vm1,vm2,vm3 --clean-install           # Reimage multiple with defaults
+  tux2lab vm reimage-pxe -H vm1,vm2,vm3 --reset-specs-to-default           # Reimage multiple with defaults
 "
 }
 
@@ -56,6 +72,10 @@ CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 # Validate distro and version locally before any work
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
 validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+
+# Auto-setup distro if not prepared for PXE boot
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
+auto_setup_distro "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
 
 # Main reimage loop
 CURRENT_VM=0
@@ -77,13 +97,6 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Prevent reimaging of lab infra server
-    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/check-lab-infra-protection.sh
-    if ! check_lab_infra_protection "$qemu_kvm_hostname"; then
-        FAILED_VMS+=("$qemu_kvm_hostname")
-        continue
-    fi
-    
     # Confirm reimage operation
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/confirm-reimage-operation.sh
     if ! confirm_reimage_operation "$qemu_kvm_hostname" "PXE boot"; then
@@ -98,13 +111,19 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fi
 
     # PXE installation requires minimum 2 GiB memory and 2 vCPUs
-    if [[ "$CLEAN_INSTALL" != "yes" ]]; then
-        current_mem_kib=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^Max memory/ {print $3}')
+    if [[ "$RESET_SPECS" != "yes" ]]; then
+        if ! dominfo=$(sudo virsh dominfo "$qemu_kvm_hostname" 2>/dev/null); then
+            print_error "Could not query VM specs for '${qemu_kvm_hostname}'."
+            fn_release_vm_hostname_lock
+            FAILED_VMS+=("$qemu_kvm_hostname")
+            continue
+        fi
+        current_mem_kib=$(awk '/^Max memory/ {print $3}' <<< "$dominfo")
+        current_vcpus=$(awk '/^CPU\(s\)/ {print $2}' <<< "$dominfo")
         current_mem_gib=$(( current_mem_kib / 1024 / 1024 ))
-        current_vcpus=$(sudo virsh dominfo "$qemu_kvm_hostname" | awk '/^CPU\(s\)/ {print $2}')
         if (( current_mem_gib < 2 || current_vcpus < 2 )); then
             print_error "VM '${qemu_kvm_hostname}' has ${current_vcpus} vCPU(s) and ${current_mem_gib} GiB memory — minimum 2 vCPUs and 2 GiB required for PXE installation."
-            print_info "Run 'tux2lab vm resize cpu 2 memory 2 -H ${qemu_kvm_hostname}' first, or use --clean-install to reset to defaults."
+            print_info "Run 'tux2lab vm resize -m 2 -c 2 -H ${qemu_kvm_hostname}' first, or use --reset-specs-to-default to reset to defaults."
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
@@ -119,17 +138,24 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             REIMAGE_VERSION_TYPE="$PREVIOUS_VERSION"
             print_info "Auto-detected previous OS: ${REIMAGE_OS_DISTRO} ${REIMAGE_VERSION_TYPE}"
         else
-            REIMAGE_OS_DISTRO=""
-            REIMAGE_VERSION_TYPE=""
+            # Auto-detect failed — prompt user
+            print_warning "Could not detect previous OS for '${qemu_kvm_hostname}'."
+            source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+            select_distro_version "" ""
+            REIMAGE_OS_DISTRO="$SELECTED_DISTRO"
+            REIMAGE_VERSION_TYPE="$SELECTED_VERSION"
         fi
     else
         REIMAGE_OS_DISTRO="$CMDLINE_OS_DISTRO"
         REIMAGE_VERSION_TYPE="$CMDLINE_VERSION_TYPE"
     fi
 
+    # Ensure the resolved distro is prepared for PXE boot
+    auto_setup_distro "$REIMAGE_OS_DISTRO" "$REIMAGE_VERSION_TYPE"
+
     # Handle MAC address based on operation type
-    if [[ "$CLEAN_INSTALL" == "yes" ]]; then
-        # For clean install, generate new MAC (VM will be destroyed and recreated)
+    if [[ "$RESET_SPECS" == "yes" ]]; then
+        # For reset-specs, generate new MAC (VM will be destroyed and recreated)
         print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
         if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
@@ -157,22 +183,28 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC}"
-    [[ -n "$REIMAGE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $REIMAGE_OS_DISTRO"
-    [[ -n "$REIMAGE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $REIMAGE_VERSION_TYPE"
+    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC} --distro $REIMAGE_OS_DISTRO --version $REIMAGE_VERSION_TYPE"
+    if [[ "${STACK_MODE_EXPLICIT}" == "true" ]] || [[ "${STACK_MODE}" != "dual" ]]; then
+        [[ "${STACK_MODE}" == "dual" ]] && ksmanager_opts="${ksmanager_opts} --dual-stack" || ksmanager_opts="${ksmanager_opts} --${STACK_MODE}-only"
+    fi
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts"; then
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
 
-    # Update /etc/hosts
+    # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    _etc_hosts_ipv4="${IPV4_ADDRESS}"
+    [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
+    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
+        print_task_fail
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
+    print_task_done
 
     # Shut down VM if running
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
@@ -182,13 +214,13 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # If --clean-install is specified, destroy and reinstall VM with default specs
-    if [[ "$CLEAN_INSTALL" == "yes" ]]; then
-        print_info "Using --clean-install: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 20 GiB disk)."
+    # If --reset-specs-to-default is specified, destroy and reinstall VM with default specs
+    if [[ "$RESET_SPECS" == "yes" ]]; then
+        print_info "Using --reset-specs-to-default: VM will be destroyed and reinstalled with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)."
         
         # Destroy VM and delete directory
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-clean-install.sh
-        if ! destroy_vm_for_clean_install "$qemu_kvm_hostname"; then
+        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/destroy-vm-for-reset-specs.sh
+        if ! destroy_vm_for_reset_specs "$qemu_kvm_hostname"; then
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
@@ -204,7 +236,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Create new disk with default size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/create-vm-disk.sh
-        if ! create_vm_disk "${qemu_kvm_hostname}" 20; then
+        if ! create_vm_disk "${qemu_kvm_hostname}" 30; then
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
@@ -219,20 +251,40 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             continue
         fi
     else
-        # Default path: preserve disk size
+        # Default path: preserve existing specs unless explicitly overridden
         print_info "Reimaging VM \"$qemu_kvm_hostname\" by replacing its qcow2 disk with a new one..."
         
+        # Apply CPU/memory overrides to the shut-off VM's definition
+        if [[ "$VM_CPUS_SPECIFIED" == "true" ]]; then
+            if ! sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config --maximum >/dev/null 2>&1 || 
+               ! sudo virsh setvcpus "$qemu_kvm_hostname" "$VM_CPUS" --config >/dev/null 2>&1; then
+                print_warning "Could not apply --cpu ${VM_CPUS} override. VM will keep existing CPU count."
+            fi
+        fi
+        if [[ "$VM_MEMORY_SPECIFIED" == "true" ]]; then
+            new_mem_kib=$(( VM_MEMORY * 1024 * 1024 ))
+            if ! sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || 
+               ! sudo virsh setmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1 || 
+               ! sudo virsh setmaxmem "$qemu_kvm_hostname" "${new_mem_kib}" --config >/dev/null 2>&1; then
+                print_warning "Could not apply --memory ${VM_MEMORY} override. VM will keep existing memory."
+            fi
+        fi
+
         vm_qcow2_disk_path="/tux2lab-data/vms/${qemu_kvm_hostname}/${qemu_kvm_hostname}.qcow2"
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-current-disk-size.sh
         get_current_disk_size "$qemu_kvm_hostname"
-        current_disk_gib="${CURRENT_DISK_SIZE:-20}"
+        current_disk_gib="${CURRENT_DISK_SIZE:-30}"
         
+        # Use user-specified disk size if provided, otherwise preserve current
+        target_disk_gib="${current_disk_gib}"
+        [[ "$VM_DISK_SIZE_SPECIFIED" == "true" ]] && target_disk_gib="${VM_DISK_SIZE}"
+
         # Delete existing qcow2 disk and recreate with appropriate size
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/delete-vm-disk.sh
         delete_vm_disk "$qemu_kvm_hostname"
         
-        if ! sudo qemu-img create -f qcow2 "${vm_qcow2_disk_path}" "20G" >/dev/null 2>&1; then
+        if ! sudo qemu-img create -f qcow2 "${vm_qcow2_disk_path}" "30G" >/dev/null 2>&1; then
             print_error "Failed to create qcow2 disk for \"$qemu_kvm_hostname\"."
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
@@ -240,10 +292,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         fi
         
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/resize-disk-if-larger.sh
-        resize_disk_if_larger "$qemu_kvm_hostname" "$current_disk_gib" "20"
-        
-        source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
-        report_retained_resources "$qemu_kvm_hostname"
+        resize_disk_if_larger "$qemu_kvm_hostname" "$target_disk_gib" "30"
         
         # Start reimaging process
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-for-reimage.sh
@@ -253,6 +302,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
             continue
         fi
     fi
+
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/report-retained-resources.sh
+    report_retained_resources "$qemu_kvm_hostname"
 
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")

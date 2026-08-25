@@ -11,21 +11,24 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/snapshot-utils.s
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm snapshot-revert [OPTIONS]
-Options:
-  -H, --hosts <list>       Comma-separated list of VM hostnames
-  -n, --name <snapshot>    Snapshot name to revert to (e.g., 20260515-143022_pre-update)
-  -f, --force              Force power-off and skip confirmation prompt
-  -h, --help               Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm snapshot-revert [OPTIONS]
 
-Notes:
-  - VM must be shut down before reverting (use -f to auto shutdown)
-  - Current disk state will be OVERWRITTEN with snapshot data
-  - This operation cannot be undone unless you create a snapshot first
+DESCRIPTION:
+    Revert one or more VMs to a previous snapshot. Current disk state is
+    overwritten and cannot be recovered unless a new snapshot is created
+    first. VM must be shut off; use -f to auto power-off.
 
-Examples:
-  tux2lab vm snapshot-revert -H vm1 -n 20260515-143022_pre-update
-  tux2lab vm snapshot-revert -f -H vm1,vm2 -n 20260515-143022_baseline
+OPTIONS:
+    -H, --hosts <list>       Comma-separated list of VM hostnames
+    -n, --name <snapshot>    Snapshot name to revert to (e.g., 20260515-143022_pre-update)
+    -f, --force              Force power-off and skip confirmation prompt
+    -h, --help               Show this help message
+
+EXAMPLES:
+    tux2lab vm snapshot-revert -H testvm1 -n 20260515-143022_pre-update
+    tux2lab vm snapshot-revert -f -H testvm1,testvm2 -n 20260515-143022_baseline
 "
 }
 

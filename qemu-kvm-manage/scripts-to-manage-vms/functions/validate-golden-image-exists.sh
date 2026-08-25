@@ -27,7 +27,7 @@ validate_golden_image_exists() {
     if [[ ! -f "${golden_image_path}" ]]; then
         print_error "Golden image disk not found for \"$vm_hostname\"!"
         print_info "Expected at: ${golden_image_path}"
-        print_info "To build the golden image disk, run: tux2lab golden-image create"
+        print_info "To build the golden image disk, run: tux2lab golden-image build ${os_distro} -v ${version}"
         return 1
     fi
     

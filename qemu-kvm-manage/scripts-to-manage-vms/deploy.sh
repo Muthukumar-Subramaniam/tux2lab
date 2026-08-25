@@ -15,17 +15,12 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     tux2lab deploy
 
 DESCRIPTION:
-    Deploy a new lab infrastructure server. This is the starting point
-    for creating your tux2lab KVM environment.
-
-    Guides you through an interactive setup to configure:
-    - Lab infrastructure server hostname and domain
-    - Admin credentials and SSH keys
-    - Deployment mode (VM or direct on host)
+    Deploy the lab environment (one-time setup). Interactive wizard configures
+    admin credentials, generates service configs, pulls the container image,
+    and starts all services.
 
     Prerequisites:
-    - QEMU/KVM must be set up first (run setup-qemu-kvm.sh)
-    - For VM mode: download the infra server ISO (tux2lab distro download-infra-iso)"
+    - Run /tux2lab/setup/setup-host.sh first to prepare the host"
     exit 0
 fi
 
@@ -41,4 +36,4 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
-exec /tux2lab/qemu-kvm-manage/deploy-lab-infra-server.sh
+exec /tux2lab/setup/deploy-lab.sh

@@ -24,28 +24,22 @@ ssh_options=(
 
 # ====== HELP ======
 show_usage() {
-    print_cyan "Usage: tux2lab vm validate [OPTIONS]
+    print_cyan "USAGE:
+    tux2lab vm validate [OPTIONS]
 
-Validate post-install configuration of VM(s).
-Checks networking, services, filesystem, NFS mounts, security, and distro-specific settings.
+DESCRIPTION:
+    Run post-install validation checks on VM(s) via SSH. Verifies networking
+    (stack-aware), DNS, services, filesystem, user/auth, certificates, timezone,
+    and shell configuration. Without -H, validates all running VMs.
 
 OPTIONS:
-    -H, --hosts <hosts>     Comma-separated list of hostnames (e.g., vm1,vm2,vm3)
+    -H, --hosts <hosts>     Hostname(s) to validate (comma-separated)
     -h, --help              Show this help message
 
-BEHAVIOR:
-    - Without arguments: Validates all running VMs
-    - With -H flag: Validates specified comma-separated VMs
-
-EXIT CODES:
-    0   All validations passed
-    1   One or more validations failed
-    2   Could not reach any target VM
-
 EXAMPLES:
-    tux2lab vm validate                        # Validate all running VMs
-    tux2lab vm validate -H test-rhel-10        # Validate a single VM
-    tux2lab vm validate -H vm1,vm2,vm3         # Validate multiple VMs
+    tux2lab vm validate
+    tux2lab vm validate -H testvm1
+    tux2lab vm validate -H testvm1,testvm2,testvm3
 "
 }
 
@@ -90,21 +84,13 @@ if [[ -n "$hosts_list" ]]; then
     if ! validate_and_process_hostnames hosts_array; then
         exit 1
     fi
-    # Reject the lab infra server — it has a different validation path
-    for vm_candidate in "${VALIDATED_HOSTS[@]}"; do
-        if [[ "$vm_candidate" == "$lab_infra_server_hostname" ]]; then
-            print_error "Cannot validate the lab infra server with this command."
-            print_info "Use 'tux2lab health' to check lab infrastructure services."
-            exit 1
-        fi
-    done
     target_vms=("${VALIDATED_HOSTS[@]}")
 else
     # All running VMs (exclude lab infra server)
     mapfile -t target_vms < <(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" | grep -v "^${lab_infra_server_hostname}$" || true)
 
     if [[ ${#target_vms[@]} -eq 0 ]]; then
-        print_warning "No VMs running other than lab infra server VM ${lab_infra_server_hostname}"
+        print_yellow "No VMs are currently running."
         exit 0
     fi
 fi
@@ -179,24 +165,41 @@ fi
 
 # --- Networking ---
 IPV4_ADDR=$(ip -4 addr show dev eth0 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
-[[ -n "$IPV4_ADDR" ]] && emit "eth0 IPv4" "PASS" "$IPV4_ADDR" || emit "eth0 IPv4" "FAIL" "missing"
-
 IPV6_ADDR=$(ip -6 addr show dev eth0 scope global 2>/dev/null | grep -oP 'inet6 \K[0-9a-f:]+' | head -1)
-[[ -n "$IPV6_ADDR" ]] && emit "eth0 IPv6 global" "PASS" "$IPV6_ADDR" || emit "eth0 IPv6 global" "FAIL" "missing"
 
-ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" || emit "IPv4 default route" "FAIL" ""
+# Detect stack mode from actual network state
+HAS_IPV4=false; [[ -n "$IPV4_ADDR" ]] && HAS_IPV4=true
+HAS_IPV6=false; [[ -n "$IPV6_ADDR" ]] && HAS_IPV6=true
 
-# Connectivity to lab infra server
-if timeout 3 ping -c 1 "$LAB_INFRA_SERVER" &>/dev/null; then
-    emit "Ping infra server (IPv4)" "PASS" ""
+if $HAS_IPV4; then
+    emit "eth0 IPv4" "PASS" "$IPV4_ADDR"
+    ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" || emit "IPv4 default route" "FAIL" ""
+    if timeout 3 ping -c 1 "$LAB_INFRA_SERVER" &>/dev/null; then
+        emit "Ping infra server (IPv4)" "PASS" ""
+    else
+        emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
+    fi
 else
-    emit "Ping infra server (IPv4)" "FAIL" "$LAB_INFRA_SERVER unreachable"
+    emit "eth0 IPv4" "PASS" "N/A - IPv6-only"
+    emit "IPv4 default route" "PASS" "N/A - IPv6-only"
+    emit "Ping infra server (IPv4)" "PASS" "N/A - IPv6-only"
 fi
 
-if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
-    emit "Ping infra server (IPv6)" "PASS" ""
+if $HAS_IPV6; then
+    emit "eth0 IPv6 global" "PASS" "$IPV6_ADDR"
+    if timeout 3 ping -6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1 || timeout 3 ping6 -c 1 "$LAB_INFRA_SERVER" &>/dev/null 2>&1; then
+        emit "Ping infra server (IPv6)" "PASS" ""
+    else
+        emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
+    fi
 else
-    emit "Ping infra server (IPv6)" "WARN" "IPv6 may not be routable yet"
+    emit "eth0 IPv6 global" "PASS" "N/A - IPv4-only"
+    emit "Ping infra server (IPv6)" "PASS" "N/A - IPv4-only"
+fi
+
+if ! $HAS_IPV4 && ! $HAS_IPV6; then
+    emit "eth0 IPv4" "FAIL" "missing"
+    emit "eth0 IPv6 global" "FAIL" "missing"
 fi
 
 # --- Filesystem ---
@@ -351,7 +354,7 @@ fn_validate_vm() {
         case "$check" in
             FQDN*|DNS*)                    section="Identity" ;;
             eth0*|IPv*|*route*|*DAD*|*Manager*|*networkd*|wicked*|Firewall*|Ping*) section="Networking" ;;
-            Root*|EFI*|growpart*)           section="Filesystem" ;;
+            Root\ filesystem*|Root\ disk*|EFI*|growpart*) section="Filesystem" ;;
             SSH\ active|Chrony*|NTP*)   section="Services" ;;
             Mgmt*|Sudo*|SSH\ auth*|SSH\ priv*|Root\ SSH*|SSH\ client*) section="User & Auth" ;;
             CA*|HTTPS*)                    section="CA Certificate" ;;

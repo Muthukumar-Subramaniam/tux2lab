@@ -15,25 +15,48 @@ VERSION_TYPE=""
 HOSTNAMES=()
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
+SUPPORTS_STACK="yes"
+STACK_MODE="dual"
+STACK_MODE_EXPLICIT=false
+VM_CPUS="2"
+VM_CPUS_SPECIFIED=false
+VM_MEMORY="2"
+VM_MEMORY_SPECIFIED=false
+VM_DISK_SIZE="30"
+VM_DISK_SIZE_SPECIFIED=false
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm install-golden [OPTIONS]
-Options:
-  -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
-  -c, --console        Attach console during installation (single VM only)
-  -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm install [--via-golden] [OPTIONS]
 
-Examples:
-  tux2lab vm install-golden -H vm1                              # Install single VM (will prompt for distro/version)
-  tux2lab vm install-golden -H vm1 --console                    # Install and attach console
-  tux2lab vm install-golden -H vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
-  tux2lab vm install-golden -H vm1 -d rocky -v 9                # Install with Rocky Linux 9
-  tux2lab vm install-golden -H vm1,vm2,vm3                      # Install multiple VMs
-  tux2lab vm install-golden -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04  # Install multiple with Ubuntu 26.04
+DESCRIPTION:
+    Deploy new VM(s) from golden image (fast disk clone). Supports per-VM
+    stack mode selection (dual/IPv4/IPv6), custom resource specs (CPU,
+    memory, disk), multi-VM batch deployment, and console attachment for
+    monitoring golden-boot configuration.
+
+OPTIONS:
+    -H <hostnames>      Hostname(s) to deploy (comma-separated)
+    -d <distro>         OS distribution
+    -v <version>        OS version
+    -c, --console       Attach to serial console (single VM only)
+    --ipv4-only         Create IPv4-only VM
+    --ipv6-only         Create IPv6-only VM
+    --dual-stack        Create dual-stack VM (default if neither is specified)
+    --cpu <n>           vCPUs (power of 2, default: 2)
+    --memory <n>        RAM in GiB (power of 2, default: 2)
+    --root-disk-size <n> Disk in GiB (multiple of 5, default: 30)
+    -h, --help          Show this help message
+
+EXAMPLES:
+    tux2lab vm install -H testvm1
+    tux2lab vm install -H testvm1 -d almalinux -v 10
+    tux2lab vm install -H testvm1 --console
+    tux2lab vm install -H testvm1 --ipv4-only -d rocky -v 9
+    tux2lab vm install -H testvm1 --cpu 4 --memory 8 --root-disk-size 50
+    tux2lab vm install -H testvm1,testvm2,testvm3
+    tux2lab vm install -H testvm1,testvm2,testvm3 -d ubuntu-lts -v 26.04
 "
 }
 
@@ -51,7 +74,7 @@ validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
 
 # If no distro/version specified on cmdline, select from available golden images
 if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
-    source /tux2lab/ks-manage/distro-versions.conf
+    source /tux2lab/ksmanager/distro-versions.conf
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/normalize-os-distro.sh
 
     # Discover available golden images
@@ -107,31 +130,57 @@ if [[ -z "$CMDLINE_OS_DISTRO" || -z "$CMDLINE_VERSION_TYPE" ]]; then
         CMDLINE_VERSION_TYPE="${GOLDEN_IMAGES_AVAILABLE[0]#*:}"
         print_info "Using golden image: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
     else
-        # Present interactive menu
-        echo "Select golden image to deploy:"
-        idx=1
-        for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
-            gi_distro="${entry%%:*}"
-            gi_version="${entry#*:}"
-            printf "  %d)  %-30s (version %s)\n" "$idx" "${DISTRO_DISPLAY_NAMES[$gi_distro]}" "$gi_version"
-            idx=$((idx + 1))
-        done
-        printf "  q)  Quit\n"
+        # If distro is known, show simple version prompt
+        if [[ -n "$CMDLINE_OS_DISTRO" ]]; then
+            local_versions=""
+            for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                local_versions+="${entry#*:} "
+            done
+            local_versions=$(echo "$local_versions" | tr ' ' '\n' | sort -V | tr '\n' ' ')
+            _display="${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]:-$CMDLINE_OS_DISTRO}"
+            while true; do
+                echo "Available golden image versions for ${_display}: ${local_versions}"
+                echo -n "Enter the version: "
+                read -r _ver_input
+                if [[ "$_ver_input" == "q" || "$_ver_input" == "Q" ]]; then
+                    exit 130
+                fi
+                for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                    if [[ "${entry#*:}" == "$_ver_input" ]]; then
+                        CMDLINE_OS_DISTRO="${entry%%:*}"
+                        CMDLINE_VERSION_TYPE="$_ver_input"
+                        break 2
+                    fi
+                done
+                print_error "Invalid version '${_ver_input}'. Please try again."
+            done
+        else
+            # No distro specified — show full golden image menu
+            echo "Select golden image to deploy:"
+            idx=1
+            for entry in "${GOLDEN_IMAGES_AVAILABLE[@]}"; do
+                gi_distro="${entry%%:*}"
+                gi_version="${entry#*:}"
+                printf "  %d)  %-24s %s\n" "$idx" "${DISTRO_DISPLAY_NAMES[$gi_distro]}" "$gi_version"
+                idx=$((idx + 1))
+            done
+            printf "  q)  Quit\n"
 
-        while true; do
-            read -rp "Enter option number: " gi_choice
-            if [[ "$gi_choice" == "q" || "$gi_choice" == "Q" ]]; then
-                print_info "Installation cancelled."
-                exit 0
-            fi
-            if [[ "$gi_choice" =~ ^[0-9]+$ ]] && (( gi_choice >= 1 && gi_choice <= ${#GOLDEN_IMAGES_AVAILABLE[@]} )); then
-                selected="${GOLDEN_IMAGES_AVAILABLE[$((gi_choice - 1))]}"
-                CMDLINE_OS_DISTRO="${selected%%:*}"
-                CMDLINE_VERSION_TYPE="${selected#*:}"
-                break
-            fi
-            print_warning "Invalid choice. Please enter a number between 1 and ${#GOLDEN_IMAGES_AVAILABLE[@]}, or 'q' to quit."
-        done
+            while true; do
+                read -rp "Enter option number: " gi_choice
+                if [[ "$gi_choice" == "q" || "$gi_choice" == "Q" ]]; then
+                    print_info "Installation cancelled."
+                    exit 0
+                fi
+                if [[ "$gi_choice" =~ ^[0-9]+$ ]] && (( gi_choice >= 1 && gi_choice <= ${#GOLDEN_IMAGES_AVAILABLE[@]} )); then
+                    selected="${GOLDEN_IMAGES_AVAILABLE[$((gi_choice - 1))]}"
+                    CMDLINE_OS_DISTRO="${selected%%:*}"
+                    CMDLINE_VERSION_TYPE="${selected#*:}"
+                    break
+                fi
+                print_error "Invalid option. Please try again."
+            done
+        fi
         print_info "Selected: ${DISTRO_DISPLAY_NAMES[$CMDLINE_OS_DISTRO]} ${CMDLINE_VERSION_TYPE}"
     fi
 fi
@@ -190,6 +239,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
     ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
+    if [[ "${STACK_MODE_EXPLICIT}" == "true" ]] || [[ "${STACK_MODE}" != "dual" ]]; then
+        [[ "${STACK_MODE}" == "dual" ]] && ksmanager_opts="${ksmanager_opts} --dual-stack" || ksmanager_opts="${ksmanager_opts} --${STACK_MODE}-only"
+    fi
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
         fn_release_vm_hostname_lock
@@ -215,13 +267,18 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Update /etc/hosts
+    # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    _etc_hosts_ipv4="${IPV4_ADDRESS}"
+    [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
+    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
+        print_task_fail
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
+    print_task_done
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/clone-golden-image-disk.sh
     if ! clone_golden_image_disk "$qemu_kvm_hostname" "${OS_DISTRO}" "${VERSION_TYPE}"; then
@@ -240,6 +297,8 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
+
+    print_info "VM specs: ${VM_CPUS} vCPUs, ${VM_MEMORY} GiB RAM, ${VM_DISK_SIZE} GiB disk"
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh

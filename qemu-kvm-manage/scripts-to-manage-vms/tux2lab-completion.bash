@@ -22,29 +22,31 @@ _tux2lab_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Top-level commands
-    local commands="vm golden-image distro ipv6-route deploy destroy rebuild sync start stop enable disable health info dns lb version"
+    local commands="vm golden-image distro credentials ipv6-route deploy destroy rebuild start stop enable disable health info dns lb logflush version"
 
     # Top-level options
     local options="-h --help -v --version"
 
     # VM subcommands
-    local vm_subcommands="install-golden install-pxe reimage-golden reimage-pxe start stop shutdown restart reboot remove list info validate console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove snapshot-create snapshot-list snapshot-info snapshot-delete snapshot-revert"
+    local vm_subcommands="install reimage start stop shutdown restart reboot remove list info validate console resize disk-add disk-resize disk-attach disk-detach disk-delete nic-add nic-remove snapshot-create snapshot-list snapshot-info snapshot-delete snapshot-revert"
 
     # Distro subcommands
-    local distro_subcommands="list setup cleanup download-infra-iso"
+    local distro_subcommands="list setup cleanup"
 
     # Golden image subcommands
-    local golden_image_subcommands="build create rebuild list cleanup"
+    local golden_image_subcommands="build rebuild list cleanup"
 
     # IPv6 route subcommands
     local ipv6_route_subcommands="enable disable check auto status"
 
+    # Credentials subcommands
+    local credentials_subcommands="show password ssh-keys cert rhel-subscription"
+
     # Distro names and versions (sourced from single source of truth)
     # Unset guard so re-sourcing works (declare -A is function-local, doesn't persist)
     unset _DISTRO_VERSIONS_CONF_LOADED
-    source /tux2lab/ks-manage/distro-versions.conf 2>/dev/null || true
+    source /tux2lab/ksmanager/distro-versions.conf 2>/dev/null || true
     local all_distros="${!DISTRO_AVAILABLE_VERSIONS[*]}"
-    local rhel_distros="almalinux rocky oraclelinux centos-stream rhel"
 
     # Existing VM names (from filesystem — instant, no virsh overhead)
     local existing_vms
@@ -101,7 +103,7 @@ _tux2lab_completions() {
     }
 
     # DNS options
-    local dns_options="-c --create -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -dc --delete-cname -dcy -q --query --setup -y --yes --inline -h --help"
+    local dns_options="-c --create -c4 -c6 -d --delete -dy -r --rename -ry -cf --create-from-file -cfy -c4f -c4fy -c6f -c6fy -cif --create-with-ip-file -cify -df --delete-from-file -dfy -ci --create-with-ip -cc --create-cname -q --query --setup --reconfigure --update-ttl --ttl -y --yes --inline -h --help"
 
     # ===== FIRST ARGUMENT (top-level command) =====
     if [[ ${COMP_CWORD} -eq 1 ]]; then
@@ -139,7 +141,7 @@ _tux2lab_completions() {
         if [[ "$_comp_prefix" =~ (-H|--hosts|--host)[[:space:]]+([^[:space:]]*)$ ]]; then
             local _host_val="${BASH_REMATCH[2]}"
             case "${vm_subcmd}" in
-                install-golden|install-pxe) return 0 ;;
+                install) return 0 ;;
                 *)
                     if [[ -n "$existing_vms" ]]; then
                         _complete_comma_separated_hosts "$_host_val"
@@ -159,7 +161,7 @@ _tux2lab_completions() {
         # Complete distro names after -d/--distro
         if [[ "${prev}" == "-d" || "${prev}" == "--distro" ]]; then
             case "${vm_subcmd}" in
-                install-golden|install-pxe|reimage-golden|reimage-pxe)
+                install|reimage)
                     COMPREPLY=( $(compgen -W "${all_distros}" -- "${cur}") )
                     return 0
                     ;;
@@ -169,7 +171,7 @@ _tux2lab_completions() {
         # Complete version values after -v/--version
         if [[ "${prev}" == "-v" || "${prev}" == "--version" ]]; then
             case "${vm_subcmd}" in
-                install-golden|install-pxe|reimage-golden|reimage-pxe)
+                install|reimage)
                     local found_distro
                     found_distro=$(_find_distro_in_words)
                     if [[ -n "$found_distro" ]]; then
@@ -186,10 +188,10 @@ _tux2lab_completions() {
         # already handled above with their own completion handlers.
         # -H/--hosts/--host is handled earlier via COMP_LINE detection.
         case "${prev}" in
-            -f|--force|-C|--clean-install|--ignore-ksmanager-cleanup|-h|--help) ;;
+            -f|--force|--reset-specs-to-default|--ignore-ksmanager-cleanup|-h|--help) ;;
             -c|--console)
                 case "${vm_subcmd}" in
-                    install-golden|install-pxe|reimage-golden|reimage-pxe) ;;
+                    install|reimage) ;;
                     *) return 0 ;;
                 esac
                 ;;
@@ -204,11 +206,11 @@ _tux2lab_completions() {
 
         # Complete options per vm subcommand
         case "${vm_subcmd}" in
-            install-golden|install-pxe)
-                COMPREPLY=( $(compgen -W "-H --hosts -c --console -d --distro -v --version -h --help" -- "${cur}") )
+            install)
+                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console -d --distro -v --version --ipv4-only --ipv6-only --dual-stack --cpu --memory --root-disk-size -h --help" -- "${cur}") )
                 ;;
-            reimage-golden|reimage-pxe)
-                COMPREPLY=( $(compgen -W "-H --hosts -c --console -C --clean-install -d --distro -v --version -f --force -h --help" -- "${cur}") )
+            reimage)
+                COMPREPLY=( $(compgen -W "--via-golden --via-pxe -H --hosts -c --console --reset-specs-to-default -d --distro -v --version --ipv4-only --ipv6-only --dual-stack --cpu --memory --root-disk-size -f --force -h --help" -- "${cur}") )
                 ;;
             start)
                 COMPREPLY=( $(compgen -W "-H --hosts -h --help" -- "${cur}") )
@@ -217,7 +219,7 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "-H --hosts -f --force -h --help" -- "${cur}") )
                 ;;
             remove)
-                COMPREPLY=( $(compgen -W "-H --hosts -f --force --ignore-ksmanager-cleanup -h --help" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-H --hosts -f --force --ignore-ksmanager-cleanup --ksmanager-cleanup-only -h --help" -- "${cur}") )
                 ;;
             list)
                 COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
@@ -297,16 +299,6 @@ _tux2lab_completions() {
             return 0
         fi
 
-        # Complete RHEL-based distro names after download-infra-iso
-        if [[ ${COMP_CWORD} -eq 3 ]] && [[ "${distro_subcmd}" == "download-infra-iso" ]]; then
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
-            else
-                COMPREPLY=( $(compgen -W "${rhel_distros}" -- "${cur}") )
-            fi
-            return 0
-        fi
-
         # Complete --version/-v flag after distro name for setup/cleanup
         if [[ "${distro_subcmd}" == "setup" || "${distro_subcmd}" == "cleanup" ]]; then
             # Offer versions after -v/--version
@@ -319,7 +311,7 @@ _tux2lab_completions() {
                 fi
                 return 0
             fi
-            COMPREPLY=( $(compgen -W "-v --version -h --help" -- "${cur}") )
+            COMPREPLY=( $(compgen -W "-v --version -f --force -h --help" -- "${cur}") )
             return 0
         fi
 
@@ -333,6 +325,19 @@ _tux2lab_completions() {
                 COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
             else
                 COMPREPLY=( $(compgen -W "${ipv6_route_subcommands}" -- "${cur}") )
+            fi
+            return 0
+        fi
+        return 0
+    fi
+
+    # ===== CREDENTIALS COMMAND =====
+    if [[ "${cmd}" == "credentials" ]]; then
+        if [[ ${COMP_CWORD} -eq 2 ]]; then
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=( $(compgen -W "-h --help" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "${credentials_subcommands}" -- "${cur}") )
             fi
             return 0
         fi
@@ -514,7 +519,7 @@ _tux2lab_completions() {
         # After a file-based operation, complete file paths
         local dns_opt="${COMP_WORDS[2]}"
         case "${dns_opt}" in
-            -cf|--create-from-file|-cfy|-cif|--create-with-ip-file|-cify|-df|--delete-from-file|-dfy)
+            -cf|--create-from-file|-cfy|-c4f|-c4fy|-c6f|-c6fy|-cif|--create-with-ip-file|-cify|-df|--delete-from-file|-dfy)
                 if [[ ${COMP_CWORD} -eq 3 ]]; then
                     compopt -o default
                     COMPREPLY=()
@@ -534,7 +539,7 @@ _tux2lab_completions() {
 
     # ===== DESTROY COMMAND =====
     if [[ "${cmd}" == "destroy" ]]; then
-        local all_opts="--wipe-iso-files-too -h --help"
+        local all_opts="-h --help"
         local opts=""
         for opt in $all_opts; do
             local already_used=false
@@ -552,7 +557,7 @@ _tux2lab_completions() {
 
     # ===== REBUILD COMMAND =====
     if [[ "${cmd}" == "rebuild" ]]; then
-        local all_opts="--clean-state -h --help"
+        local all_opts="--pull-image -y --yes -h --help"
         local opts=""
         for opt in $all_opts; do
             local already_used=false

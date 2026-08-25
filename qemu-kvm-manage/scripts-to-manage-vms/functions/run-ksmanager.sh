@@ -13,38 +13,17 @@ run_ksmanager() {
 
     # Execute ksmanager — output flows directly to terminal
     local ksmanager_exit_code=0
-    if $lab_infra_server_mode_is_host; then
-        if [[ -z "$hostname" ]]; then
-            /tux2lab/ks-manage/ksmanager.sh ${ksmanager_options}
-            ksmanager_exit_code=$?
-        else
-            /tux2lab/ks-manage/ksmanager.sh "${hostname}" ${ksmanager_options}
-            ksmanager_exit_code=$?
-        fi
+    if [[ -z "$hostname" ]]; then
+        /tux2lab/ksmanager/ksmanager.sh ${ksmanager_options} || ksmanager_exit_code=$?
     else
-        if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o ConnectTimeout=5 "${lab_infra_admin_username}@${lab_infra_server_hostname}" true 2>/dev/null; then
-            print_error "Cannot reach the lab infra server (${lab_infra_server_hostname})."
-            return 1
-        fi
-        if [[ -z "$hostname" ]]; then
-            ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${ksmanager_options}"
-            ksmanager_exit_code=$?
-        else
-            ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -t "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${hostname} ${ksmanager_options}"
-            ksmanager_exit_code=$?
-        fi
+        /tux2lab/ksmanager/ksmanager.sh "${hostname}" ${ksmanager_options} || ksmanager_exit_code=$?
     fi
 
     # Check if user cancelled (exit code 130)
     if [[ $ksmanager_exit_code -eq 130 ]]; then
         if [[ "$cleanup_on_cancel" == "true" ]] && [[ -n "$hostname" ]]; then
             print_info "Cleaning up resources for '${hostname}' due to cancellation..."
-            if $lab_infra_server_mode_is_host; then
-                /tux2lab/ks-manage/ksmanager.sh "${hostname}" --remove-host || true
-            else
-                ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh ${hostname} --remove-host" || true
-            fi
+            /tux2lab/ksmanager/ksmanager.sh "${hostname}" --remove-host || true
             print_info "Cleanup completed for '${hostname}' due to cancellation.\n"
         fi
         return 1
@@ -66,7 +45,7 @@ run_ksmanager() {
 
         if [[ -n "$golden_mac" ]]; then
             local hosts_json=""
-            hosts_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/hosts.json" 2>/dev/null) || true
+            hosts_json=$(cat /tux2lab-data/ksmanager-hub/hosts.json 2>/dev/null) || true
 
             if [[ -n "$hosts_json" ]]; then
                 EXTRACTED_HOSTNAME=$(printf '%s' "$hosts_json" | jq -r --arg mac "$golden_mac" '.[] | select(.mac_address == $mac) | .hostname // empty')
@@ -74,10 +53,10 @@ run_ksmanager() {
         fi
 
         if [[ -n "${EXTRACTED_HOSTNAME:-}" ]]; then
-            provision_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/kickstarts/${EXTRACTED_HOSTNAME}/provision-result.json" 2>/dev/null) || true
+            provision_json=$(cat /tux2lab-data/ksmanager-hub/kickstarts/${EXTRACTED_HOSTNAME}/provision-result.json 2>/dev/null) || true
         fi
     else
-        provision_json=$(curl -fsSL "http://${lab_infra_server_hostname}/ksmanager-hub/kickstarts/${hostname}/provision-result.json" 2>/dev/null) || true
+        provision_json=$(cat /tux2lab-data/ksmanager-hub/kickstarts/${hostname}/provision-result.json 2>/dev/null) || true
     fi
 
     if [[ -n "$provision_json" ]]; then
@@ -86,30 +65,34 @@ run_ksmanager() {
         OS_DISTRO=$(printf '%s' "$provision_json" | jq -r '.os_distribution // empty')
         VERSION_TYPE=$(printf '%s' "$provision_json" | jq -r '.version // empty')
         EXTRACTED_HOSTNAME=$(printf '%s' "$provision_json" | jq -r '.hostname // empty')
+        STACK_MODE=$(printf '%s' "$provision_json" | jq -r '.stack_mode // "dual"')
+        PXE_BOOTSTRAP_HOSTNAME=$(printf '%s' "$provision_json" | jq -r '.pxe_bootstrap_hostname // empty')
     else
         IPV4_ADDRESS=""
         IPV6_ADDRESS=""
         OS_DISTRO=""
         VERSION_TYPE=""
         EXTRACTED_HOSTNAME="${EXTRACTED_HOSTNAME:-}"
+        STACK_MODE="dual"
+        PXE_BOOTSTRAP_HOSTNAME=""
     fi
 
     # Validate extracted values based on operation mode
     if [[ "$ksmanager_options" == *"--create-golden-image"* ]]; then
         if [[ -z "${EXTRACTED_HOSTNAME}" ]]; then
             print_error "Failed to extract hostname from ksmanager output."
-            print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+            print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
             return 1
         fi
     else
-        if [[ -z "${IPV4_ADDRESS}" ]]; then
+        if [[ "${STACK_MODE}" != "ipv6" ]] && [[ -z "${IPV4_ADDRESS}" ]]; then
             print_error "Failed to extract IPv4 address from ksmanager output."
-            print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+            print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
             return 1
         fi
-        if [[ -z "${IPV6_ADDRESS}" ]]; then
+        if [[ "${STACK_MODE}" != "ipv4" ]] && [[ -z "${IPV6_ADDRESS}" ]]; then
             print_error "Failed to extract IPv6 address from ksmanager output."
-            print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+            print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
             return 1
         fi
     fi
@@ -117,7 +100,7 @@ run_ksmanager() {
     # OS_DISTRO is optional - only validate if it was expected (golden-image mode)
     if [[ "$ksmanager_options" == *"--golden-image"* && -z "${OS_DISTRO}" ]]; then
         print_error "Failed to extract OS distro from ksmanager output."
-        print_info "Please check the lab infrastructure server VM at ${lab_infra_server_hostname} for details."
+        print_info "Please check the lab infrastructure container ${CONTAINER_NAME} for details."
         return 1
     fi
 

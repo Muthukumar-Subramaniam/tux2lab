@@ -15,25 +15,49 @@ VERSION_TYPE=""
 HOSTNAMES=()
 SUPPORTS_DISTRO="yes"
 SUPPORTS_VERSION="yes"
+SUPPORTS_STACK="yes"
+SUPPORTS_MIN_RESOURCES="pxe"
+STACK_MODE="dual"
+STACK_MODE_EXPLICIT=false
+VM_CPUS="2"
+VM_CPUS_SPECIFIED=false
+VM_MEMORY="2"
+VM_MEMORY_SPECIFIED=false
+VM_DISK_SIZE="30"
+VM_DISK_SIZE_SPECIFIED=false
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm install-pxe [OPTIONS]
-Options:
-  -H, --hosts          Specify hostname(s) (comma-separated for multiple VMs)
-  -c, --console        Attach console during installation (single VM only)
-  -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azurelinux)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6, 4)
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm install --via-pxe [OPTIONS]
 
-Examples:
-  tux2lab vm install-pxe -H vm1                              # Install single VM (will prompt for distro/version)
-  tux2lab vm install-pxe -H vm1 --console                    # Install and attach console
-  tux2lab vm install-pxe -H vm1 --distro almalinux           # Install with AlmaLinux (will prompt for version)
-  tux2lab vm install-pxe -H vm1 -d almalinux -v 9            # Install with AlmaLinux 9
-  tux2lab vm install-pxe -H vm1,vm2,vm3                      # Install multiple VMs
-  tux2lab vm install-pxe -H vm1,vm2,vm3 -d ubuntu-lts -v 26.04  # Install multiple with Ubuntu 26.04
+DESCRIPTION:
+    Deploy new VM(s) via PXE network boot (full OS installation). Supports
+    per-VM stack mode selection (dual/IPv4/IPv6), custom resource specs
+    (CPU, memory, disk), multi-VM batch deployment, and console attachment
+    for monitoring the installation process.
+
+OPTIONS:
+    -H <hostnames>      Hostname(s) to deploy (comma-separated)
+    -d <distro>         OS distribution
+    -v <version>        OS version
+    -c, --console       Attach to serial console during install (single VM only)
+    --ipv4-only         Create IPv4-only VM
+    --ipv6-only         Create IPv6-only VM
+    --dual-stack        Create dual-stack VM (default if neither is specified)
+    --cpu <n>           vCPUs (power of 2, min: 2, default: 2)
+    --memory <n>        RAM in GiB (power of 2, min: 2, default: 2)
+    --root-disk-size <n> Disk in GiB (multiple of 5, default: 30)
+    -h, --help          Show this help message
+
+EXAMPLES:
+    tux2lab vm install --via-pxe -H testvm1
+    tux2lab vm install --via-pxe -H testvm1 -d almalinux -v 10
+    tux2lab vm install --via-pxe -H testvm1 --console
+    tux2lab vm install --via-pxe -H testvm1 --ipv4-only -d almalinux -v 10
+    tux2lab vm install --via-pxe -H testvm1 --cpu 4 --memory 8 --root-disk-size 50
+    tux2lab vm install --via-pxe -H testvm1,testvm2,testvm3
+    tux2lab vm install --via-pxe -H testvm1 -d ubuntu-lts -v 24.04 --console
 "
 }
 
@@ -48,6 +72,16 @@ CMDLINE_VERSION_TYPE="$VERSION_TYPE"
 # Validate distro and version locally before any work
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-version.sh
 validate_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+
+# Interactive distro/version selection (resolved once, used for all VMs)
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+select_distro_version "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
+CMDLINE_OS_DISTRO="$SELECTED_DISTRO"
+CMDLINE_VERSION_TYPE="$SELECTED_VERSION"
+
+# Auto-setup distro if not prepared for PXE boot
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
+auto_setup_distro "$CMDLINE_OS_DISTRO" "$CMDLINE_VERSION_TYPE"
 
 # Main installation loop
 CURRENT_VM=0
@@ -89,9 +123,10 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC}"
-    [[ -n "$CMDLINE_OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $CMDLINE_OS_DISTRO"
-    [[ -n "$CMDLINE_VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $CMDLINE_VERSION_TYPE"
+    ksmanager_opts="--qemu-kvm --mac ${GENERATED_MAC} --distro $CMDLINE_OS_DISTRO --version $CMDLINE_VERSION_TYPE"
+    if [[ "${STACK_MODE_EXPLICIT}" == "true" ]] || [[ "${STACK_MODE}" != "dual" ]]; then
+        [[ "${STACK_MODE}" == "dual" ]] && ksmanager_opts="${ksmanager_opts} --dual-stack" || ksmanager_opts="${ksmanager_opts} --${STACK_MODE}-only"
+    fi
     cleanup_on_cancel=true  # Cleanup DNS/MAC if user cancels during install
     if ! run_ksmanager "${qemu_kvm_hostname}" "$ksmanager_opts" "$cleanup_on_cancel"; then
         fn_release_vm_hostname_lock
@@ -107,13 +142,18 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         continue
     fi
 
-    # Update /etc/hosts
+    # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    if ! update_etc_hosts "${qemu_kvm_hostname}" "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"; then
+    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    _etc_hosts_ipv4="${IPV4_ADDRESS}"
+    [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
+    if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
+        print_task_fail
         fn_release_vm_hostname_lock
         FAILED_VMS+=("$qemu_kvm_hostname")
         continue
     fi
+    print_task_done
 
     # Start installation process via PXE boot
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-installation.sh
@@ -125,6 +165,14 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     fn_release_vm_hostname_lock
     SUCCESSFUL_VMS+=("$qemu_kvm_hostname")
+
+    print_info "VM specs: ${VM_CPUS} vCPUs, ${VM_MEMORY} GiB RAM, ${VM_DISK_SIZE} GiB disk"
+
+    # Clean up temp PXE bootstrap record for --ipv6-only
+    if [[ -n "${PXE_BOOTSTRAP_HOSTNAME:-}" ]]; then
+        print_task "Removing temporary PXE bootstrap record '${PXE_BOOTSTRAP_HOSTNAME}'..."
+        sudo /tux2lab/named-manage/dnsbinder.sh -dy "${PXE_BOOTSTRAP_HOSTNAME}" &>/dev/null && print_task_done || print_task_fail
+    fi
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh

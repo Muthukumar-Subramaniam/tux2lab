@@ -1,12 +1,11 @@
-# Optional parameter: allow_self_reference mode (for safe read-only operations like 'info' or 'console')
-# Pass "ALLOW_SELF_REFERENCE" as second parameter to bypass the check
-allow_self_reference_mode="${2:-}"
-
 # Use first argument or prompt for hostname
 if [[ -n "$1" ]]; then
     qemu_kvm_hostname="$1"
 else
-    read -rp "Please enter the hostname of the VM: " qemu_kvm_hostname
+    while true; do
+        read -rp "Please enter the hostname of the VM: " qemu_kvm_hostname
+        [[ -n "${qemu_kvm_hostname}" ]] && break
+    done
 fi
 
 # Validate and normalize hostname to FQDN
@@ -35,6 +34,12 @@ else
         exit 1
     fi
     qemu_kvm_hostname="${qemu_kvm_hostname}.${lab_infra_domain_name}"
+fi
+
+# Block operations on the lab infra server hostname
+if [[ "${qemu_kvm_hostname}" == "${lab_infra_server_hostname}" ]]; then
+    print_error "'${qemu_kvm_hostname}' is the lab infrastructure container. Cannot use it as a VM hostname."
+    exit 1
 fi
 
 

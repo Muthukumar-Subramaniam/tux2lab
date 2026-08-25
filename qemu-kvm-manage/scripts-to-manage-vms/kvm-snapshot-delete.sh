@@ -11,16 +11,23 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/snapshot-utils.s
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm snapshot-delete [OPTIONS]
-Options:
-  -H, --hosts <list>       Comma-separated list of VM hostnames
-  -n, --name <snapshot>    Snapshot name to delete (e.g., 20260515-143022_pre-update)
-  -f, --force              Skip confirmation prompt
-  -h, --help               Show this help message
+    print_cyan "
+USAGE:
+    tux2lab vm snapshot-delete [OPTIONS]
 
-Examples:
-  tux2lab vm snapshot-delete -H vm1 -n 20260515-143022_pre-update
-  tux2lab vm snapshot-delete -f -H vm1,vm2 -n 20260515-143022_baseline
+DESCRIPTION:
+    Delete a named snapshot from one or more VMs.
+    Frees disk space used by the snapshot.
+
+OPTIONS:
+    -H, --hosts <list>       Comma-separated list of VM hostnames
+    -n, --name <snapshot>    Snapshot name to delete (e.g., 20260515-143022_pre-update)
+    -f, --force              Skip confirmation prompt
+    -h, --help               Show this help message
+
+EXAMPLES:
+    tux2lab vm snapshot-delete -H testvm1 -n 20260515-143022_pre-update
+    tux2lab vm snapshot-delete -f -H testvm1,testvm2 -n 20260515-143022_baseline
 "
 }
 

@@ -35,7 +35,7 @@ check_vm_exists() {
             if [[ $total_vms -eq 1 ]]; then
                 print_warning "Either do one of the following:"
                 print_info "Remove the VM using 'tux2lab vm remove', then try again."
-                print_info "Re-image the VM using 'tux2lab vm reimage-golden' or 'tux2lab vm reimage-pxe'."
+                print_info "Re-image the VM using 'tux2lab vm reimage -H ${vm_hostname}'."
                 exit 1
             fi
             return 1

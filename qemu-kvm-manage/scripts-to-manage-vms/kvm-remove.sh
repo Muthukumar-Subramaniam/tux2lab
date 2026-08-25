@@ -8,25 +8,27 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
-ETC_HOSTS_FILE='/etc/hosts'
-
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm remove [OPTIONS]
-Options:
-  -H, --hosts <list>               Comma-separated list of VM hostnames to remove
-  -f, --force                      Skip confirmation prompt (except for lab infra server)
-  --ignore-ksmanager-cleanup       Skip cleanup of ksmanager databases (DNS, MAC, kickstart, iPXE, DHCP)
-  -h, --help                       Show this help message
+    print_cyan "USAGE:
+    tux2lab vm remove [OPTIONS]
 
-Examples:
-  tux2lab vm remove -H vm1                             # Remove single VM with confirmation
-  tux2lab vm remove -f -H vm1                          # Remove single VM without confirmation
-  tux2lab vm remove --ignore-ksmanager-cleanup -H vm1  # Remove VM but keep ksmanager data
-  tux2lab vm remove -H vm1,vm2,vm3                     # Remove multiple VMs with confirmation
-  tux2lab vm remove -f -H vm1,vm2                      # Remove multiple VMs without confirmation
+DESCRIPTION:
+    Permanently delete one or more VMs and all associated data — disk images,
+    DNS records, DHCP reservations, MAC cache, and kickstart configs.
 
-Note: Lab infra server always requires special confirmation regardless of -f flag.
+OPTIONS:
+    -H, --hosts <hosts>             Hostname(s) to remove (comma-separated)
+    -f, --force                     Skip confirmation prompt
+    --ignore-ksmanager-cleanup      Skip DNS/DHCP/MAC/kickstart cleanup
+    --ksmanager-cleanup-only        Only clean ksmanager data (DNS, DHCP, MAC, kickstart)
+    -h, --help                      Show this help message
+
+EXAMPLES:
+    tux2lab vm remove -H testvm1
+    tux2lab vm remove -f -H testvm1,testvm2,testvm3
+    tux2lab vm remove --ignore-ksmanager-cleanup -H testvm1
+    tux2lab vm remove --ksmanager-cleanup-only -H testvm1
 "
 }
 
@@ -38,6 +40,7 @@ parse_vm_control_args "$@"
 
 force_remove="$FORCE_FLAG"
 ignore_ksmanager_cleanup="$IGNORE_KSMANAGER_CLEANUP"
+ksmanager_cleanup_only="$KSMANAGER_CLEANUP_ONLY"
 hosts_list="$HOSTS_LIST"
 vm_hostname_arg="$VM_HOSTNAME_ARG"
 
@@ -46,6 +49,17 @@ remove_vm() {
     local vm_name="$1"
     local skip_confirmation="${2:-false}"
     
+    # --ksmanager-cleanup-only: only clean ksmanager data, skip VM operations
+    if [[ "$ksmanager_cleanup_only" == true ]]; then
+        print_info "Removing host '$vm_name' from all ksmanager databases..."
+        if /tux2lab/ksmanager/ksmanager.sh "$vm_name" --remove-host; then
+            return 0
+        else
+            print_warning "Could not clean up ksmanager databases for '$vm_name'."
+            return 1
+        fi
+    fi
+
     # Check if VM exists in 'virsh list --all'
     print_task "Checking if VM exists..."
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then
@@ -55,16 +69,7 @@ remove_vm() {
     fi
     print_task_done
     
-    # Special confirmation for lab infra server (always required)
-    if [[ "$vm_name" == "$lab_infra_server_hostname" ]]; then
-        print_warning "You are about to delete your lab infra server VM: $lab_infra_server_hostname!"
-        read -r -p "If you know what you are doing, confirm by typing 'delete-lab-infra-server': " confirmation
-        if [[ "$confirmation" != "delete-lab-infra-server" ]]; then
-            print_info "Operation cancelled by user."
-            return 3
-        fi
-    elif [[ "$skip_confirmation" == false ]]; then
-        # Regular confirmation for other VMs
+    if [[ "$skip_confirmation" == false ]]; then
         print_warning "This will permanently delete VM \"$vm_name\" and all associated files!"
         read -rp "Are you sure you want to proceed? (YES/NO): " confirmation
         if [[ "$confirmation" != "YES" ]]; then
@@ -116,23 +121,15 @@ remove_vm() {
         fi
     fi
     
-    # Remove from /etc/hosts (escape dots for regex)
-    local escaped_vm_name="${vm_name//./\\.}"
-    if grep -q "${vm_name}" "$ETC_HOSTS_FILE" 2>/dev/null; then
+    # Remove from /etc/hosts
+    if grep -q "${vm_name}" /etc/hosts 2>/dev/null; then
         print_task "Removing from /etc/hosts..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-        if fn_acquire_etc_hosts_lock; then
-            if sudo sed -i.bak "/[[:space:]]${escaped_vm_name}$/d" "$ETC_HOSTS_FILE" 2>/dev/null; then
-                fn_release_etc_hosts_lock
-                print_task_done
-            else
-                fn_release_etc_hosts_lock
-                print_task_fail
-                print_warning "Could not update /etc/hosts."
-            fi
+        if remove_etc_hosts_entry "${vm_name}"; then
+            print_task_done
         else
             print_task_fail
-            print_warning "Could not acquire /etc/hosts lock."
+            print_warning "Could not update /etc/hosts."
         fi
     fi
     
@@ -140,14 +137,8 @@ remove_vm() {
     if [[ "$ignore_ksmanager_cleanup" == true ]]; then
         print_info "Skipping ksmanager cleanup (--ignore-ksmanager-cleanup flag)."
     else
-        if $lab_infra_server_mode_is_host; then
-            if ! /tux2lab/ks-manage/ksmanager.sh "$vm_name" --remove-host; then
-                print_warning "Could not clean up ksmanager databases."
-            fi
-        else
-            if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh '${vm_name}' --remove-host"; then
-                print_warning "Could not clean up ksmanager databases."
-            fi
+        if ! /tux2lab/ksmanager/ksmanager.sh "$vm_name" --remove-host; then
+            print_warning "Could not clean up ksmanager databases."
         fi
     fi
     

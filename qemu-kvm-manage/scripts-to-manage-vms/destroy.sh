@@ -10,8 +10,6 @@ set -euo pipefail
 source /tux2lab/common-utils/color-functions.sh
 
 # ====== FLAG PARSING ======
-wipe_iso_files=false
-
 declare -A _seen_args
 for arg in "$@"; do
     if [[ -n "${_seen_args[$arg]:-}" ]]; then
@@ -22,32 +20,18 @@ for arg in "$@"; do
     case "$arg" in
         -h|--help)
             print_cyan "USAGE:
-    tux2lab destroy [OPTIONS]
+    tux2lab destroy
 
 DESCRIPTION:
-    Permanently destroys the entire tux2lab environment, including:
-      - All virtual machines and their data
-      - The lab infrastructure server (VM or host services)
-      - Lab network configuration
-      - Lab data files (/tux2lab-data/ contents, excluding ISOs)
-      - SSH keys and configuration for lab access
-      - tux2lab systemd service
-
-    Downloaded ISO files are preserved by default.
-
-    If you wish to rebuild your lab after destruction:
-      1. Run /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh
-      2. Run tux2lab deploy
+    Permanently destroy the entire lab environment including all VMs, data,
+    DNS, networking, downloaded ISO files, and the container.
+    This cannot be undone.
 
 OPTIONS:
-    --wipe-iso-files-too    Also delete downloaded ISO files
     -h, --help              Show this help message
 
     Requires typing 'DESTROY-THE-LAB-AND-ALL-ITS-DATA' to confirm."
             exit 0
-            ;;
-        --wipe-iso-files-too)
-            wipe_iso_files=true
             ;;
         *)
             print_error "Unknown argument: $arg"
@@ -63,46 +47,29 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
-# ====== SUMMARY COUNTERS ======
-completed_steps=0
-skipped_steps=0
-failed_steps=0
+# ====== CONSTANTS ======
+readonly CONTAINER_NAME="tux2lab-engine"
+readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
 
-# ====== SOURCE ENVIRONMENT (OPTIONAL — PROCEED EVEN IF MISSING) ======
-LAB_ENV_VARS_FILE="/tux2lab-data/lab_environment_vars"
-lab_infra_server_hostname=""
-lab_infra_domain_name=""
-
-if [[ -f "$LAB_ENV_VARS_FILE" ]]; then
-    source "$LAB_ENV_VARS_FILE"
+# ====== READ CONFIG IF AVAILABLE ======
+lab_domain=""
+lab_ipv4=""
+lab_ipv6=""
+if [[ -f "$LAB_ENV_JSON" ]]; then
+    lab_domain=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
+    lab_ipv4=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON")
+    lab_ipv6=$(jq -r '.network.ipv6.address' "$LAB_ENV_JSON")
 fi
 
-# ====== EARLY EXIT IF NO LAB EXISTS ======
-lab_exists=false
-if [[ -f "$LAB_ENV_VARS_FILE" ]]; then
-    lab_exists=true
-elif sudo virsh list --all --name 2>/dev/null | grep -q .; then
-    lab_exists=true
-elif sudo virsh net-info tux2lab &>/dev/null 2>&1; then
-    lab_exists=true
-elif ip link show labbr0 &>/dev/null 2>&1; then
-    lab_exists=true
-elif systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
-    lab_exists=true
-# Host-mode specific artifacts
-elif systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
-    lab_exists=true
-elif ip link show dummy-vnet &>/dev/null 2>&1; then
-    lab_exists=true
-elif [[ -f /etc/chrony.d/tux2lab.conf ]]; then
-    lab_exists=true
-elif grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
-    lab_exists=true
-fi
-
-if ! $lab_exists; then
-    print_info "No lab detected — nothing to destroy."
-    exit 0
+# ====== DETECT LAB STATE (for display only, not for early exit) ======
+# Captured before teardown, since afterwards there is nothing left to inspect
+lab_existed=false
+if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null \
+   || [[ -f "${LAB_ENV_JSON}" ]] \
+   || sudo virsh net-info tux2lab &>/dev/null \
+   || ip link show labbr0 &>/dev/null \
+   || compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
+    lab_existed=true
 fi
 
 # ====== HEADER ======
@@ -110,40 +77,35 @@ print_cyan "══════════════════════�
 print_red  "              DESTROY LAB — COMPLETE LAB TEARDOWN"
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
-echo
-print_warning "This operation will PERMANENTLY DESTROY:"
-print_warning "  • All virtual machines and their data"
-if [[ -n "$lab_infra_server_hostname" ]]; then
-    print_warning "  • Lab infrastructure server (${lab_infra_server_hostname})"
-else
-    print_warning "  • Lab infrastructure server"
+# Optional entry, empty when no ISOs have been downloaded
+iso_entry=""
+if [[ -d /tux2lab-data/iso-files ]] && compgen -G "/tux2lab-data/iso-files/*" >/dev/null 2>&1; then
+    iso_size=$(du -sh /tux2lab-data/iso-files 2>/dev/null | cut -f1 || true)
+    iso_entry="
+  • Downloaded ISO files${iso_size:+ (${iso_size})}"
 fi
-print_warning "  • Lab network bridge and virtual network"
-print_warning "  • Lab data in /tux2lab-data/ (env vars, VM disks, ksmanager data)"
-print_warning "  • SSH keys and config for lab access"
-print_warning "  • tux2lab systemd service"
 
-if $wipe_iso_files; then
-    print_warning "  • Downloaded ISO files (--wipe-iso-files-too)"
-else
-    print_info "  ISO files will be PRESERVED (use --wipe-iso-files-too to remove)"
-fi
+print_yellow "This operation will PERMANENTLY DESTROY:
+  • The tux2lab-engine container and all services
+  • All virtual machines and their data
+  • Lab network bridge and virtual network
+  • Lab config, SSH keys, SSL certificates
+  • VM disks, golden images, ksmanager data${iso_entry}"
 
 # ====== LIST VMs THAT WILL BE DESTROYED ======
-all_vms=$(sudo virsh list --all --name 2>/dev/null | grep -v "^$" || true)
-if [[ -n "$all_vms" ]]; then
-    echo
-    print_warning "The following VMs will be DESTROYED:"
-    while IFS= read -r vm; do
-        [[ -z "$vm" ]] && continue
-        vm_state=$(sudo virsh domstate "$vm" 2>/dev/null || echo "unknown")
-        print_warning "  - ${vm} (${vm_state})"
-    done <<< "$all_vms"
+# Single virsh call yields name and state together
+vm_list=""
+while IFS='|' read -r vm vm_state; do
+    [[ -z "$vm" ]] && continue
+    vm_list+="
+  - ${vm} (${vm_state})"
+done < <(sudo virsh list --all 2>/dev/null | awk 'NR>2 && NF {name=$2; $1=""; $2=""; sub(/^[ \t]+/,""); sub(/[ \t]+$/,""); print name"|"$0}')
+
+if [[ -n "$vm_list" ]]; then
+    print_yellow "The following VMs will be DESTROYED:${vm_list}"
 fi
 
-echo
 print_red "THIS ACTION CANNOT BE UNDONE."
-echo
 echo -n "Type DESTROY-THE-LAB-AND-ALL-ITS-DATA to confirm: "
 read -r confirmation
 
@@ -154,14 +116,17 @@ fi
 
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
-# Display detected mode
-if [[ "${lab_infra_server_mode_is_host:-false}" == "true" ]]; then
-    print_info "Detected mode: HOST (services run directly on KVM host)"
+# ====== STEP 1: STOP AND REMOVE CONTAINER ======
+print_task "Stopping and removing tux2lab-engine container..."
+if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
+    sudo podman stop "${CONTAINER_NAME}" &>/dev/null || true
+    sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
+    print_task_done
 else
-    print_info "Detected mode: VM (services run inside infra server VM)"
+    print_task_skip
 fi
 
-# ====== STEP 1: FORCE STOP ALL RUNNING VMs ======
+# ====== STEP 2: FORCE STOP ALL RUNNING VMs ======
 running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$running_vms" ]]; then
     while IFS= read -r vm_name; do
@@ -169,19 +134,15 @@ if [[ -n "$running_vms" ]]; then
         print_task "Force stopping VM \"${vm_name}\"..."
         if sudo virsh destroy "$vm_name" >/dev/null 2>&1; then
             print_task_done
-            ((++completed_steps))
         else
             print_task_fail
-            ((++failed_steps))
         fi
     done <<< "$running_vms"
 else
-    print_task "Force stopping running VMs..."
-    print_task_skip
-    ((++skipped_steps))
+    print_info "No running VMs to stop."
 fi
 
-# ====== STEP 2: UNDEFINE ALL VMs ======
+# ====== STEP 3: UNDEFINE ALL VMs ======
 all_vms=$(sudo virsh list --all --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$all_vms" ]]; then
     while IFS= read -r vm_name; do
@@ -189,14 +150,11 @@ if [[ -n "$all_vms" ]]; then
         print_task "Undefining VM \"${vm_name}\"..."
         if sudo virsh undefine "$vm_name" --nvram >/dev/null 2>&1; then
             print_task_done
-            ((++completed_steps))
         elif sudo virsh undefine "$vm_name" >/dev/null 2>&1; then
             print_task_done
-            ((++completed_steps))
         else
             print_task_fail
             print_warning "Could not undefine VM \"${vm_name}\""
-            ((++failed_steps))
         fi
 
         # Remove VM disk directory
@@ -211,12 +169,10 @@ if [[ -n "$all_vms" ]]; then
         fi
     done <<< "$all_vms"
 else
-    print_task "Removing VMs from libvirt..."
-    print_task_skip
-    ((++skipped_steps))
+    print_info "No VMs to remove."
 fi
 
-# ====== STEP 3: STOP AND REMOVE SYSTEMD SERVICE ======
+# ====== STEP 4: STOP AND REMOVE SYSTEMD SERVICE ======
 print_task "Stopping and removing tux2lab.service..."
 if systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
     sudo systemctl stop tux2lab.service --no-block 2>/dev/null || true
@@ -224,181 +180,83 @@ if systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
     sudo rm -f /etc/systemd/system/tux2lab.service
     sudo systemctl daemon-reload
     print_task_done
-    ((++completed_steps))
 else
     print_task_skip
-    ((++skipped_steps))
-fi
-# Clean up legacy service name if still present
-if systemctl list-unit-files tux2lab-lab-infra.service &>/dev/null 2>&1; then
-    print_task "Removing legacy tux2lab-lab-infra.service..."
-    sudo systemctl stop tux2lab-lab-infra.service --no-block 2>/dev/null || true
-    sudo systemctl disable tux2lab-lab-infra.service 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/tux2lab-lab-infra.service
-    sudo systemctl daemon-reload
-    print_task_done
 fi
 
-# ====== STEP 4: STOP HOST-MODE LAB SERVICES ======
-# Use the authoritative mode variable from lab_environment_vars (set during deploy).
-# If the env file is already gone, only check for tux2lab-specific artifacts
-# (never probe generic services — they may be running for non-lab purposes).
-host_services=("nginx" "nfs-server" "tftp.socket" "kea-ctrl-agent" "kea-dhcp4" "kea-dhcp6" "radvd" "named")
-host_mode_detected="${lab_infra_server_mode_is_host:-false}"
-if [[ "$host_mode_detected" != "true" ]]; then
-    # Check only tux2lab-specific artifacts (safe — these only exist if tux2lab created them)
-    if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1 || \
-       ip link show dummy-vnet &>/dev/null 2>&1 || \
-       [[ -f /etc/chrony.d/tux2lab.conf ]] || \
-       grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
-        host_mode_detected=true
-    fi
-fi
+# ====== STEP 5.1: STOP NFS AND CLEAN HOST CONFIG ======
+source /tux2lab/shared-functions/host-nfs.sh
+stop_host_nfs
 
-if [[ "$host_mode_detected" == "true" ]]; then
-    print_info "Stopping and disabling host-mode lab services..."
-    for service_name in "${host_services[@]}"; do
-        print_task "Stopping and disabling ${service_name}..."
-        if systemctl is-enabled "$service_name" &>/dev/null || systemctl is-active "$service_name" &>/dev/null; then
-            sudo systemctl stop "$service_name" 2>/dev/null || true
-            if sudo systemctl disable "$service_name" 2>/dev/null; then
-                print_task_done
-                ((++completed_steps))
-            else
-                print_task_fail
-                ((++failed_steps))
-            fi
-        else
-            print_task_skip
-            ((++skipped_steps))
-        fi
-    done
-
-    # Stop, disable and remove tux2lab-iso-mounts service
-    print_task "Stopping and removing tux2lab-iso-mounts.service..."
-    if systemctl list-unit-files tux2lab-iso-mounts.service &>/dev/null 2>&1; then
-        sudo systemctl stop tux2lab-iso-mounts.service 2>/dev/null || true
-        sudo systemctl disable tux2lab-iso-mounts.service 2>/dev/null || true
-        sudo rm -f /etc/systemd/system/tux2lab-iso-mounts.service
-        sudo systemctl daemon-reload
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-
-    # Remove dummy interface
-    print_task "Removing dummy interface dummy-vnet..."
-    if ip link show dummy-vnet &>/dev/null; then
-        sudo ip link set dummy-vnet down 2>/dev/null || true
-        sudo ip link del dummy-vnet 2>/dev/null || true
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-
-    # Remove chrony tux2lab drop-in config (chrony stays running)
-    print_task "Removing chrony tux2lab drop-in config..."
-    if [[ -f /etc/chrony.d/tux2lab.conf ]]; then
-        sudo rm -f /etc/chrony.d/tux2lab.conf
-        sudo systemctl restart chronyd 2>/dev/null || true
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-
-    # Remove firewalld trusted zone rules for lab network (only lab subnets)
-    print_task "Removing firewalld trusted zone rules..."
-    if systemctl is-active firewalld &>/dev/null; then
-        fw_removed=false
-        if [[ -n "${lab_infra_server_ipv4_subnet:-}" ]]; then
-            sudo firewall-cmd --permanent --zone=trusted --remove-source="${lab_infra_server_ipv4_subnet}" &>/dev/null && fw_removed=true || true
-        fi
-        if [[ -n "${lab_infra_server_ipv6_ula_subnet:-}" ]]; then
-            sudo firewall-cmd --permanent --zone=trusted --remove-source="${lab_infra_server_ipv6_ula_subnet}" &>/dev/null && fw_removed=true || true
-        fi
-        if $fw_removed; then
-            sudo firewall-cmd --reload &>/dev/null || true
-            print_task_done
-            ((++completed_steps))
-        else
-            print_task_skip
-            ((++skipped_steps))
-        fi
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-fi
-
-# ====== STEP 5: CLEAN /etc/hosts ENTRIES ======
+# ====== STEP 6: CLEAN /etc/hosts ENTRIES ======
 print_task "Cleaning lab entries from /etc/hosts..."
-if [[ -n "$lab_infra_domain_name" ]] && grep -q "${lab_infra_domain_name}" /etc/hosts 2>/dev/null; then
-    # Escape dots for regex (sufficient for valid domain names)
-    escaped_domain="${lab_infra_domain_name//./\\.}"
-    sudo sed -i "/${escaped_domain}/d" /etc/hosts 2>/dev/null || true
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
-fi
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
+remove_etc_hosts_block
+rm -f "${ETC_HOSTS_STATE}" 2>/dev/null || true
+print_task_done
 
-# ====== STEP 6: REMOVE SSH ARTIFACTS ======
-print_task "Removing SSH artifacts..."
-if [[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] || [[ -f /etc/ssh/ssh_config.d/999-tux2lab.conf ]]; then
+# ====== STEP 6: REMOVE SSH AND SSL ARTIFACTS ======
+print_task "Removing SSH and SSL artifacts..."
+has_artifacts=false
+[[ -f "$HOME/.ssh/tux2lab_id_rsa" ]] && has_artifacts=true
+grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null && has_artifacts=true
+[[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
+[[ -f /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
+[[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
+
+if $has_artifacts; then
     rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
-
-    # Remove tux2lab key from authorized_keys
-    if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_infra_domain_name" ]]; then
-        escaped_domain="${lab_infra_domain_name//./\\.}"
+    # Remove tux2lab block from config.custom
+    if grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null; then
+        sed -i '/# BEGIN tux2lab/,/# END tux2lab/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
+    fi
+    # Legacy cleanup
+    rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
+    if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_domain" ]]; then
+        escaped_domain="${lab_domain//./\\.}"
         sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
     fi
-
-    # Remove system-wide SSH config
-    sudo rm -f /etc/ssh/ssh_config.d/999-tux2lab.conf 2>/dev/null || true
-
-    # Remove lab entries from user SSH config.custom
-    if [[ -f "$HOME/.ssh/config.custom" ]]; then
-        sed -i '/# tux2lab SSH Config - Start/,/# tux2lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
-        sed -i '/# KVM Lab SSH Config - Start/,/# KVM Lab SSH Config - End/d' "$HOME/.ssh/config.custom" 2>/dev/null || true
+    # Remove SSL cert from host trust store
+    if [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-trust &>/dev/null || true
+    elif [[ -f /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-certificates &>/dev/null || true
+    elif [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]]; then
+        sudo rm -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
+        sudo update-ca-certificates &>/dev/null || true
     fi
     print_task_done
-    ((++completed_steps))
 else
     print_task_skip
-    ((++skipped_steps))
 fi
 
-# ====== STEP 7: DESTROY VIRTUAL NETWORK ======
+# ====== STEP 7: REMOVE LABLINK0 DUMMY INTERFACE ======
+source /tux2lab/shared-functions/lablink0.sh
+remove_lablink0
+
+# ====== STEP 8: REMOVE FIREWALL RULES ======
+source /tux2lab/shared-functions/bridge-firewall.sh
+close_bridge_firewall "labbr0"
+
+# ====== STEP 9: DESTROY VIRTUAL NETWORK ======
 print_task "Destroying tux2lab virtual network..."
-if sudo virsh net-info tux2lab &>/dev/null || ip link show labbr0 &>/dev/null; then
+if sudo virsh net-info tux2lab &>/dev/null 2>&1 || ip link show labbr0 &>/dev/null 2>&1; then
     sudo virsh net-destroy tux2lab &>/dev/null || true
     sudo virsh net-undefine tux2lab &>/dev/null || true
-    if ip link show labbr0 &>/dev/null; then
-        sudo ip addr flush dev labbr0 2>/dev/null || true
-    fi
     print_task_done
-    ((++completed_steps))
 else
     print_task_skip
-    ((++skipped_steps))
 fi
 
-# ====== STEP 8: REMOVE STORAGE POOLS AND STOP LIBVIRTD ======
-# Remove all tux2lab storage pools (metadata only — does not delete files on disk)
+# ====== STEP 9: REMOVE STORAGE POOLS AND STOP LIBVIRTD ======
 if systemctl is-active libvirtd &>/dev/null; then
-    for pool_name in $(sudo virsh pool-list --all --name 2>/dev/null | grep -v "^$"); do
+    for pool_name in $(sudo virsh pool-list --all --name 2>/dev/null | grep -v "^$" || true); do
         print_task "Removing storage pool \"${pool_name}\"..."
         sudo virsh pool-destroy "$pool_name" &>/dev/null || true
         sudo virsh pool-undefine "$pool_name" &>/dev/null || true
         print_task_done
-        ((++completed_steps))
     done
 fi
 
@@ -407,141 +265,54 @@ if systemctl is-enabled libvirtd &>/dev/null || systemctl is-active libvirtd &>/
     sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null || true
     sudo systemctl disable libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null || true
     print_task_done
-    ((++completed_steps))
 else
     print_task_skip
-    ((++skipped_steps))
 fi
 
-# ====== STEP 9: WIPE /tux2lab-data/ CONTENTS ======
-# Remove host-mode config artifacts (named.conf, /etc/environment)
-if [[ "$host_mode_detected" == "true" ]]; then
-    print_task "Removing named.conf..."
-    if [[ -f /etc/named.conf ]]; then
-        sudo rm -f /etc/named.conf /etc/named.conf_bkp_by_dnsbinder
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-
-    print_task "Removing DNS zone files..."
-    if [[ -d /var/named/dnsbinder-managed-zone-files ]]; then
-        sudo rm -rf /var/named/dnsbinder-managed-zone-files
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-
-    print_task "Removing tux2lab variables from /etc/environment..."
-    if grep -q -E '^(dnsbinder_|mgmt_super_user|mgmt_interface_name)' /etc/environment 2>/dev/null; then
-        sudo sed -i '/^dnsbinder_/d; /^mgmt_super_user/d; /^mgmt_interface_name/d' /etc/environment
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-
-    print_task "Removing CLI symlinks..."
-    sudo rm -f /usr/sbin/dnsbinder /usr/local/bin/ksmanager /usr/local/bin/prepare-distro-for-ksmanager
-    print_task_done
-    ((++completed_steps))
-
-    print_task "Removing SSL certificates..."
-    if [[ -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key ]] || [[ -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt ]]; then
-        sudo rm -f /etc/pki/tls/private/tux2lab-nginx-selfsigned.key
-        sudo rm -f /etc/pki/tls/certs/tux2lab-nginx-selfsigned.crt
-        sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
-        sudo update-ca-trust 2>/dev/null || true
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_skip
-        ((++skipped_steps))
-    fi
-fi
-
-# Unmount any active mounts under /tux2lab-data/ (bind mounts, ISO mounts)
-print_task "Unmounting active mounts under /tux2lab-data/..."
-if findmnt --list --output TARGET | grep -q '/tux2lab-data/'; then
-    findmnt --list --output TARGET | grep '/tux2lab-data/' | sort -r | while IFS= read -r mnt; do
-        sudo umount -l "$mnt" 2>/dev/null || true
+# ====== UNMOUNT ISOs AND WIPE /tux2lab-data/ CONTENTS ======
+# Unmount any loop-mounted ISOs under /tux2lab-data/os-repos/
+if mount | grep -q "/tux2lab-data/os-repos/"; then
+    print_task "Unmounting ISO mounts..."
+    mount | grep "/tux2lab-data/os-repos/" | awk '{print $3}' | while read -r mnt; do
+        sudo umount "$mnt" 2>/dev/null || sudo umount -l "$mnt" 2>/dev/null || true
     done
     print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
-fi
-
-# Clean fstab entries for mounts under /tux2lab-data/ (bind mounts, ISO mounts)
-print_task "Removing /tux2lab-data/ fstab entries..."
-if grep -q '/tux2lab-data/' /etc/fstab 2>/dev/null; then
-    sudo sed -i '\|/tux2lab-data/|d' /etc/fstab
-    sudo systemctl daemon-reload
-    print_task_done
-    ((++completed_steps))
-else
-    print_task_skip
-    ((++skipped_steps))
 fi
 
 if [[ -d "/tux2lab-data" ]]; then
-    if $wipe_iso_files; then
-        print_task "Wiping /tux2lab-data/ contents (including ISOs)..."
-        if compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
-            sudo rm -rf /tux2lab-data/*
-            print_task_done
-            ((++completed_steps))
-        else
-            print_task_skip
-            ((++skipped_steps))
-        fi
+    print_task "Wiping /tux2lab-data/ contents..."
+    if compgen -G "/tux2lab-data/*" >/dev/null 2>&1; then
+        sudo rm -rf /tux2lab-data/*
+        print_task_done
     else
-        # Check if anything besides iso-files/ exists
-        has_content=false
-        for item in /tux2lab-data/*; do
-            [[ ! -e "$item" ]] && continue
-            [[ "$(basename "$item")" == "iso-files" ]] && continue
-            has_content=true
-            break
-        done
-        print_task "Wiping /tux2lab-data/ contents (preserving ISOs)..."
-        if $has_content; then
-            for item in /tux2lab-data/*; do
-                [[ "$(basename "$item")" == "iso-files" ]] && continue
-                sudo rm -rf "$item"
-            done
-            print_task_done
-            ((++completed_steps))
-        else
-            print_task_skip
-            ((++skipped_steps))
-        fi
+        print_task_skip
     fi
+fi
+
+# ====== STEP 11: REMOVE CONTAINER IMAGE ======
+print_task "Removing tux2lab-engine container image..."
+if sudo podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | grep -q "tux2lab-engine"; then
+    sudo podman rmi --all --force &>/dev/null || true
+    print_task_done
+else
+    print_task_skip
 fi
 
 # ====== SUMMARY ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
-if [[ $completed_steps -eq 0 && $failed_steps -eq 0 ]]; then
-    print_success "Lab is already clean — nothing left to destroy."
-elif [[ $failed_steps -eq 0 ]]; then
+if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null \
+   || [[ -f "${LAB_ENV_JSON}" ]] \
+   || sudo virsh net-info tux2lab &>/dev/null 2>&1 \
+   || ip link show labbr0 &>/dev/null 2>&1; then
+    print_warning "Some components could not be fully removed. Run again or check manually."
+elif $lab_existed; then
     print_success "Lab has been completely destroyed."
 else
-    print_warning "Lab destruction completed with ${failed_steps} failed step(s)."
-fi
-echo
-print_cyan "Summary: ${completed_steps} completed, ${skipped_steps} skipped, ${failed_steps} failed"
-if ! $wipe_iso_files && [[ -d "/tux2lab-data/iso-files" ]]; then
-    print_cyan "ISO files preserved at /tux2lab-data/iso-files/"
+    print_info "Lab is already clean — nothing to destroy."
 fi
 print_cyan "
 If you wish to rebuild your lab:
-  1. Run /tux2lab/qemu-kvm-manage/setup-qemu-kvm.sh
+  1. Run /tux2lab/setup/setup-host.sh
   2. Run tux2lab deploy
 ═══════════════════════════════════════════════════════════════════"
 

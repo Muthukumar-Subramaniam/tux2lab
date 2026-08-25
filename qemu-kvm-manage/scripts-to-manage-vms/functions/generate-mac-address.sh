@@ -53,7 +53,9 @@ fn_release_mac_gen_lock() {
 # Function to generate a random MAC address for QEMU/KVM VMs
 generate_mac() {
     # Use 52:54:00 prefix (QEMU/KVM range) followed by 3 random octets
-    local mac="52:54:00:$(openssl rand -hex 3 | sed 's/../&:/g; s/:$//')"
+    # Assigned separately so a failing openssl is not masked by local's exit status
+    local mac
+    mac="52:54:00:$(openssl rand -hex 3 | sed 's/../&:/g; s/:$//')"
     echo "$mac"
 }
 

@@ -25,8 +25,8 @@ If applicable, add screenshots or terminal output to help explain your problem.
 **Environment (please complete the following information):**
  - Host OS and version: [e.g. Fedora 42, Ubuntu 24.04]
  - libvirt/QEMU version: [e.g. libvirt 10.0.0, QEMU 8.2.0]
- - tux2lab version: [e.g. v1.4.0]
- - Component: [e.g. ksmanager, dnsbinder, kvm-manage, configure-lab-infra-server]
+ - tux2lab version: [e.g. v2.0.0, output of `tux2lab version`]
+ - Component: [e.g. ksmanager, dnsbinder, lbmanager, qemu-kvm-manage, setup]
 
 **Additional context**
 Add any other context about the problem here.

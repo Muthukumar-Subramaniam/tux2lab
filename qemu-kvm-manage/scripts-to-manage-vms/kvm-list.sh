@@ -8,14 +8,16 @@ set -euo pipefail
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm list
+    print_cyan "USAGE:
+    tux2lab vm list
 
-List all VMs with their state, OS state, and OS distribution.
+DESCRIPTION:
+    Display a summary of all VMs showing hostname, power state, OS reachability,
+    and OS distribution with version. For running VMs, connects via SSH to detect
+    the live OS. Shut-off VMs show power state only.
 
-Options:
-  -h, --help           Show this help message
-
-This command takes no other arguments.
+OPTIONS:
+    -h, --help          Show this help message
 "
 }
 
@@ -57,7 +59,7 @@ done < <(sudo virsh list --all | awk 'NR>2 && $2 != "" {print $2, $3}')
 # Collect data (parallel)
 # ────────────────────────────────────────────────────────────────
 tmp_dir=$(mktemp -d)
-trap "rm -rf $tmp_dir" EXIT
+trap 'rm -rf "$tmp_dir"' EXIT
 
 check_vm() {
     local vm_name=$1

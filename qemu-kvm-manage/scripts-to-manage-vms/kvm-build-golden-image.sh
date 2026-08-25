@@ -13,36 +13,15 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/validate-distro-
 OS_DISTRO=""
 VERSION_TYPE=""
 
-# Function to show help
-fn_show_help() {
-    print_cyan "Usage: tux2lab golden-image build [distro] [OPTIONS]
-Description:
-    Creates a golden image disk by installing a VM via PXE boot.
-    The VM will be automatically removed after the disk is created.
-
-Options:
-    -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 15.6)
-    -h, --help           Show this help message
-
-Examples:
-    tux2lab golden-image build                             # Build golden image (will prompt for distro/version)
-    tux2lab golden-image build almalinux                   # Build AlmaLinux golden image (will prompt for version)
-    tux2lab golden-image build rocky --version 9           # Build Rocky Linux 9 golden image
-    tux2lab golden-image build ubuntu-lts -v 26.04         # Build Ubuntu LTS 26.04 golden image
-"
-}
-
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
-            fn_show_help
-            exit 0
+            exec tux2lab golden-image --help
             ;;
         -v|--version)
             if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-                print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 15.6)."
-                fn_show_help
+                print_error "--version/-v requires a version number (e.g., 10, 9, 26.04, 16.0)."
                 exit 1
             fi
             VERSION_TYPE="$2"
@@ -50,15 +29,17 @@ while [[ $# -gt 0 ]]; do
             ;;
         -*)
             print_error "No such option: $1"
-            fn_show_help
+            print_info "Run 'tux2lab golden-image --help' for usage."
             exit 1
             ;;
         *)
             if [[ -z "$OS_DISTRO" ]]; then
                 OS_DISTRO="$1"
+            elif [[ -z "$VERSION_TYPE" ]]; then
+                VERSION_TYPE="$1"
             else
                 print_error "Unexpected argument: $1"
-                fn_show_help
+                print_info "Run 'tux2lab golden-image --help' for usage."
                 exit 1
             fi
             shift
@@ -68,13 +49,57 @@ done
 
 # Validate: --version requires --distro for golden image creation
 if [[ -n "$VERSION_TYPE" && -z "$OS_DISTRO" ]]; then
-    print_error "The --version option requires --distro to be specified for golden image creation."
-    fn_show_help
+    print_error "The --version option requires a distro to be specified."
+    print_info "Run 'tux2lab golden-image --help' for usage."
     exit 1
 fi
 
 # Validate distro name and version locally before generating MAC or invoking ksmanager
 validate_distro_version "$OS_DISTRO" "$VERSION_TYPE"
+
+# Interactive distro/version selection (if not provided on command line)
+# Selection happens HERE so ksmanager is always called non-interactively.
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/select-distro-version.sh
+select_distro_version "$OS_DISTRO" "$VERSION_TYPE"
+OS_DISTRO="$SELECTED_DISTRO"
+VERSION_TYPE="$SELECTED_VERSION"
+
+# Pre-flight: verify internet connectivity (golden image builds require package downloads)
+print_task "Checking internet connectivity..."
+if ! ping -4 -c1 -W3 8.8.8.8 &>/dev/null; then
+    print_task_fail
+    print_error "No internet connectivity. Golden image builds require internet access for package downloads."
+    exit 1
+fi
+print_task_done
+
+# Auto-setup distro if not prepared for PXE boot
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/auto-setup-distro.sh
+auto_setup_distro "$OS_DISTRO" "$VERSION_TYPE"
+
+# Check if golden image already exists (early check before ksmanager work)
+if [[ -n "$OS_DISTRO" && -n "$VERSION_TYPE" ]]; then
+    _version_dashed="${VERSION_TYPE//./-}"
+    _predicted_hostname="${OS_DISTRO}-${_version_dashed}-golden-image.${lab_infra_domain_name}"
+    _predicted_path="/tux2lab-data/golden-images-disk-store/${_predicted_hostname}.qcow2"
+    if [[ -f "$_predicted_path" ]]; then
+        print_warning "Golden image \"${_predicted_hostname}\" already exists!"
+        read -rp "Do you want to delete and recreate it? (YES/NO): " answer
+        echo -ne "\033[1A\033[2K"
+        case "$answer" in
+            YES)
+                print_task "Deleting existing golden image..." nskip
+                sudo rm -f "$_predicted_path"
+                sudo rm -f "/tux2lab-data/golden-images-disk-store/${_predicted_hostname}_VARS.fd"
+                print_task_done
+                ;;
+            *)
+                print_info "Keeping existing golden image. Aborted."
+                exit 0
+                ;;
+        esac
+    fi
+fi
 
 # Generate unique MAC address for the VM
 print_task "Generating MAC address for golden image VM..."
@@ -85,13 +110,11 @@ if ! GENERATED_MAC=$(generate_unique_mac "golden-image"); then
 fi
 print_task_done
 
-print_info "Invoking ksmanager to create PXE environment for golden image..."
+print_info "Creating PXE environment for golden image..."
 
-# Run ksmanager for golden image creation
+# Run ksmanager for golden image creation (always non-interactive — distro/version resolved above)
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
-ksmanager_opts="--qemu-kvm --create-golden-image --mac ${GENERATED_MAC}"
-[[ -n "$OS_DISTRO" ]] && ksmanager_opts="$ksmanager_opts --distro $OS_DISTRO"
-[[ -n "$VERSION_TYPE" ]] && ksmanager_opts="$ksmanager_opts --version $VERSION_TYPE"
+ksmanager_opts="--qemu-kvm --create-golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
 if ! run_ksmanager "" "$ksmanager_opts"; then
     print_error "Something went wrong while executing ksmanager!"
     print_info "Please check your Lab Infra Server for the root cause."
@@ -107,6 +130,27 @@ GOLDEN_BUILD_LOCK_DIR="/tux2lab-data/.golden-image-build-${qemu_kvm_hostname}.lo
 fn_release_golden_build_lock() {
     rm -f "${GOLDEN_BUILD_LOCK_DIR}/pid" 2>/dev/null
     rmdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null || true
+}
+
+fn_cleanup_on_interrupt() {
+    echo ""
+    print_error "Build interrupted. Cleaning up..."
+    print_task "Stopping and removing temporary VM..."
+    sudo virsh destroy "$qemu_kvm_hostname" >/dev/null 2>&1 || true
+    sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true
+    print_task_done
+    if [[ -n "${golden_image_path:-}" ]]; then
+        print_task "Removing golden image disk..."
+        sudo rm -f "${golden_image_path}" 2>/dev/null || true
+        print_task_done
+    fi
+    [[ -n "${NVRAM_PATH:-}" ]] && sudo rm -f "${NVRAM_PATH}" 2>/dev/null || true
+    if sudo virsh pool-info golden-images-disk-store >/dev/null 2>&1; then
+        sudo virsh pool-destroy golden-images-disk-store >/dev/null 2>&1 || true
+        sudo virsh pool-undefine golden-images-disk-store >/dev/null 2>&1 || true
+    fi
+    /tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+    fn_release_golden_build_lock
 }
 
 if ! mkdir "${GOLDEN_BUILD_LOCK_DIR}" 2>/dev/null; then
@@ -128,8 +172,8 @@ fi
 
 printf '%s\n' "$$" > "${GOLDEN_BUILD_LOCK_DIR}/pid"
 trap 'fn_release_golden_build_lock' EXIT
-trap 'fn_release_golden_build_lock; trap - INT; kill -s INT $$' INT
-trap 'fn_release_golden_build_lock; trap - TERM; kill -s TERM $$' TERM
+trap 'fn_cleanup_on_interrupt; trap - INT; kill -s INT $$' INT
+trap 'fn_cleanup_on_interrupt; trap - TERM; kill -s TERM $$' TERM
 
 mkdir -p /tux2lab-data/golden-images-disk-store
 
@@ -138,54 +182,27 @@ mkdir -p /tux2lab-data/golden-images-disk-store
 # The hostname from ksmanager already includes the version
 golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
 
-# Check if golden image already exists
-if [[ -f "${golden_image_path}" ]]; then
-    print_warning "Golden image \"${qemu_kvm_hostname}\" already exists!"
-    read -rp "Do you want to delete and recreate it? (YES/NO): " answer
-    echo -ne "\033[1A\033[2K"  # Move up one line and clear it
-    case "$answer" in
-        YES)
-            print_task "Deleting existing golden image..." nskip
-            if sudo rm -f "${golden_image_path}"; then
-                print_task_done
-            else
-                print_task_fail
-                print_error "Could not delete existing golden image."
-                exit 1
-            fi
-            ;;
-        * )
-            print_info "Keeping existing golden image \"${qemu_kvm_hostname}\". Cleaning up ksmanager databases..."
-            if $lab_infra_server_mode_is_host; then
-                /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host || true
-            else
-                ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" || true
-            fi
-            exit 0
-            ;;
-    esac
-fi
-
 print_info "Starting installation of VM \"${qemu_kvm_hostname}\" to create golden image disk..."
 
-# Azure Linux needs more RAM for golden image build (live squashfs loaded into RAM)
-golden_build_memory=2048
-if [[ "${OS_DISTRO}" == "azurelinux" ]]; then
-    golden_build_memory=4096
-fi
+# Golden image builds use higher specs (SELinux policy compilation, dracut, depmod are heavy)
+golden_build_memory=4096
+golden_build_vcpus=4
 
 # Set custom paths for golden image creation
 DISK_PATH="${golden_image_path}"
 NVRAM_PATH="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}_VARS.fd"
 VENDORED_VIRT_MANAGER_DIR="/tux2lab/vendor/virt-manager"
 
-# Run virt-install with console attachment (don't use shared function to avoid complexity)
+# Run virt-install in background (no console attachment)
+# --events on_reboot=destroy: when installer reboots, libvirt destroys the domain and
+# virt-install exits cleanly. This avoids hangs where QEMU fails to process the reset
+# signal (common with Ubuntu's squashfs/loop-device-heavy installer).
 if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MANAGER_DIR}/virt-install" \
     --name "${qemu_kvm_hostname}" \
     --features acpi=on,apic=on \
     --memory ${golden_build_memory} \
-    --vcpus 2 \
-    --disk "path=${DISK_PATH},size=20,bus=virtio,boot.order=1" \
+    --vcpus ${golden_build_vcpus} \
+    --disk "path=${DISK_PATH},size=30,bus=virtio,boot.order=1" \
     --os-variant almalinux9 \
     --network "network=tux2lab,model=virtio,mac=${GENERATED_MAC},boot.order=2" \
     --graphics none \
@@ -193,52 +210,76 @@ if ! sudo PYTHONPATH="${VENDORED_VIRT_MANAGER_DIR}" python3 "${VENDORED_VIRT_MAN
     --machine q35 \
     --watchdog none \
     --cpu host-model \
+    --events on_reboot=destroy \
+    --noautoconsole \
     --boot "loader=${OVMF_CODE_PATH},nvram.template=${OVMF_VARS_PATH}${OVMF_NVRAM_TEMPLATE_FORMAT_OPT},nvram=${NVRAM_PATH},menu=on" \
-    --xml ./os/nvram/@format=raw; then
-    print_error "VM installation failed. Cleaning up..."
+    --xml ./os/nvram/@format=raw >/dev/null; then
+    print_error "Failed to create VM. Cleaning up..."
     sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
     sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
     sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
-    if $lab_infra_server_mode_is_host; then
-        /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
-    else
-        ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host" 2>/dev/null || true
-    fi
+    /tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
     exit 1
 fi
 
-print_info "VM installation of \"${qemu_kvm_hostname}\" completed."
+# --- Stage 1: OS Installation ---
+print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_cyan "Preparing Golden Image with OS Installation via PXE Network Boot"
+print_cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+print_yellow "  To monitor: tux2lab vm console -H ${qemu_kvm_hostname}"
+print_yellow "  This may take several minutes depending on the distribution and internet speed."
 
-# Cleanup: destroy and undefine the temporary VM
-print_info "Cleaning up temporary VM \"${qemu_kvm_hostname}\"..."
+# Poll until VM is destroyed (on_reboot=destroy triggers after installer reboots)
+stage_start=$SECONDS
+network_detected=false
+while sudo virsh domstate "$qemu_kvm_hostname" &>/dev/null && \
+      [[ "$(sudo virsh domstate "$qemu_kvm_hostname" 2>/dev/null)" != "shut off" ]]; do
+    elapsed=$(( SECONDS - stage_start ))
+    minutes=$(( elapsed / 60 ))
+    seconds=$(( elapsed % 60 ))
 
-# Destroy VM if running
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/poweroff-vm.sh
-POWEROFF_VM_CONTEXT="Stopping temporary VM" poweroff_vm "$qemu_kvm_hostname"
-
-# Undefine VM
-if error_msg=$(sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>&1); then
-    print_info "Temporary VM \"${qemu_kvm_hostname}\" cleaned up successfully."
-else
-    print_warning "Could not cleanup temporary VM \"${qemu_kvm_hostname}\": $error_msg"
-fi
-
-# Remove auto-created storage pool (virt-install artifact, not needed)
-if sudo virsh pool-info golden-images-disk-store &>/dev/null; then
-    sudo virsh pool-destroy golden-images-disk-store &>/dev/null || true
-    sudo virsh pool-undefine golden-images-disk-store &>/dev/null || true
-fi
-
-# Clean up ksmanager databases (DNS, MAC cache, kickstart, iPXE, DHCP)
-print_info "Cleaning up ksmanager databases for temporary VM..."
-if $lab_infra_server_mode_is_host; then
-    if ! /tux2lab/ks-manage/ksmanager.sh "$qemu_kvm_hostname" --remove-host; then
-        print_warning "Could not clean up ksmanager databases."
+    if ! $network_detected; then
+        if ping -4 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null || ping -6 -c1 -W1 "$qemu_kvm_hostname" &>/dev/null; then
+            network_detected=true
+        fi
     fi
-else
-    if ! ssh -o LogLevel=QUIET -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${lab_infra_admin_username}@${lab_infra_server_hostname}" "/tux2lab/ks-manage/ksmanager.sh $qemu_kvm_hostname --remove-host"; then
-        print_warning "Could not clean up ksmanager databases."
-    fi
-fi
 
-print_success "Golden image disk created successfully: ${golden_image_path}"
+    if $network_detected; then
+        printf "\033[2K\r  OS installation in progress... (%dm %02ds)" "$minutes" "$seconds"
+    else
+        printf "\033[2K\r  PXE Booting... (%dm %02ds)" "$minutes" "$seconds"
+    fi
+
+    sleep 4
+
+    # Timeout: 60 minutes
+    if [[ $elapsed -ge 3600 ]]; then
+        echo ""
+        print_error "Stage 1 timed out after 60 minutes. Cleaning up..."
+        sudo virsh destroy "$qemu_kvm_hostname" 2>/dev/null || true
+        sudo virsh undefine "$qemu_kvm_hostname" --nvram 2>/dev/null || true
+        sudo rm -f "${golden_image_path}" "${NVRAM_PATH}"
+        /tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host 2>/dev/null || true
+        exit 1
+    fi
+done
+
+elapsed=$(( SECONDS - stage_start ))
+minutes=$(( elapsed / 60 ))
+seconds=$(( elapsed % 60 ))
+printf "\r\033[K"
+print_green "  ✓ Golden image preparation completed (${minutes}m ${seconds}s)"
+
+# Cleanup: remove provisioning configs and temporary VM definition
+print_task "Cleaning up provisioning environment..."
+/tux2lab/ksmanager/ksmanager.sh "$qemu_kvm_hostname" --remove-host >/dev/null 2>&1 || true
+print_task_done
+print_task "Cleaning up temporary VM..."
+sudo virsh undefine "$qemu_kvm_hostname" --nvram >/dev/null 2>&1 || true
+if sudo virsh pool-info golden-images-disk-store >/dev/null 2>&1; then
+    sudo virsh pool-destroy golden-images-disk-store >/dev/null 2>&1 || true
+    sudo virsh pool-undefine golden-images-disk-store >/dev/null 2>&1 || true
+fi
+print_task_done
+
+print_success "Golden image created successfully for ${OS_DISTRO} ${VERSION_TYPE}"

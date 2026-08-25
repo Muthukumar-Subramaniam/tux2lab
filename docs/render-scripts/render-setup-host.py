@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+from render_common import *
+
+lines = []
+lines.append(prompt("~", "/tux2lab/setup/setup-host.sh"))
+lines.append(whole("This script will configure the tux2lab host environment.", YELLOW))
+lines.append(whole("The following actions will be performed:", YELLOW))
+lines.append(whole("  - Grant passwordless sudo privileges to user 'musubram'", YELLOW))
+lines.append(whole("  - Install QEMU/KVM, libvirt, podman, and dependencies", YELLOW))
+lines.append(whole("  - Enable and configure libvirtd", YELLOW))
+lines.append(whole("  - Create /tux2lab-data directory", YELLOW))
+lines.append(whole("  - Set up labbr0 bridge network with dual-stack (IPv4/IPv6)", YELLOW))
+lines.append(whole("  - Enable IPv6 forwarding", YELLOW))
+lines.append(whole("  - Install tux2lab CLI and bash completion", YELLOW))
+lines.append(whole("Are you sure you want to continue? (yes/no): yes", DEFAULT))
+lines.append(task("Enabling passwordless sudo for musubram...", "[DONE]", GREEN))
+lines.append(task("Installing required packages (1m 36s)...", "[DONE]", GREEN))
+lines.append(task("Disabling libvirtd-tls and libvirtd-tcp sockets...", "[DONE]", GREEN))
+lines.append(task("Enabling and restarting libvirtd (0m 0s)...", "[DONE]", GREEN))
+lines.append(task("Creating /tux2lab-data directory...", "[DONE]", GREEN))
+lines.append(task("Setting up bridge network labbr0...", "[DONE]", GREEN))
+lines.append(task("Removing libvirt default network (virbr0)...", "[DONE]", GREEN))
+lines.append(task("Creating lablink0 to keep labbr0 UP...", "[DONE]", GREEN))
+lines.append(task("Waiting for labbr0 to be UP...", "[DONE]", GREEN))
+lines.append(task("Waiting for IPv6 DAD to complete...", "[DONE]", GREEN))
+lines.append(task("Opening firewall for labbr0...", "[SKIP]", YELLOW))
+lines.append(task("Installing tux2lab CLI...", "[DONE]", GREEN))
+lines.append(task("Installing bash completion...", "[DONE]", GREEN))
+lines.append(whole("[SUCCESS] Host setup completed!", GREEN))
+lines.append(whole("[INFO] Next: run 'tux2lab deploy' to deploy the lab infrastructure.", MAGENTA))
+lines.append(prompt("~", ""))
+
+render(lines, "tux2lab-setup-host.png")

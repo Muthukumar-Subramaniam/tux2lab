@@ -9,16 +9,19 @@ set -uo pipefail
 # Source color functions
 source /tux2lab/common-utils/color-functions.sh
 
-# Source lab environment variables
-if [[ -f /tux2lab-data/lab_environment_vars ]]; then
-    source /tux2lab-data/lab_environment_vars
-else
-    print_error "Lab environment not configured. Run 'tux2lab deploy' first."
-    exit 1
-fi
+# Source lab environment
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
+source /tux2lab/shared-functions/lab-state.sh
 
 # Validate required variables
-if [[ -z "${lab_infra_server_ipv6_gateway:-}" ]]; then
+if [[ ! -f "${LAB_ENV_JSON}" ]]; then
+    print_error "Lab environment config not found: ${LAB_ENV_JSON}"
+    print_info "Deploy the lab first with: tux2lab deploy"
+    exit 1
+fi
+lab_infra_server_ipv6_gateway=$(jq -r '.network.ipv6.gateway' "${LAB_ENV_JSON}")
+lab_infra_server_ipv6_ula_subnet=$(jq -r '.network.ipv6.ula_subnet' "${LAB_ENV_JSON}")
+if [[ -z "${lab_infra_server_ipv6_gateway}" || "${lab_infra_server_ipv6_gateway}" == "null" ]]; then
     print_error "IPv6 gateway not configured in lab environment."
     print_info "Redeploy with: tux2lab rebuild"
     exit 1
@@ -50,8 +53,9 @@ fn_usage() {
     tux2lab ipv6-route <subcommand>
 
 DESCRIPTION:
-    Manage IPv6 default routes on running lab VMs.
-    Enable or disable IPv6 internet access based on host connectivity.
+    Manage IPv6 default routes on running lab VMs. Enable or disable
+    internet-bound IPv6 routing based on host connectivity.
+    Local IPv6 subnet routes are always present regardless of this setting.
 
 SUBCOMMANDS:
     enable      Enable IPv6 default route on all running VMs
@@ -64,10 +68,7 @@ EXAMPLES:
     tux2lab ipv6-route enable      # Enable IPv6 default route
     tux2lab ipv6-route disable     # Remove IPv6 default route
     tux2lab ipv6-route check       # Test connectivity and show status
-    tux2lab ipv6-route auto        # Auto-configure based on connectivity
-
-NOTE:
-    Local IPv6 subnet routes are always present regardless of this setting."
+    tux2lab ipv6-route auto        # Auto-configure based on connectivity"
 }
 
 fn_test_ipv6_connectivity() {
@@ -94,57 +95,22 @@ fn_vm_is_ssh_ready() {
     return $?
 }
 
-fn_enable_ipv6_route() {
+fn_trigger_sync_on_vm() {
     local vm_name="$1"
     
     if ! fn_vm_is_ssh_ready "$vm_name"; then
-        print_warning "VM $vm_name: SSH not ready, skipping"
+        print_warning "VM $vm_name: SSH not ready, will sync on next cycle"
         return 1
     fi
     
-    # Check if route already exists
-    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        'sudo ip -6 route show default' 2>/dev/null)
-    
-    if [[ "$route_check" =~ "default" ]]; then
-        print_info "VM $vm_name: IPv6 default route already exists"
-        return 0
-    fi
-    
-    # Add default route
     if ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        "sudo ip -6 route add default via ${IPV6_GATEWAY}" &>/dev/null; then
-        print_success "VM $vm_name: IPv6 default route added"
+        'sudo /usr/local/bin/tux2lab-sync' &>/dev/null; then
+        print_success "VM $vm_name: sync triggered"
         return 0
     else
-        print_error "VM $vm_name: Failed to add IPv6 default route"
+        print_warning "VM $vm_name: sync failed, will retry on next cycle"
         return 1
     fi
-}
-
-fn_disable_ipv6_route() {
-    local vm_name="$1"
-    
-    if ! fn_vm_is_ssh_ready "$vm_name"; then
-        print_warning "VM $vm_name: SSH not ready, skipping"
-        return 1
-    fi
-    
-    # Check if route exists before attempting removal
-    local route_check=$(ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        'sudo ip -6 route show default' 2>/dev/null)
-    
-    if [[ ! "$route_check" =~ "default" ]]; then
-        print_info "VM $vm_name: IPv6 default route already disabled"
-        return 2
-    fi
-    
-    # Remove default route
-    ssh "${ssh_options[@]}" "${lab_infra_admin_username}@${vm_name}" \
-        'sudo ip -6 route del default 2>/dev/null' &>/dev/null || true
-    
-    print_success "VM $vm_name: IPv6 default route removed"
-    return 0
 }
 
 fn_check_vm_ipv6_route() {
@@ -252,6 +218,9 @@ fn_enable_all() {
     fn_enable_host_ipv6_forwarding
     echo ""
     
+    # Set flag BEFORE triggering sync so VMs see the new state
+    echo "enabled" > /tux2lab-data/lab-config/ipv6-route-active
+
     local vms=$(fn_get_running_vms)
     
     if [[ -z "$vms" ]]; then
@@ -260,7 +229,7 @@ fn_enable_all() {
     fi
     
     for vm in $vms; do
-        fn_enable_ipv6_route "$vm"
+        fn_trigger_sync_on_vm "$vm"
     done
     
     echo ""
@@ -271,24 +240,20 @@ fn_disable_all() {
     print_notify "Disabling IPv6 default route on all running VMs..."
     echo ""
     
+    # Remove flag BEFORE triggering sync so VMs see the new state
+    rm -f /tux2lab-data/lab-config/ipv6-route-active
+
     local vms=$(fn_get_running_vms)
     
     if [[ -z "$vms" ]]; then
         print_warning "No running VMs found"
     else
-        local removed=0
         for vm in $vms; do
-            fn_disable_ipv6_route "$vm"
-            local rc=$?
-            [[ $rc -eq 0 ]] && ((++removed))
+            fn_trigger_sync_on_vm "$vm"
         done
         
         echo ""
-        if [[ $removed -gt 0 ]]; then
-            print_success "IPv6 default route removal complete."
-        else
-            print_info "No IPv6 default routes were active"
-        fi
+        print_success "IPv6 default route removal complete."
     fi
 
     # Clean up host-level forwarding and NAT rules
@@ -305,8 +270,17 @@ fn_auto_configure() {
         fn_enable_all
     else
         echo ""
-        print_info "No IPv6 internet → Disabling default routes"
-        fn_disable_all
+        # Check if already in the correct state
+        local forwarding_enabled=false
+        if [[ "$(cat /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null)" == "1" ]]; then
+            forwarding_enabled=true
+        fi
+        if $forwarding_enabled; then
+            print_info "No IPv6 internet → Disabling default routes"
+            fn_disable_all
+        else
+            print_info "No IPv6 internet. Routes already disabled — nothing to do."
+        fi
     fi
 }
 
@@ -361,18 +335,23 @@ fi
 
 case "${1}" in
     enable)
+        fn_require_lab_running
         fn_enable_all
         ;;
     disable)
+        fn_require_lab_running
         fn_disable_all
         ;;
     auto)
+        fn_require_lab_running
         fn_auto_configure
         ;;
     check)
+        fn_require_lab_running
         fn_check_and_report
         ;;
     status)
+        fn_require_lab_running
         fn_show_status
         ;;
     -h|--help)

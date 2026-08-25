@@ -10,17 +10,21 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
 
 # Function to show help
 fn_show_help() {
-    print_cyan "Usage: tux2lab vm shutdown [OPTIONS]
-Options:
-  -H, --hosts <list>   Comma-separated list of VM hostnames to shutdown
-  -f, --force          Skip confirmation prompt and force graceful shutdown
-  -h, --help           Show this help message
+    print_cyan "USAGE:
+    tux2lab vm shutdown [OPTIONS]
 
-Examples:
-  tux2lab vm shutdown -H vm1                    # Shutdown single VM with confirmation
-  tux2lab vm shutdown -f -H vm1                 # Shutdown single VM without confirmation
-  tux2lab vm shutdown -H vm1,vm2,vm3            # Shutdown multiple VMs with confirmation
-  tux2lab vm shutdown -f -H vm1,vm2             # Shutdown multiple VMs without confirmation
+DESCRIPTION:
+    Gracefully shut down one or more VMs via ACPI signal. The guest OS performs
+    a clean shutdown. Use 'stop' for immediate power off.
+
+OPTIONS:
+    -H, --hosts <hosts>     Hostname(s) to shut down (comma-separated)
+    -f, --force             Skip confirmation prompt
+    -h, --help              Show this help message
+
+EXAMPLES:
+    tux2lab vm shutdown -H testvm1
+    tux2lab vm shutdown -f -H testvm1,testvm2,testvm3
 "
 }
 
@@ -147,18 +151,8 @@ fi
 # Use argument or prompt for hostname
 source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$vm_hostname_arg"
 
-# Lab infra server protection
-if [[ "$qemu_kvm_hostname" == "$lab_infra_server_hostname" ]]; then
-    print_warning "You are about to shutdown the lab infra server: $lab_infra_server_hostname!"
-    print_warning "This will stop all lab services (DNS, DHCP, NFS, TFTP, Web)."
-    print_warning "All VMs in the lab will lose connectivity to these services."
-    read -r -p "If you understand the impact, confirm by typing 'shutdown-lab-infra-server': " confirmation
-    if [[ "$confirmation" != "shutdown-lab-infra-server" ]]; then
-        print_info "Operation cancelled by user."
-        exit 1
-    fi
-elif [[ "$force_shutdown" == false ]]; then
-    # Warning prompt unless force flag is used
+# Warning prompt unless force flag is used
+if [[ "$force_shutdown" == false ]]; then
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/confirm-vm-operation.sh
     if ! confirm_vm_operation "shutdown" "send graceful shutdown signal to" "Guest OS will attempt to shutdown cleanly (requires guest tools)." 1 "$qemu_kvm_hostname"; then
         exit 0

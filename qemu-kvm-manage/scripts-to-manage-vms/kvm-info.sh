@@ -24,37 +24,27 @@ ssh_options=(
 
 # Display usage information
 show_usage() {
-    print_cyan "Usage: tux2lab vm info [OPTIONS]
+    print_cyan "USAGE:
+    tux2lab vm info [OPTIONS]
 
-Display detailed VM information including IP stack, storage, birthdate, uptime, CPU, and memory.
+DESCRIPTION:
+    Display detailed information for running VM(s) via SSH — OS, uptime, CPU,
+    memory, network (IPv4/IPv6 with gateways), storage, and birthdate. Without
+    -H, shows all VMs. Powered-off VMs show state only.
 
 OPTIONS:
-    -H, --hosts <hosts>     Comma-separated list of hostnames (e.g., vm1,vm2,vm3)
+    -H, --hosts <hosts>     Hostname(s) to query (comma-separated)
     -h, --help              Show this help message
 
-BEHAVIOR:
-    - Without arguments: Shows info for all VMs (detailed for running, state-only for powered off)
-    - With -H flag: Shows info for specified comma-separated VMs
-
 EXAMPLES:
-    tux2lab vm info                    # Show info for all running VMs
-    tux2lab vm info -H vm1             # Show info for vm1
-    tux2lab vm info -H vm1,vm2,vm3     # Show info for vm1, vm2, and vm3
-
-INFORMATION DISPLAYED:
-    - Hostname and VM state
-    - CPU cores and memory (allocated/used)
-    - Birthdate (system installation time from /etc/bigbang)
-    - Uptime
-    - IPv4 and IPv6 addresses (all interfaces)
-    - Storage devices and sizes
-    - OS distribution
+    tux2lab vm info
+    tux2lab vm info -H testvm1
+    tux2lab vm info -H testvm1,testvm2,testvm3
 "
 }
 
 # Parse command-line arguments
 hosts_list=""
-single_host=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -96,10 +86,6 @@ if [[ -n "$hosts_list" ]]; then
         exit 1
     fi
     target_vms=("${VALIDATED_HOSTS[@]}")
-elif [[ -n "$single_host" ]]; then
-    # Validate and normalize single hostname
-    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/input-hostname.sh "$single_host" "ALLOW_SELF_REFERENCE"
-    target_vms=("$qemu_kvm_hostname")
 else
     # Get all VMs
     mapfile -t target_vms < <(sudo virsh list --all | awk 'NR>2 && $2 != "" {print $2}')

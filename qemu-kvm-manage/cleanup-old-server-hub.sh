@@ -56,55 +56,62 @@ print_cyan "══════════════════════�
 print_yellow "     CLEANUP — Removing predecessor project (server-hub)"
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
-echo
-print_warning "A previous server-hub deployment has been detected on this system."
-print_warning "The following will be PERMANENTLY REMOVED to prepare for tux2lab:"
-echo
-print_warning "  • All VMs with disks under /kvm-hub/vms/"
+print_yellow "A previous server-hub deployment has been detected on this system.
+The following will be PERMANENTLY REMOVED to prepare for tux2lab:"
+
+# Optional entries, empty when they do not apply
+infra_server_entry=""
 if [[ -n "$lab_infra_server_hostname" ]]; then
-    print_warning "  • Lab infrastructure server (${lab_infra_server_hostname})"
+    infra_server_entry="
+  • Lab infrastructure server (${lab_infra_server_hostname})"
 fi
-print_warning "  • All libvirt storage pools"
-print_warning "  • Virtual network 'default' (labbr0)"
+
+host_mode_entries=""
 if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
-    print_warning "  • Host-mode lab services (named, kea, nginx, etc.)"
+    host_mode_entries="
+  • Host-mode lab services (named, kea, nginx, etc.)"
     if [[ -n "$lab_infra_server_hostname" ]]; then
-        print_warning "  • Web root directory (/${lab_infra_server_hostname}/)"
+        host_mode_entries+="
+  • Web root directory (/${lab_infra_server_hostname}/)"
     fi
-    print_warning "  • DNS zone files (/var/named/dnsbinder-managed-zone-files/)"
+    host_mode_entries+="
+  • DNS zone files (/var/named/dnsbinder-managed-zone-files/)"
 fi
-print_warning "  • SSH keys and config (kvm_lab_global_id_rsa, 999-kvm-lab-global.conf)"
-print_warning "  • CLI tools (qlabvmctl, qlabstart, qlabhealth, qlabdnsbinder, ksmanager)"
-print_warning "  • Directories: /server-hub, /kvm-hub, /iso-files"
-print_warning "  • /etc/sudoers.d/$USER"
+
+iso_entry=""
 if [[ -d "/iso-files" ]]; then
-    print_info "  ISO files from /iso-files/ will be MIGRATED to /tux2lab-data/iso-files/"
+    iso_entry="
+  • Boot ISO files under /iso-files/ (not reusable by tux2lab)"
 fi
+
+print_yellow "  • All VMs with disks under /kvm-hub/vms/${infra_server_entry}
+  • All libvirt storage pools
+  • Virtual network 'default' (labbr0)${host_mode_entries}
+  • SSH keys and config (kvm_lab_global_id_rsa, 999-kvm-lab-global.conf)
+  • CLI tools (qlabvmctl, qlabstart, qlabhealth, qlabdnsbinder, ksmanager)
+  • Directories: /server-hub, /kvm-hub, /iso-files
+  • /etc/sudoers.d/${USER}${iso_entry}"
 
 # ====== LIST VMs THAT WILL BE DESTROYED ======
+# Single virsh call yields name and state, so only domblklist runs per VM
 old_vms=()
-if sudo virsh list --all --name &>/dev/null; then
-    while IFS= read -r vm; do
-        [[ -z "$vm" ]] && continue
-        disk_path=$(sudo virsh domblklist "$vm" 2>/dev/null | awk '/\/kvm-hub\/vms\// {print $2; exit}')
-        if [[ -n "$disk_path" ]]; then
-            old_vms+=("$vm")
-        fi
-    done < <(sudo virsh list --all --name 2>/dev/null | grep -v "^$")
+vm_list=""
+while IFS='|' read -r vm vm_state; do
+    [[ -z "$vm" ]] && continue
+    # awk exits on first match, so the producer may take SIGPIPE under pipefail
+    disk_path=$(sudo virsh domblklist "$vm" 2>/dev/null | awk '/\/kvm-hub\/vms\// {print $2; exit}' || true)
+    if [[ -n "$disk_path" ]]; then
+        old_vms+=("$vm")
+        vm_list+="
+  - ${vm} (${vm_state})"
+    fi
+done < <(sudo virsh list --all 2>/dev/null | awk 'NR>2 && NF {name=$2; $1=""; $2=""; sub(/^[ \t]+/,""); sub(/[ \t]+$/,""); print name"|"$0}')
+
+if [[ -n "$vm_list" ]]; then
+    print_yellow "The following VMs will be DESTROYED:${vm_list}"
 fi
 
-if [[ ${#old_vms[@]} -gt 0 ]]; then
-    echo
-    print_warning "The following VMs will be DESTROYED:"
-    for vm in "${old_vms[@]}"; do
-        vm_state=$(sudo virsh domstate "$vm" 2>/dev/null || echo "unknown")
-        print_warning "  - ${vm} (${vm_state})"
-    done
-fi
-
-echo
 print_red "THIS ACTION CANNOT BE UNDONE."
-echo
 echo -n "Type CLEANUP-SERVER-HUB to confirm: "
 read -r confirmation
 
@@ -256,9 +263,9 @@ if [[ "$lab_infra_server_mode_is_host" == "true" ]]; then
 
     # Remove old SSL cert/key files (server-hub used <FQDN>-nginx-selfsigned.{key,crt})
     if [[ -n "$lab_infra_server_hostname" ]]; then
-        local old_ssl_key="/etc/pki/tls/private/${lab_infra_server_hostname}-nginx-selfsigned.key"
-        local old_ssl_cert="/etc/pki/tls/certs/${lab_infra_server_hostname}-nginx-selfsigned.crt"
-        local old_ssl_anchor="/etc/pki/ca-trust/source/anchors/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+        old_ssl_key="/etc/pki/tls/private/${lab_infra_server_hostname}-nginx-selfsigned.key"
+        old_ssl_cert="/etc/pki/tls/certs/${lab_infra_server_hostname}-nginx-selfsigned.crt"
+        old_ssl_anchor="/etc/pki/ca-trust/source/anchors/${lab_infra_server_hostname}-nginx-selfsigned.crt"
         if [[ -f "$old_ssl_key" || -f "$old_ssl_cert" || -f "$old_ssl_anchor" ]]; then
             print_task "Removing old server-hub SSL cert/key files..."
             sudo rm -f "$old_ssl_key" "$old_ssl_cert" "$old_ssl_anchor"
@@ -488,49 +495,12 @@ for mount_point in /mnt/iso-for-*; do
     sudo rmdir "$mount_point" 2>/dev/null || true
 done
 
-# ====== PHASE 6: DIRECTORY CLEANUP & ISO MIGRATION ======
-iso_migrated=false
-if [[ -d "/iso-files" ]]; then
-    # Migrate all ISO files (filenames are identical between projects)
-    iso_files_found=false
-    for iso_file in /iso-files/*.iso; do
-        [[ -f "$iso_file" ]] || continue
-        iso_files_found=true
-        break
-    done
-
-    if [[ "$iso_files_found" == true ]]; then
-        print_task "Migrating ISO files from /iso-files/ to /tux2lab-data/iso-files/..."
-        sudo mkdir -p /tux2lab-data/iso-files
-        sudo chown "$USER":"$(id -g)" /tux2lab-data/iso-files
-        migration_failed=false
-        for iso_file in /iso-files/*.iso; do
-            [[ -f "$iso_file" ]] || continue
-            if ! sudo mv "$iso_file" /tux2lab-data/iso-files/; then
-                print_warning "Failed to migrate $(basename "$iso_file")"
-                migration_failed=true
-            fi
-        done
-        if [[ "$migration_failed" == false ]]; then
-            print_task_done
-            ((++completed_steps))
-        else
-            print_task_fail
-            ((++failed_steps))
-        fi
-
-        # Check if infra server ISO was among migrated files
-        if [[ -f "/tux2lab-data/iso-files/AlmaLinux-10-latest-x86_64-dvd.iso" ]]; then
-            iso_migrated=true
-        fi
-    fi
-
-    # Migrate and rename checksum file for infra server ISO
-    if [[ -f "/iso-files/CHECKSUM" ]]; then
-        print_task "Migrating checksum file (CHECKSUM → almalinux-10-CHECKSUM)..."
-        sudo mkdir -p /tux2lab-data/iso-files
-        sudo chown "$USER":"$(id -g)" /tux2lab-data/iso-files
-        if sudo mv /iso-files/CHECKSUM /tux2lab-data/iso-files/almalinux-10-CHECKSUM; then
+# ====== PHASE 6: DIRECTORY CLEANUP ======
+# v1 media is not carried over: v2 uses boot ISOs under different filenames
+for old_dir in /kvm-hub /iso-files /server-hub; do
+    if [[ -d "$old_dir" ]]; then
+        print_task "Removing ${old_dir}/..."
+        if sudo rm -rf "$old_dir"; then
             print_task_done
             ((++completed_steps))
         else
@@ -538,61 +508,12 @@ if [[ -d "/iso-files" ]]; then
             ((++failed_steps))
         fi
     fi
-
-    # Write marker files (only if infra ISO was migrated successfully)
-    if [[ "$iso_migrated" == true ]]; then
-        print_task "Writing infra server ISO marker files..."
-        echo "AlmaLinux-10-latest-x86_64-dvd.iso" > /tux2lab-data/iso-files/infra-server-iso
-        echo "almalinux" > /tux2lab-data/iso-files/infra-server-distro
-        print_task_done
-        ((++completed_steps))
-    fi
-fi
-
-# Remove directories
-if [[ -d "/kvm-hub" ]]; then
-    print_task "Removing /kvm-hub/..."
-    if sudo rm -rf /kvm-hub; then
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_fail
-        ((++failed_steps))
-    fi
-fi
-
-if [[ -d "/iso-files" ]]; then
-    print_task "Removing /iso-files/..."
-    if sudo rm -rf /iso-files; then
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_fail
-        ((++failed_steps))
-    fi
-fi
-
-if [[ -d "/server-hub" ]]; then
-    print_task "Removing /server-hub/..."
-    if sudo rm -rf /server-hub; then
-        print_task_done
-        ((++completed_steps))
-    else
-        print_task_fail
-        ((++failed_steps))
-    fi
-fi
+done
 
 # ====== SUMMARY ======
 print_cyan "═══════════════════════════════════════════════════════════════════"
 print_success "Server-hub cleanup completed."
-echo
 print_info "Summary: ${completed_steps} completed, ${skipped_steps} skipped, ${failed_steps} failed"
-if [[ "$iso_migrated" == true ]]; then
-    print_info "ISO migrated to /tux2lab-data/iso-files/AlmaLinux-10-latest-x86_64-dvd.iso"
-    print_info "Infra server ISO markers written — no need to run 'tux2lab distro download-infra-iso'."
-fi
-echo
 print_info "System is ready for tux2lab setup. Proceeding..."
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
