@@ -456,10 +456,11 @@ tux2lab/
 
 ---
 
-## HA K8s Cluster Running on tux2lab
+## Example Use Case: Highly Available Kubernetes Cluster
 
-Three control planes and four workers, with the control plane endpoint and workload
-publishing served by `tux2lab lb`.
+This is one of the things I use my own lab for. Three control planes and four
+workers, with the control plane endpoint and workload publishing served by
+`tux2lab lb`.
 
 The infrastructure is provisioned and managed by tux2lab. The Kubernetes deployment
 itself is done with
