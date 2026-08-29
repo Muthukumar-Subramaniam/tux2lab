@@ -189,6 +189,7 @@ _tux2lab_completions() {
         # -H/--hosts/--host is handled earlier via COMP_LINE detection.
         case "${prev}" in
             -f|--force|--reset-specs-to-default|--ignore-ksmanager-cleanup|-h|--help) ;;
+            --via-golden|--via-pxe|--ipv4-only|--ipv6-only|--dual-stack) ;;
             -c|--console)
                 case "${vm_subcmd}" in
                     install|reimage) ;;
