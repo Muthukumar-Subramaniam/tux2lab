@@ -109,7 +109,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fi
 
     # Generate unique MAC address for the VM
-    print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
+    print_task "Generating MAC address..."
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
     if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
         print_task_fail
@@ -119,7 +119,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fi
     print_task_done
 
-    print_info "Creating PXE environment for '${qemu_kvm_hostname}' using ksmanager..."
+    print_info "Creating PXE environment via ksmanager..."
 
     # Run ksmanager and extract VM details
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
@@ -144,7 +144,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    print_task "Updating /etc/hosts..."
     _etc_hosts_ipv4="${IPV4_ADDRESS}"
     [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
     if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
@@ -168,15 +168,9 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     print_info "VM specs: ${VM_CPUS} vCPUs, ${VM_MEMORY} GiB RAM, ${VM_DISK_SIZE} GiB disk"
 
-    # Clean up temp PXE bootstrap record for --ipv6-only
-    if [[ -n "${PXE_BOOTSTRAP_HOSTNAME:-}" ]]; then
-        print_task "Removing temporary PXE bootstrap record '${PXE_BOOTSTRAP_HOSTNAME}'..."
-        sudo /tux2lab/named-manage/dnsbinder.sh -dy "${PXE_BOOTSTRAP_HOSTNAME}" &>/dev/null && print_task_done || print_task_fail
-    fi
-
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
-    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via PXE boot" "Installation via PXE boot may take a few minutes per VM."
+    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "Installation" "Installation via PXE boot may take a few minutes per VM."
 done
 
 # Summary for multiple VMs
