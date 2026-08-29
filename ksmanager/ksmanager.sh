@@ -941,38 +941,14 @@ fn_select_os_distro() {
     # Check if --distro flag was provided
     if [[ -n "${distro_from_flag}" ]]; then
         case "${distro_from_flag}" in
-            alma|almalinux) 
-                os_distribution="almalinux"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            rocky) 
-                os_distribution="rocky"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            oracle|oraclelinux) 
-                os_distribution="oraclelinux"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            centos|centos-stream) 
-                os_distribution="centos-stream"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            rhel|redhat) 
-                os_distribution="rhel"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            ubuntu-lts|ubuntu) 
-                os_distribution="ubuntu-lts"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            debian) 
-                os_distribution="debian"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
-            opensuse-leap|opensuse|suse) 
-                os_distribution="opensuse-leap"
-                print_info "OS distribution selected via --distro flag: ${os_distribution}"
-                ;;
+            alma|almalinux)              os_distribution="almalinux" ;;
+            rocky)                       os_distribution="rocky" ;;
+            oracle|oraclelinux)          os_distribution="oraclelinux" ;;
+            centos|centos-stream)        os_distribution="centos-stream" ;;
+            rhel|redhat)                 os_distribution="rhel" ;;
+            ubuntu-lts|ubuntu)           os_distribution="ubuntu-lts" ;;
+            debian)                      os_distribution="debian" ;;
+            opensuse-leap|opensuse|suse) os_distribution="opensuse-leap" ;;
             *)
                 print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
                 print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
