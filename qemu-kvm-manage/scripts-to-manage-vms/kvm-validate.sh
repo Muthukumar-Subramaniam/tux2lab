@@ -136,6 +136,8 @@ set -uo pipefail
 
 LAB_INFRA_SERVER="${1:-}"
 lab_infra_domain_name="${2:-}"
+LAB_DNS_IPV4="${3:-}"
+LAB_DNS_IPV6="${4:-}"
 
 # Detect distro
 source /etc/os-release 2>/dev/null || exit 99
@@ -150,20 +152,6 @@ emit() { echo "RESULT|$1|$2|$3"; }
 # --- Identity ---
 [[ "$HOSTNAME_FQDN" == *.* ]] && emit "FQDN set" "PASS" "$HOSTNAME_FQDN" || emit "FQDN set" "FAIL" "$HOSTNAME_FQDN"
 
-# DNS forward and reverse lookup
-if host "$HOSTNAME_FQDN" &>/dev/null; then
-    emit "DNS forward lookup" "PASS" ""
-    RESOLVED_IP=$(host "$HOSTNAME_FQDN" | head -1 | awk '{print $NF}')
-    if host "$RESOLVED_IP" 2>/dev/null | grep -q "$HOSTNAME_FQDN"; then
-        emit "DNS reverse lookup" "PASS" "$RESOLVED_IP"
-    else
-        emit "DNS reverse lookup" "WARN" "PTR may not match"
-    fi
-else
-    emit "DNS forward lookup" "WARN" "may not be populated yet"
-fi
-
-# --- Networking ---
 IPV4_ADDR=$(ip -4 addr show dev eth0 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
 IPV6_ADDR=$(ip -6 addr show dev eth0 scope global 2>/dev/null | grep -oP 'inet6 \K[0-9a-f:]+' | head -1)
 
@@ -171,6 +159,44 @@ IPV6_ADDR=$(ip -6 addr show dev eth0 scope global 2>/dev/null | grep -oP 'inet6 
 HAS_IPV4=false; [[ -n "$IPV4_ADDR" ]] && HAS_IPV4=true
 HAS_IPV6=false; [[ -n "$IPV6_ADDR" ]] && HAS_IPV6=true
 
+# DNS forward and reverse lookup, asked of the lab server by address.
+# The address is passed in rather than read from the VM: systemd-resolved answers
+# queries for the machine's own name from its interface list, so the stub resolver
+# would confirm the host against itself and pass even with the lab DNS down. It
+# also invents 127.0.0.2 or ::1 for whichever family the VM lacks.
+if $HAS_IPV4; then LAB_DNS="$LAB_DNS_IPV4"; else LAB_DNS="$LAB_DNS_IPV6"; fi
+
+GOT4=""; GOT6=""; DNS_MISMATCH=""
+if [[ -z "$LAB_DNS" ]]; then
+    emit "DNS forward lookup" "WARN" "lab DNS address not provided"
+    emit "DNS reverse lookup" "WARN" "lab DNS address not provided"
+else
+    if $HAS_IPV4; then
+        GOT4=$(host -t A "$HOSTNAME_FQDN" "$LAB_DNS" 2>/dev/null | awk '/has address/{print $NF; exit}')
+        [[ "$GOT4" != "$IPV4_ADDR" ]] && DNS_MISMATCH="A ${GOT4:-none} != $IPV4_ADDR"
+    fi
+    if $HAS_IPV6; then
+        GOT6=$(host -t AAAA "$HOSTNAME_FQDN" "$LAB_DNS" 2>/dev/null | awk '/has IPv6 address/{print $NF; exit}')
+        [[ "$GOT6" != "$IPV6_ADDR" ]] && DNS_MISMATCH="${DNS_MISMATCH:+$DNS_MISMATCH, }AAAA ${GOT6:-none} != $IPV6_ADDR"
+    fi
+
+    if [[ -n "$DNS_MISMATCH" ]]; then
+        emit "DNS forward lookup" "FAIL" "$DNS_MISMATCH"
+    else
+        emit "DNS forward lookup" "PASS" "${GOT4:-$GOT6}"
+    fi
+
+    PTR_IP="${GOT4:-$GOT6}"
+    if [[ -z "$PTR_IP" ]]; then
+        emit "DNS reverse lookup" "FAIL" "no forward record on $LAB_DNS"
+    elif host -t PTR "$PTR_IP" "$LAB_DNS" 2>/dev/null | grep -q "$HOSTNAME_FQDN"; then
+        emit "DNS reverse lookup" "PASS" "$PTR_IP"
+    else
+        emit "DNS reverse lookup" "WARN" "PTR may not match"
+    fi
+fi
+
+# --- Networking ---
 if $HAS_IPV4; then
     emit "eth0 IPv4" "PASS" "$IPV4_ADDR"
     ip -4 route show default | grep -q via && emit "IPv4 default route" "PASS" "" || emit "IPv4 default route" "FAIL" ""
@@ -334,7 +360,7 @@ fn_validate_vm() {
 
     # Run validation payload remotely — pass infra server hostname as $1
     local raw_output
-    raw_output=$(fn_generate_validation_payload | ssh "${ssh_options[@]}" "root@${vm_name}" "bash -s -- ${lab_infra_server_hostname}" 2>/dev/null)
+    raw_output=$(fn_generate_validation_payload | ssh "${ssh_options[@]}" "root@${vm_name}" "bash -s -- ${lab_infra_server_hostname} ${lab_infra_domain_name} ${lab_infra_server_ipv4_address} ${lab_infra_server_ipv6_address}" 2>/dev/null)
 
     if [[ $? -ne 0 ]] && [[ -z "$raw_output" ]]; then
         print_error "  SSH connection failed — skipping"
