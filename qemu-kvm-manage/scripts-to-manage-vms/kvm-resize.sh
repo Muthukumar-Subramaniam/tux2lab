@@ -518,9 +518,12 @@ fn_start_vm_after_resize() {
     fi
 
     # Print summary of all resize operations
-    for msg in "${resize_summary[@]}"; do
-        print_success "$msg"
-    done
+    if [[ ${#resize_summary[@]} -gt 0 ]]; then
+        print_green "VM ${qemu_kvm_hostname} resized successfully."
+        for msg in "${resize_summary[@]}"; do
+            print_green "     - $msg"
+        done
+    fi
 }
 
 # Initialize tracking variables
