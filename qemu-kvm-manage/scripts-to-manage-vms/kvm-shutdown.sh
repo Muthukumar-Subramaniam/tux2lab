@@ -101,12 +101,12 @@ if [[ -n "$hosts_list" ]]; then
     failed_vms=()
     successful_vms=()
     skipped_vms=()
-    total_vms=${#validated_hosts[@]}
-    current=0
+    source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-multi-vm-progress.sh
+    TOTAL_VMS=${#validated_hosts[@]}
+    CURRENT_VM=0
     
     for vm_name in "${validated_hosts[@]}"; do
-        ((++current))
-        print_info "Progress: $current/$total_vms"
+        show_multi_vm_progress "$vm_name"
         exit_code=0
         shutdown_vm_wrapper "$vm_name" || exit_code=$?
         if [[ $exit_code -eq 0 ]]; then
@@ -121,19 +121,19 @@ if [[ -n "$hosts_list" ]]; then
     # Print summary
     print_summary "Shutdown VMs Results"
     if [[ ${#successful_vms[@]} -gt 0 ]]; then
-        print_green "  DONE: ${#successful_vms[@]}/$total_vms"
+        print_green "  DONE: ${#successful_vms[@]}/$TOTAL_VMS"
         for vm in "${successful_vms[@]}"; do
             print_green "    - $vm"
         done
     fi
     if [[ ${#skipped_vms[@]} -gt 0 ]]; then
-        print_yellow "  SKIP: ${#skipped_vms[@]}/$total_vms"
+        print_yellow "  SKIP: ${#skipped_vms[@]}/$TOTAL_VMS"
         for vm in "${skipped_vms[@]}"; do
             print_yellow "    - $vm"
         done
     fi
     if [[ ${#failed_vms[@]} -gt 0 ]]; then
-        print_red "  FAIL: ${#failed_vms[@]}/$total_vms"
+        print_red "  FAIL: ${#failed_vms[@]}/$TOTAL_VMS"
         for vm in "${failed_vms[@]}"; do
             print_red "    - $vm"
         done

@@ -129,14 +129,12 @@ fi
 failed_vms=()
 successful_vms=()
 skipped_vms=()
-total_vms=${#validated_hosts[@]}
-current=0
+source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-multi-vm-progress.sh
+TOTAL_VMS=${#validated_hosts[@]}
+CURRENT_VM=0
 
 for vm_name in "${validated_hosts[@]}"; do
-    ((++current))
-    if [[ $total_vms -gt 1 ]]; then
-        print_info "Progress: $current/$total_vms - $vm_name"
-    fi
+    show_multi_vm_progress "$vm_name"
 
     # Check if VM exists
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then
@@ -173,23 +171,23 @@ for vm_name in "${validated_hosts[@]}"; do
 done
 
 # Print summary for multi-VM operations
-if [[ $total_vms -gt 1 ]]; then
+if [[ $TOTAL_VMS -gt 1 ]]; then
     echo
     print_summary "Snapshot Delete Results"
     if [[ ${#successful_vms[@]} -gt 0 ]]; then
-        print_green "  DONE: ${#successful_vms[@]}/$total_vms"
+        print_green "  DONE: ${#successful_vms[@]}/$TOTAL_VMS"
         for vm in "${successful_vms[@]}"; do
             print_green "    - $vm"
         done
     fi
     if [[ ${#skipped_vms[@]} -gt 0 ]]; then
-        print_yellow "  SKIP: ${#skipped_vms[@]}/$total_vms"
+        print_yellow "  SKIP: ${#skipped_vms[@]}/$TOTAL_VMS"
         for vm in "${skipped_vms[@]}"; do
             print_yellow "    - $vm"
         done
     fi
     if [[ ${#failed_vms[@]} -gt 0 ]]; then
-        print_red "  FAIL: ${#failed_vms[@]}/$total_vms"
+        print_red "  FAIL: ${#failed_vms[@]}/$TOTAL_VMS"
         for vm in "${failed_vms[@]}"; do
             print_red "    - $vm"
         done
