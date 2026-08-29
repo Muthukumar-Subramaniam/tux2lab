@@ -126,7 +126,9 @@ systemctl enable chronyd
 ######################################################################
 # 12. Chrony NTP
 ######################################################################
-/usr/bin/echo 'server get_lab_infra_server_hostname iburst' > /etc/chrony.d/tux2lab.conf
+# 'pool' adds every resolved address; 'server' binds to one, which strands an
+# ipv6-only VM if the A record is the one chrony happens to pick.
+/usr/bin/echo 'pool get_lab_infra_server_hostname iburst' > /etc/chrony.d/tux2lab.conf
 /usr/bin/rm -f /etc/chrony.d/pool.conf
 
 ######################################################################

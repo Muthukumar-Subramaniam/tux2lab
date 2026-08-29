@@ -84,9 +84,12 @@ EMBED_EOF
 ######################################################################
 # 7. Chrony NTP
 ######################################################################
+# Debian ships its pool inline, so chrony.conf has to be edited; ours goes in a
+# drop-in. The sources.d sweep is insurance in case Debian moves pools there too.
 cp -p /etc/chrony/chrony.conf /etc/chrony/chrony.conf_bkp_orig
 sed -i 's/^pool/#pool/g' /etc/chrony/chrony.conf
-echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
+rm -f /etc/chrony/sources.d/*.sources
+echo 'pool get_lab_infra_server_hostname iburst' > /etc/chrony/conf.d/tux2lab.conf
 
 ######################################################################
 # 8. Golden image setup (conditional)

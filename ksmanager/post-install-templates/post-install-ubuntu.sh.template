@@ -127,9 +127,12 @@ fi
 ######################################################################
 # 8. Chrony NTP
 ######################################################################
+# Ubuntu ships its pools via sourcedir marked 'prefer', which leaves chrony
+# waiting on them instead of using the lab. The sed covers inline pools too.
 cp -p /etc/chrony/chrony.conf /etc/chrony/chrony.conf_bkp_orig
 sed -i 's/^pool/#pool/g' /etc/chrony/chrony.conf
-echo 'pool get_lab_infra_server_hostname iburst' >> /etc/chrony/chrony.conf
+rm -f /etc/chrony/sources.d/*.sources
+echo 'pool get_lab_infra_server_hostname iburst' > /etc/chrony/conf.d/tux2lab.conf
 
 ######################################################################
 # 9. Golden image setup (conditional)
