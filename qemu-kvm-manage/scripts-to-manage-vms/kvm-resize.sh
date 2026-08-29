@@ -308,7 +308,7 @@ resize_vm_memory() {
     else
         # Prompt for memory size
         print_info "Memory of Host Machine: ${host_mem_gib} GiB"
-        print_info "Memory: ${current_vm_mem_gib} GiB"
+        print_info "Memory of VM: ${current_vm_mem_gib} GiB"
         print_info "Allowed sizes: Powers of 2 — e.g., 1, 2, 4, 8... but less than ${host_mem_gib} GiB"
 
         while true; do
@@ -342,7 +342,7 @@ resize_vm_memory() {
     if sudo virsh setmaxmem "$qemu_kvm_hostname" "$vm_mem_kib" --config &>/dev/null && \
        sudo virsh setmem "$qemu_kvm_hostname" "$vm_mem_kib" --config &>/dev/null; then
         print_task_done
-        resize_summary+=("VM '${qemu_kvm_hostname}' memory resized to ${vm_mem_gib} GiB.")
+        resize_summary+=("Memory resized to ${vm_mem_gib} GiB.")
     else
         print_task_fail
         print_error "Failed to update VM memory."
@@ -398,7 +398,7 @@ resize_vm_cpu() {
     if sudo virsh setvcpus "$qemu_kvm_hostname" "$new_vcpus_of_vm" --maximum --config &>/dev/null && \
        sudo virsh setvcpus "$qemu_kvm_hostname" "$new_vcpus_of_vm" --config &>/dev/null; then
         print_task_done
-        resize_summary+=("VM '${qemu_kvm_hostname}' vCPUs resized to ${new_vcpus_of_vm}.")
+        resize_summary+=("vCPUs resized to ${new_vcpus_of_vm}.")
     else
         print_task_fail
         print_error "Failed to update vCPU count."
@@ -459,7 +459,7 @@ resize_vm_disk() {
     if sudo qemu-img resize "$vm_qcow2_disk_path" +${grow_size_gib}G &>/dev/null; then
         print_task_done
         disk_was_resized=true
-        resize_summary+=("VM '${qemu_kvm_hostname}' OS disk resized to ${target_disk_gib} GiB.")
+        resize_summary+=("OS disk resized to ${target_disk_gib} GiB.")
     else
         print_task_fail
         print_error "OS disk resize failed!"
