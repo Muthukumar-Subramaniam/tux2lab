@@ -156,7 +156,7 @@ for vm_name in "${validated_hosts[@]}"; do
     fn_get_snapshot_size "$local_snapshot_dir"
     freed_size="$SNAPSHOT_SIZE_HUMAN"
 
-    print_task "Deleting snapshot '$snapshot_name' from VM '$vm_name'..."
+    print_task "Deleting snapshot '$snapshot_name'..."
 
     if ! sudo rm -rf "$local_snapshot_dir"; then
         print_task_fail

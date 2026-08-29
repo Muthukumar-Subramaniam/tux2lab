@@ -138,7 +138,7 @@ fn_shutdown_or_poweroff() {
         SHUTDOWN_VM_CONTEXT="Attempting graceful shutdown" SHUTDOWN_VM_STRICT=false shutdown_vm "$qemu_kvm_hostname"
         
         # Wait for VM to shut down with timeout
-        print_info "Waiting for VM \"${qemu_kvm_hostname}\" to shut down (timeout: 30s)..."
+        print_info "Waiting for VM to shut down (timeout: 30s)..."
         TIMEOUT=30
         ELAPSED=0
         while sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; do
@@ -177,7 +177,7 @@ fn_shutdown_or_poweroff() {
             fi
             
             # Wait for VM to shut down with timeout
-            print_info "Waiting for VM \"${qemu_kvm_hostname}\" to shut down (timeout: 60s)..."
+            print_info "Waiting for VM to shut down (timeout: 60s)..."
             TIMEOUT=60
             ELAPSED=0
             while sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; do
@@ -210,7 +210,7 @@ fn_shutdown_or_poweroff() {
 }
 
 if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
+    print_info "VM is not running. Proceeding further."
 else
     fn_shutdown_or_poweroff
 fi
@@ -261,7 +261,7 @@ if [[ $added_count -eq 0 ]]; then
     exit 1
 fi
 
-print_task "Starting VM \"$qemu_kvm_hostname\"..." nskip
+print_task "Starting VM..." nskip
 
 if error_msg=$(sudo virsh start "$qemu_kvm_hostname" 2>&1); then
     print_task_done

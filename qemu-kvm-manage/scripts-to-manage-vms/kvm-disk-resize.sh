@@ -312,7 +312,7 @@ while true; do
             break
         fi
         
-        print_info "Available additional disks for VM \"$qemu_kvm_hostname\":"
+        print_info "Available additional disks:"
         for i in "${!AVAILABLE_DISKS[@]}"; do
             disk="${AVAILABLE_DISKS[$i]}"
             echo "  $((i+1))) $disk"
@@ -352,7 +352,7 @@ while true; do
     # Shutdown VM if running (only once, before first resize operation)
     if [[ "${VM_SHUTDOWN_DONE:-false}" == false ]]; then
         if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-            print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
+            print_info "VM is not running. Proceeding further."
         else
             fn_shutdown_or_poweroff
         fi
@@ -508,7 +508,7 @@ while true; do
 done
 
 # Start the VM
-print_task "Starting VM \"$qemu_kvm_hostname\"..." nskip
+print_task "Starting VM..." nskip
 if error_msg=$(sudo virsh start "$qemu_kvm_hostname" 2>&1); then
     print_task_done
     if (( ${#RESIZED_DISKS[@]} > 1 )); then

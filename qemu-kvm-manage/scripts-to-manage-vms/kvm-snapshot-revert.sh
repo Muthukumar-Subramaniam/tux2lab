@@ -147,7 +147,7 @@ for vm_name in "${validated_hosts[@]}"; do
     # Check if VM is running - must be offline for revert
     if fn_is_vm_running "$vm_name"; then
         if [[ "$force_revert" == true ]]; then
-            print_task "Shutting down VM '$vm_name'..."
+            print_task "Shutting down VM..."
             if ! sudo virsh shutdown "$vm_name" &>/dev/null; then
                 print_task_fail
                 print_error "Failed to send shutdown signal to '$vm_name'."
@@ -184,7 +184,7 @@ for vm_name in "${validated_hosts[@]}"; do
 
             case "$selected_choice" in
                 1)
-                    print_task "Shutting down VM '$vm_name' gracefully..."
+                    print_task "Shutting down VM gracefully..."
                     if ! sudo virsh shutdown "$vm_name" &>/dev/null; then
                         print_task_fail
                         failed_vms+=("$vm_name")
@@ -205,7 +205,7 @@ for vm_name in "${validated_hosts[@]}"; do
                     print_task_done
                     ;;
                 2)
-                    print_task "Forcing power off VM '$vm_name'..."
+                    print_task "Forcing power off VM..."
                     if ! sudo virsh destroy "$vm_name" &>/dev/null; then
                         print_task_fail
                         failed_vms+=("$vm_name")
@@ -244,7 +244,7 @@ for vm_name in "${validated_hosts[@]}"; do
 
     vm_dir="/tux2lab-data/vms/${vm_name}"
 
-    print_task "Reverting VM '$vm_name' to snapshot '$snapshot_name'..."
+    print_task "Reverting to snapshot '$snapshot_name'..."
 
     # Restore disk files from snapshot
     revert_failed=false
@@ -289,10 +289,10 @@ for vm_name in "${validated_hosts[@]}"; do
     fi
 
     print_task_done
-    print_info "VM '$vm_name' reverted to snapshot: $snapshot_name"
+    print_info "Reverted to snapshot: $snapshot_name"
 
     # Start VM after successful revert
-    print_task "Starting VM '$vm_name'..."
+    print_task "Starting VM..."
     if sudo virsh start "$vm_name" &>/dev/null; then
         print_task_done
     else

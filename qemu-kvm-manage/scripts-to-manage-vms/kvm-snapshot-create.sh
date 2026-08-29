@@ -142,7 +142,7 @@ for vm_name in "${validated_hosts[@]}"; do
     # Check if VM is running - must be offline for snapshot
     if fn_is_vm_running "$vm_name"; then
         if [[ "$force_poweroff" == true ]]; then
-            print_task "Shutting down VM '$vm_name'..."
+            print_task "Shutting down VM..."
             if ! sudo virsh shutdown "$vm_name" &>/dev/null; then
                 print_task_fail
                 print_error "Failed to send shutdown signal to '$vm_name'."
@@ -179,7 +179,7 @@ for vm_name in "${validated_hosts[@]}"; do
 
             case "$selected_choice" in
                 1)
-                    print_task "Shutting down VM '$vm_name' gracefully..."
+                    print_task "Shutting down VM gracefully..."
                     if ! sudo virsh shutdown "$vm_name" &>/dev/null; then
                         print_task_fail
                         failed_vms+=("$vm_name")
@@ -200,7 +200,7 @@ for vm_name in "${validated_hosts[@]}"; do
                     print_task_done
                     ;;
                 2)
-                    print_task "Forcing power off VM '$vm_name'..."
+                    print_task "Forcing power off VM..."
                     if ! sudo virsh destroy "$vm_name" &>/dev/null; then
                         print_task_fail
                         failed_vms+=("$vm_name")
@@ -247,7 +247,7 @@ for vm_name in "${validated_hosts[@]}"; do
         continue
     fi
 
-    print_task "Creating snapshot '$local_snapshot_name' for VM '$vm_name'..."
+    print_task "Creating snapshot '$local_snapshot_name'..."
 
     if ! sudo mkdir -p "$snapshot_path"; then
         print_task_fail
@@ -294,7 +294,7 @@ for vm_name in "${validated_hosts[@]}"; do
     print_info "Snapshot size: $SNAPSHOT_SIZE_HUMAN"
 
     # Start VM after successful snapshot
-    print_task "Starting VM '$vm_name'..."
+    print_task "Starting VM..."
     if sudo virsh start "$vm_name" &>/dev/null; then
         print_task_done
     else

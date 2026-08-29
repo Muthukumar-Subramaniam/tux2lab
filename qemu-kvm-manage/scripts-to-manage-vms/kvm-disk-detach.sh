@@ -275,7 +275,7 @@ fi
 
 # Shut down VM if running (only after confirming there's work to do)
 if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
+    print_info "VM is not running. Proceeding further."
 else
     fn_shutdown_or_poweroff
 fi
@@ -292,7 +292,7 @@ for disk in "${DISKS_TO_DETACH[@]}"; do
     detached_path="${DETACHED_DIR}/${disk_name}"
     
     # Detach disk
-    print_task "Detaching $disk from VM \"$qemu_kvm_hostname\"..." nskip
+    print_task "Detaching $disk..." nskip
     if error_msg=$(sudo virsh detach-disk "$qemu_kvm_hostname" "$disk" --persistent 2>&1); then
         print_task_done
     else
@@ -315,7 +315,7 @@ for disk in "${DISKS_TO_DETACH[@]}"; do
     fi
 done
 
-print_task "Starting VM \"$qemu_kvm_hostname\"..." nskip
+print_task "Starting VM..." nskip
 
 if error_msg=$(sudo virsh start "$qemu_kvm_hostname" 2>&1); then
     print_task_done

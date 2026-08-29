@@ -194,7 +194,7 @@ fi
 
 # Now that we confirmed there are disks to attach, check VM state and shut down if needed
 if ! sudo virsh list  | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
+    print_info "VM is not running. Proceeding further."
 else
     fn_shutdown_or_poweroff
 fi
@@ -340,7 +340,7 @@ for disk in "${DISKS_TO_ATTACH[@]}"; do
     fi
     
     # Attach disk to VM
-    print_task "Attaching $new_disk_name to VM \"$qemu_kvm_hostname\" as $next_target..." nskip
+    print_task "Attaching $new_disk_name as $next_target..." nskip
     if error_msg=$(sudo virsh attach-disk "$qemu_kvm_hostname" "$new_disk_path" "$next_target" \
         --subdriver qcow2 --persistent 2>&1); then
         print_task_done
@@ -360,7 +360,7 @@ if [[ $attached_count -eq 0 ]]; then
     exit 1
 fi
 
-print_task "Starting VM \"$qemu_kvm_hostname\"..." nskip
+print_task "Starting VM..." nskip
 
 if error_msg=$(sudo virsh start "$qemu_kvm_hostname" 2>&1); then
     print_task_done

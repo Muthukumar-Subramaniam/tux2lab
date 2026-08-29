@@ -308,7 +308,7 @@ resize_vm_memory() {
     else
         # Prompt for memory size
         print_info "Memory of Host Machine: ${host_mem_gib} GiB"
-        print_info "Memory of VM '${qemu_kvm_hostname}': ${current_vm_mem_gib} GiB"
+        print_info "Memory: ${current_vm_mem_gib} GiB"
         print_info "Allowed sizes: Powers of 2 — e.g., 1, 2, 4, 8... but less than ${host_mem_gib} GiB"
 
         while true; do
@@ -360,7 +360,7 @@ resize_vm_cpu() {
     else
         # Prompt for CPU count
         print_info "Host logical CPUs: $host_cpu_count"
-        print_info "Current vCPUs of VM '${qemu_kvm_hostname}': $current_vcpus_of_vm"
+        print_info "Current vCPUs: $current_vcpus_of_vm"
         print_info "Allowed values: Powers of 2 — e.g., 1, 2, 4, 8... up to ${host_cpu_count}"
 
         while true; do
@@ -424,7 +424,7 @@ resize_vm_disk() {
         fi
 
         # Prompt for target disk size
-        print_info "Current OS disk size of VM '${qemu_kvm_hostname}': ${current_disk_gib} GiB"
+        print_info "Current OS disk size: ${current_disk_gib} GiB"
         print_info "Enter a target size larger than ${current_disk_gib} GiB (multiple of 5, max increase: 100 GiB)"
 
         while true; do
@@ -553,7 +553,7 @@ if [[ ${#resize_order[@]} -gt 0 ]]; then
 fi
 
 # Interactive mode — show menu with multi-select
-print_info "Select resource(s) to resize for VM '$qemu_kvm_hostname':
+print_info "Select resource(s) to resize:
   1) Memory
   2) CPU
   3) Disk

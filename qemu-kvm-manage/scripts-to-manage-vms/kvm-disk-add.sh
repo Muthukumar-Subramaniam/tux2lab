@@ -190,7 +190,7 @@ fn_shutdown_or_poweroff() {
 }
 
 if ! sudo virsh list | awk '{print $2}' | grep -Fxq "$qemu_kvm_hostname"; then
-    print_info "VM \"$qemu_kvm_hostname\" is not running. Proceeding further."
+    print_info "VM is not running. Proceeding further."
 else
     fn_shutdown_or_poweroff
 fi
@@ -283,7 +283,7 @@ for ((i=1; i<=DISK_COUNT; i++)); do
     fi
 
     # Attach disk
-    print_task "Attaching vd${NEXT_DISK_LETTER} (${DISK_SIZE_GB} GiB) to VM \"$qemu_kvm_hostname\"..." nskip
+    print_task "Attaching vd${NEXT_DISK_LETTER} (${DISK_SIZE_GB} GiB)..." nskip
     if error_msg=$(sudo virsh attach-disk "$qemu_kvm_hostname" "$DISK_PATH" "vd$NEXT_DISK_LETTER" --subdriver qcow2 --persistent 2>&1); then
         print_task_done
     else
@@ -299,7 +299,7 @@ for ((i=1; i<=DISK_COUNT; i++)); do
     ((++DISKS_ADDED))
 done
 
-print_task "Starting VM \"$qemu_kvm_hostname\"..." nskip
+print_task "Starting VM..." nskip
 
 if error_msg=$(sudo virsh start "$qemu_kvm_hostname" 2>&1); then
     print_task_done
