@@ -149,9 +149,18 @@ fi
 log "Setting hostname to: ${HOST_NAME}"
 hostnamectl set-hostname "${HOST_NAME}"
 
-# Replace stale golden-image hostname in the 127.0.1.1 entry (Debian/Ubuntu) with the new hostname
-if grep -q "^127.0.1.1[[:space:]].*golden-image" /etc/hosts; then
-	sed -i "s/^\(127.0.1.1[[:space:]]\+\)[^[:space:]]*golden-image[^[:space:]]*/\1${HOST_NAME}/" /etc/hosts
+# The image carries the build VM's entry, and Debian/Ubuntu add a 127.0.1.1 one.
+# Either makes anything resolving its own FQDN get an address it does not own.
+log "Updating /etc/hosts with the VM's own addresses"
+_self_short="${HOST_NAME%%.*}"
+# Command substitution strips trailing newlines, so re-running cannot stack blanks.
+_hosts_kept=$(sed -e "/^# Added by tux2lab/d" -e "/^127\.0\.1\.1[[:space:]]/d" -e "/golden-image/d" -e "/[[:space:]]${_self_short}\(-ipv4\)\?\([[:space:]]\|\.\|$\)/d" /etc/hosts)
+printf '%s\n\n# Added by tux2lab golden boot\n' "${_hosts_kept}" > /etc/hosts
+if [ "$IPV4_ENABLED" = true ]; then
+	printf '%s %s %s\n' "${IPv4_ADDRESS}" "${HOST_NAME}" "${_self_short}" >> /etc/hosts
+fi
+if [ "$IPV6_ENABLED" = true ]; then
+	printf '%s %s %s\n' "${IPv6_ADDRESS}" "${HOST_NAME}" "${_self_short}" >> /etc/hosts
 fi
 
 log "Configuring kernel hostname"

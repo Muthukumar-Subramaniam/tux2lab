@@ -221,6 +221,26 @@ EMBED_EOF
 
 fi
 
+######################################################################
+# 16. /etc/hosts self entry
+######################################################################
+# Without this the FQDN resolves to loopback, so anything that looks itself up
+# to decide what address to advertise picks the wrong one.
+if get_golden_image_creation_not_requested; then
+    _stack_mode="get_stack_mode"
+    _self_v4="get_ipv4_address"
+    _self_v6="get_ipv6_address"
+    # Command substitution strips trailing newlines, so re-running cannot stack blanks.
+    _hosts_kept=$(/usr/bin/sed -e "/^# Added by tux2lab/d" -e "/^127\.0\.1\.1[[:space:]]/d" -e "/[[:space:]]get_hostname\(-ipv4\)\?\([[:space:]]\|\.\|$\)/d" /etc/hosts)
+    printf '%s\n\n# Added by tux2lab PXE post-install\n' "${_hosts_kept}" > /etc/hosts
+    if [[ "${_stack_mode}" != "ipv6" ]]; then
+        printf '%s %s %s\n' "${_self_v4}" "get_hostname.get_ipv4_domain" "get_hostname" >> /etc/hosts
+    fi
+    if [[ "${_stack_mode}" != "ipv4" ]] && [[ -n "${_self_v6}" ]]; then
+        printf '%s %s %s\n' "${_self_v6}" "get_hostname.get_ipv4_domain" "get_hostname" >> /etc/hosts
+    fi
+fi
+
 echo "tux2lab post-install completed: $(date)"
 
 ######################################################################
