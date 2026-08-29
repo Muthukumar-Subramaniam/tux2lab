@@ -403,10 +403,10 @@ fn_check_and_create_host_record() {
     # Extract short hostname for use with tools that need it
     kickstart_short_hostname="${kickstart_hostname%%.*}"
 
-    print_info "Checking DNS record for \"${kickstart_hostname}\"..."
+    print_info "Checking DNS record..."
     if ! fn_dns_record_exists "${kickstart_hostname}"
     then
-        print_info "No DNS record found for \"${kickstart_hostname}\"."
+        print_info "No DNS record found."
         local _dnsbinder_flag
         _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
         
@@ -1860,7 +1860,11 @@ _summary+="
   ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${lab_infra_server_hostname}
   ${MAKE_IT_CYAN}✓ Requested OS     :${RESET_COLOR} ${os_name_and_version}"
 
-echo -e "$_summary"
+# Skipped for golden image builds: that VM is temporary scaffolding and its
+# address details already appear in the DNS record output above.
+if $golden_image_creation_not_requested; then
+    echo -e "$_summary"
+fi
 
 # Determine provision method from invocation flags
 provision_method="pxe"
@@ -1958,9 +1962,9 @@ if [[ -n "$provision_json" ]]; then
 fi
 
 if ! $invoked_with_golden_image; then
-    print_info "Kickstart configs ready for '${kickstart_hostname}'."
+    print_info "Kickstart configs ready."
 else
-    print_info "Golden boot configs ready for '${kickstart_hostname}'."
+    print_info "Golden boot configs ready."
 fi
 
 fn_release_host_lock

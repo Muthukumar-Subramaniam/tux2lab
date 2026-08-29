@@ -438,7 +438,7 @@ golden_image_rebuild() {
         for f in "${matched_files[@]}"; do
             local base
             base=$(basename "$f" .qcow2)
-            print_task "Removing existing golden image: ${base}..."
+            print_task "Removing existing golden image..."
             sudo rm -f "$f"
             sudo rm -f "${GOLDEN_IMAGE_DIR}/${base}_VARS.fd"
             print_task_done
@@ -505,7 +505,7 @@ golden_image_rebuild() {
         base=$(basename "$selected_file" .qcow2)
 
         print_info "Rebuilding golden image: ${image_labels[$((choice-1))]}"
-        print_task "Removing existing golden image: ${base}..."
+        print_task "Removing existing golden image..."
         sudo rm -f "$selected_file"
         sudo rm -f "${GOLDEN_IMAGE_DIR}/${base}_VARS.fd"
         print_task_done

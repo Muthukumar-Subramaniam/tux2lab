@@ -182,7 +182,7 @@ mkdir -p /tux2lab-data/golden-images-disk-store
 # The hostname from ksmanager already includes the version
 golden_image_path="/tux2lab-data/golden-images-disk-store/${qemu_kvm_hostname}.qcow2"
 
-print_info "Starting installation of VM \"${qemu_kvm_hostname}\" to create golden image disk..."
+print_info "Starting installation to create the golden image disk..."
 
 # Golden image builds use higher specs (SELinux policy compilation, dracut, depmod are heavy)
 golden_build_memory=4096
