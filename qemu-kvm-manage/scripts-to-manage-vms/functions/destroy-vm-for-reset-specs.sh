@@ -19,7 +19,7 @@ destroy_vm_for_reset_specs() {
     fi
     
     # Undefine the VM
-    print_task "Undefining VM \"$vm_hostname\"..."
+    print_task "Undefining VM..."
     if error_msg=$(sudo virsh undefine "$vm_hostname" --nvram 2>&1); then
         print_task_done
     else
@@ -29,7 +29,7 @@ destroy_vm_for_reset_specs() {
     fi
     
     # Delete VM folder and contents
-    print_task "Deleting VM folder /tux2lab-data/vms/${vm_hostname}..."
+    print_task "Deleting VM folder..."
     if sudo rm -rf "/tux2lab-data/vms/${vm_hostname}"; then
         print_task_done
     else

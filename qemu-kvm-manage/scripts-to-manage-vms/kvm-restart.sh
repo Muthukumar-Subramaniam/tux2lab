@@ -41,7 +41,7 @@ vm_hostname_arg="$VM_HOSTNAME_ARG"
 restart_vm() {
     local vm_name="$1"
     
-    print_task "Restarting VM '$vm_name'..."
+    print_task "Restarting VM..."
     
     # Check if VM exists in 'virsh list --all'
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then

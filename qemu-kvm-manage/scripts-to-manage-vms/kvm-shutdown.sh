@@ -44,7 +44,7 @@ source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/shutdown-vm.sh
 shutdown_vm_wrapper() {
     local vm_name="$1"
     
-    print_task "Shutting down VM '$vm_name'..."
+    print_task "Shutting down VM..."
     
     # Check if VM exists in 'virsh list --all'
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then

@@ -15,7 +15,7 @@
 #   SHUTDOWN_VM_STRICT=false shutdown_vm "vm-hostname"
 #   
 #   # Custom message context
-#   SHUTDOWN_VM_CONTEXT="for maintenance" shutdown_vm "vm-hostname"
+#   SHUTDOWN_VM_CONTEXT="Powering off for maintenance" shutdown_vm "vm-hostname"
 #
 # Environment Variables:
 #   SHUTDOWN_VM_STRICT - If "false", warnings only (default: true, returns 1 on errors)
@@ -43,12 +43,12 @@ shutdown_vm() {
     
     # Check if VM is running
     if ! sudo virsh list | awk -v vm="$vm_hostname" '$2 == vm {found=1; exit} END {exit !found}'; then
-        print_info "VM \"$vm_hostname\" is not running (already stopped)."
+        print_info "VM is not running (already stopped)."
         return 0
     fi
     
     # VM is running, proceed with graceful shutdown
-    print_task "${context} to VM \"$vm_hostname\"..."
+    print_task "${context}..."
     
     if error_msg=$(sudo virsh shutdown "$vm_hostname" 2>&1); then
         print_task_done

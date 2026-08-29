@@ -22,7 +22,7 @@ resize_disk_if_larger() {
     local vm_disk_path="/tux2lab-data/vms/${vm_hostname}/${vm_hostname}.qcow2"
     
     if [[ "$current_disk_gib" -gt "$base_disk_gib" ]]; then
-        print_task "Resizing disk to ${current_disk_gib} GiB for VM \"$vm_hostname\"..."
+        print_task "Resizing disk to ${current_disk_gib} GiB..."
         if sudo qemu-img resize "${vm_disk_path}" "${current_disk_gib}G" >/dev/null 2>&1; then
             print_task_done
         else

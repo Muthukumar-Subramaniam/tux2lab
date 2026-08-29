@@ -41,7 +41,7 @@ vm_hostname_arg="$VM_HOSTNAME_ARG"
 stop_vm() {
     local vm_name="$1"
     
-    print_task "Stopping VM '$vm_name'..."
+    print_task "Stopping VM..."
     
     # Check if VM exists in 'virsh list --all'
     if ! sudo virsh list --all | awk '{print $2}' | grep -Fxq "$vm_name"; then
