@@ -179,7 +179,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     # Handle MAC address based on operation type
     if [[ "$RESET_SPECS" == "yes" ]]; then
         # For reset-specs, generate new MAC (VM will be destroyed and recreated)
-        print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
+        print_task "Generating MAC address..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
         if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
             print_task_fail
@@ -190,7 +190,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         print_task_done
     else
         # For regular reimage, preserve existing MAC
-        print_task "Getting MAC address from existing VM \"${qemu_kvm_hostname}\"..."
+        print_task "Getting MAC address from existing VM..."
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/get-vm-mac-address.sh
         if ! GENERATED_MAC=$(get_vm_mac_address "${qemu_kvm_hostname}"); then
             print_task_fail
@@ -202,7 +202,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         print_task_done
     fi
 
-    print_info "Creating first boot environment for '${qemu_kvm_hostname}' using ksmanager..."
+    print_info "Creating first boot environment via ksmanager..."
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
     ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
@@ -232,7 +232,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    print_task "Updating /etc/hosts..."
     _etc_hosts_ipv4="${IPV4_ADDRESS}"
     [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
     if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
@@ -300,7 +300,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         fi
     else
         # Default path: preserve existing specs unless explicitly overridden
-        print_task "Reimaging VM '${qemu_kvm_hostname}' by replacing qcow2 disk..."
+        print_task "Reimaging by replacing qcow2 disk..."
         
         # Apply CPU/memory overrides to the shut-off VM's definition
         if [[ "$VM_CPUS_SPECIFIED" == "true" ]]; then
@@ -349,7 +349,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
         
         # Start reimaging process
         source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/start-vm-for-reimage.sh
-        if ! start_vm_for_reimage "$qemu_kvm_hostname" "reimaging via golden image disk"; then
+        if ! start_vm_for_reimage "$qemu_kvm_hostname"; then
             fn_release_vm_hostname_lock
             FAILED_VMS+=("$qemu_kvm_hostname")
             continue
@@ -364,7 +364,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
-    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "reimaging via golden image disk" "Reimaging via golden image disk takes ~1 minute."
+    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "Reimage" "Reimaging via golden image disk takes ~1 minute."
 done
 
 # Summary for multiple VMs

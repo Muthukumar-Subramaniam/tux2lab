@@ -180,7 +180,9 @@ if [[ -n "$hosts_list" ]]; then
     
     for vm_name in "${validated_hosts[@]}"; do
         ((++current))
-        print_info "Progress: $current/$total_vms"
+        if [[ ${total_vms} -gt 1 ]]; then
+            print_info "Processing VM ${current}/${total_vms}: ${vm_name}"
+        fi
         # Pass true to skip individual confirmation (bulk confirmation already handled above)
         exit_code=0
         remove_vm "$vm_name" true || exit_code=$?

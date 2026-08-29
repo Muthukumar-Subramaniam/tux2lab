@@ -4,10 +4,10 @@
 #
 # Usage:
 #   source /path/to/start-vm-for-reimage.sh
-#   start_vm_for_reimage "vm-hostname" "reimage-description"
+#   start_vm_for_reimage "vm-hostname"
 #
 # Example:
-#   start_vm_for_reimage "myvm" "reimaging via golden image disk"
+#   start_vm_for_reimage "myvm"
 #
 # Returns:
 #   0 - VM started successfully
@@ -15,14 +15,13 @@
 
 start_vm_for_reimage() {
     local vm_hostname="$1"
-    local reimage_description="${2:-reimaging}"
     
     if [[ -z "$vm_hostname" ]]; then
         print_error "start_vm_for_reimage: VM hostname not provided."
         return 1
     fi
     
-    print_task "Starting VM \"$vm_hostname\" (${reimage_description})..."
+    print_task "Starting VM..."
     if error_msg=$(sudo virsh start "$vm_hostname" 2>&1); then
         print_task_done
         return 0

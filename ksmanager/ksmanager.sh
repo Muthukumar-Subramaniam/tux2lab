@@ -334,6 +334,27 @@ fn_get_dnsbinder_create_flag() {
     esac
 }
 
+# dnsbinder prints its own progress, which is too verbose inside an install.
+# It writes errors to stdout, so both streams are captured and kept only on failure.
+fn_run_dnsbinder() {
+    local _rc=0 _out
+    _out=$(sudo "${dnsbinder_script}" "$@" 2>&1) || _rc=$?
+    if [[ ${_rc} -ne 0 ]]; then
+        _dnsbinder_output="${_out}"
+    else
+        _dnsbinder_output=""
+    fi
+    return ${_rc}
+}
+
+# Closes the open task line before showing what dnsbinder said.
+fn_dnsbinder_failed() {
+    print_task_fail
+    [[ -n "${_dnsbinder_output:-}" ]] && echo "  ${_dnsbinder_output//$'\n'/$'\n'  }"
+    print_error "$1"
+    exit 1
+}
+
 # Wait for DNS record based on stack_mode
 fn_wait_for_dns_record() {
     local hostname="$1"
@@ -403,34 +424,33 @@ fn_check_and_create_host_record() {
     # Extract short hostname for use with tools that need it
     kickstart_short_hostname="${kickstart_hostname%%.*}"
 
-    print_info "Checking DNS record..."
     if ! fn_dns_record_exists "${kickstart_hostname}"
     then
-        print_info "No DNS record found."
         local _dnsbinder_flag
         _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
         
         if $invoked_with_qemu_kvm; then
-            sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
-
-            if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
-                print_error "Failed to create DNS record for \"${kickstart_hostname}\"."
-                exit 1
+            print_task "Creating DNS record..."
+            if ! fn_run_dnsbinder "${_dnsbinder_flag}" "${kickstart_hostname}" \
+               || ! fn_wait_for_dns_record "${kickstart_hostname}"; then
+                fn_dnsbinder_failed "Failed to create DNS record for \"${kickstart_hostname}\"."
             fi
+            print_task_done
 
             # For --ipv6-only PXE: create temp IPv4 record for PXE boot
             if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image; then
                 pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
-                print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
-                sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
-                if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
-                    print_error "Failed to create temporary PXE bootstrap record."
-                    exit 1
+                print_task "Creating IPv4 PXE bootstrap record..."
+                if ! fn_run_dnsbinder -c4 "${pxe_bootstrap_hostname}" \
+                   || ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                    fn_dnsbinder_failed "Failed to create temporary PXE bootstrap record."
                 fi
+                print_task_done
             fi
 
             flush_dns_cache
         else
+            print_info "No DNS record found."
             while :
             do
                 read -r -p "Enter (y) to create a DNS record for \"${kickstart_hostname}\" or (n) to exit: " v_confirmation
@@ -457,45 +477,55 @@ fn_check_and_create_host_record() {
             done
         fi
     else
-        print_info "DNS record found for \"${kickstart_hostname}\"."
         local ipv4=$(dig @"${dnsbinder_server_ipv4_address}" +short A "${kickstart_hostname}" | head -1)
         local ipv6=$(dig @"${dnsbinder_server_ipv4_address}" +short AAAA "${kickstart_hostname}" | head -1)
-        [[ -n "${ipv4}" ]] && print_info "${kickstart_hostname} has address ${ipv4}"
-        [[ -n "${ipv6}" ]] && print_info "${kickstart_hostname} has IPv6 address ${ipv6}"
 
         # If stack mode was explicitly changed, recreate DNS to match
+        local needs_recreate=false
         if $stack_mode_explicit; then
-            local needs_recreate=false
             case "${stack_mode}" in
                 ipv4) [[ -n "${ipv6}" ]] && needs_recreate=true ;;
                 ipv6) [[ -n "${ipv4}" ]] && needs_recreate=true ;;
                 dual) [[ -z "${ipv4}" || -z "${ipv6}" ]] && needs_recreate=true ;;
             esac
+        fi
+
+        if $invoked_with_qemu_kvm && ! $needs_recreate; then
+            print_task "Creating DNS record..."
+            print_task_skip
+        fi
+
+        if $stack_mode_explicit; then
             if $needs_recreate; then
-                print_info "Stack mode changed to '${stack_mode}' — recreating DNS record..."
-                sudo "${dnsbinder_script}" -dy "${kickstart_hostname}"
+                local _stack_label
+                case "${stack_mode}" in
+                    ipv4) _stack_label="ipv4-only" ;;
+                    ipv6) _stack_label="ipv6-only" ;;
+                    *)    _stack_label="dual-stack" ;;
+                esac
+                print_task "Recreating DNS record for ${_stack_label}..."
+                fn_run_dnsbinder -dy "${kickstart_hostname}" || true
                 # Clean up stale PXE bootstrap record from previous ipv6-only PXE install
                 _old_bootstrap="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
                 if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${_old_bootstrap}" | grep -q '^[0-9]'; then
-                    sudo "${dnsbinder_script}" -dy "${_old_bootstrap}"
-                    print_info "Removed stale PXE bootstrap record ${_old_bootstrap}"
+                    fn_run_dnsbinder -dy "${_old_bootstrap}" || true
                 fi
                 local _dnsbinder_flag
                 _dnsbinder_flag=$(fn_get_dnsbinder_create_flag)
-                sudo "${dnsbinder_script}" ${_dnsbinder_flag} "${kickstart_hostname}"
-                if ! fn_wait_for_dns_record "${kickstart_hostname}"; then
-                    print_error "Failed to recreate DNS record for \"${kickstart_hostname}\"."
-                    exit 1
+                if ! fn_run_dnsbinder "${_dnsbinder_flag}" "${kickstart_hostname}" \
+                   || ! fn_wait_for_dns_record "${kickstart_hostname}"; then
+                    fn_dnsbinder_failed "Failed to recreate DNS record for \"${kickstart_hostname}\"."
                 fi
+                print_task_done
                 # For --ipv6-only PXE: create temp IPv4 record
                 if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image; then
                     pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
-                    print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
-                    sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
-                    if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
-                        print_error "Failed to create temporary PXE bootstrap record."
-                        exit 1
+                    print_task "Creating IPv4 PXE bootstrap record..."
+                    if ! fn_run_dnsbinder -c4 "${pxe_bootstrap_hostname}" \
+                       || ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                        fn_dnsbinder_failed "Failed to create temporary PXE bootstrap record."
                     fi
+                    print_task_done
                 fi
                 flush_dns_cache
             fi
@@ -505,12 +535,12 @@ fn_check_and_create_host_record() {
         if [[ "${stack_mode}" == "ipv6" ]] && ! $invoked_with_golden_image && [[ -z "${pxe_bootstrap_hostname:-}" ]]; then
             pxe_bootstrap_hostname="${kickstart_short_hostname}-ipv4.${ipv4_domain}"
             if ! dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${pxe_bootstrap_hostname}" | grep -q '^[0-9]'; then
-                print_info "Creating temporary IPv4 record '${pxe_bootstrap_hostname}' for PXE boot..."
-                sudo "${dnsbinder_script}" -c4 "${pxe_bootstrap_hostname}"
-                if ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
-                    print_error "Failed to create temporary PXE bootstrap record."
-                    exit 1
+                print_task "Creating IPv4 PXE bootstrap record..."
+                if ! fn_run_dnsbinder -c4 "${pxe_bootstrap_hostname}" \
+                   || ! fn_wait_for_dns_a_record "${pxe_bootstrap_hostname}"; then
+                    fn_dnsbinder_failed "Failed to create temporary PXE bootstrap record."
                 fi
+                print_task_done
                 flush_dns_cache
             fi
         fi
@@ -586,15 +616,16 @@ if $remove_host_requested; then
         cleanup_hostname="${cleanup_hostname}.${ipv4_domain}"
     fi
     
-    print_info "Removing host '${cleanup_hostname}' from all ksmanager databases..."
-    
     if ! fn_acquire_host_lock "${cleanup_hostname}"; then
         exit 1
     fi
 
+    print_task "Cleaning up ksmanager databases..."
+
     # 1. Snapshot and remove cache row atomically under lock
     if [[ -f "${mac_cache_file}" ]]; then
         if ! fn_acquire_mac_cache_lock; then
+            print_task_fail
             fn_release_host_lock
             exit 1
         fi
@@ -608,48 +639,26 @@ if $remove_host_requested; then
             awk -v host="${cleanup_hostname}" '$1 != host' "${mac_cache_file}" > "${mac_cache_file}.tmp.$$" && \
                 mv "${mac_cache_file}.tmp.$$" "${mac_cache_file}"
             rm -f "${mac_cache_file}.tmp.$$"
-            print_info "Removed from MAC address cache"
-        else
-            print_info "No MAC address cache entry found"
         fi
 
         fn_remove_hosts_json_entry "${cleanup_hostname}"
 
         fn_release_mac_cache_lock
-    else
-        print_info "No MAC address cache entry found"
     fi
     
     # 2. Remove kickstart directory
     if [[ -d "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}" ]]; then
         rm -rf "${ksmanager_hub_dir}/kickstarts/${cleanup_hostname}"
-        print_info "Removed kickstart files"
-    else
-        print_info "No kickstart files found"
     fi
     
     # 3. Remove iPXE config file
     if [[ -n "$ipxe_cfg_mac" ]]; then
-        if [[ -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe" ]]; then
-            rm -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe"
-            print_info "Removed iPXE config file (${ipxe_cfg_mac}.ipxe)"
-        else
-            print_info "No iPXE config file found"
-        fi
-    else
-        print_info "No iPXE config (no MAC address found)"
+        rm -f "${ipxe_web_dir}/${ipxe_cfg_mac}.ipxe"
     fi
     
     # 4. Remove golden boot network config
     if [[ -n "$ipxe_cfg_mac" ]]; then
-        if [[ -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}" ]]; then
-            rm -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}"
-            print_info "Removed golden boot network config"
-        else
-            print_info "No golden boot network config found"
-        fi
-    else
-        print_info "No golden boot config (no MAC address found)"
+        rm -f "${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac}"
     fi
     
     # 5. Remove KEA DHCP reservation
@@ -714,6 +723,7 @@ if $remove_host_requested; then
         mkdir -p "$kea_config_temp_dir"
 
         if ! fn_copy_mac_cache_snapshot_locked "${kea_cache_snapshot}"; then
+            print_task_fail
             print_error "Could not snapshot MAC cache for KEA rebuild. Aborting KEA reservation refresh."
             fn_release_host_lock
             exit 1
@@ -721,6 +731,7 @@ if $remove_host_requested; then
         
         # Rebuild DHCPv4 reservations
         if ! kea_dhcp4_existing_config=$(sudo cat "$kea_dhcp4_config_file"); then
+            print_task_fail
             print_error "Failed to read KEA DHCPv4 config: ${kea_dhcp4_config_file}"
             fn_release_host_lock
             exit 1
@@ -756,6 +767,7 @@ EOF
         
         # Rebuild DHCPv6 reservations
         if ! kea_dhcp6_existing_config=$(sudo cat "$kea_dhcp6_config_file"); then
+            print_task_fail
             print_error "Failed to read KEA DHCPv6 config: ${kea_dhcp6_config_file}"
             fn_release_host_lock
             exit 1
@@ -795,6 +807,7 @@ EOF
             -u "$kea_api_auth" \
             -d @"$kea_dhcp4_tmp_config" \
             "$kea_api_url" &>/dev/null; then
+            print_task_fail
             print_error "Failed to push KEA DHCPv4 config update"
             rm -f "${kea_cache_snapshot}"
             fn_release_host_lock
@@ -806,6 +819,7 @@ EOF
             -u "$kea_api_auth" \
             -d @"$kea_dhcp6_tmp_config" \
             "$kea_api_url" &>/dev/null; then
+            print_task_fail
             print_error "Failed to push KEA DHCPv6 config update"
             rm -f "${kea_cache_snapshot}"
             fn_release_host_lock
@@ -813,14 +827,15 @@ EOF
         fi
 
         rm -f "${kea_cache_snapshot}"
-        
-        print_info "Removed KEA DHCP reservations (IPv4 and IPv6)"
     fi
+    
+    print_task_done
     
     # 6. Remove DNS record (check both A and AAAA for stack-aware deletion)
     if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${cleanup_hostname}" | grep -q '^[0-9]' || \
        dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 AAAA "${cleanup_hostname}" | grep -q ':'; then
-        sudo "${dnsbinder_script}" -dy "${cleanup_hostname}"
+        print_task "Removing DNS record..."
+        fn_run_dnsbinder -dy "${cleanup_hostname}" || true
         
         # Verify deletion with retry mechanism (max 1 second)
         retry_count=0
@@ -837,13 +852,15 @@ EOF
         done
         
         if ${record_deleted}; then
-            print_info "Removed DNS record"
+            print_task_done
             flush_dns_cache
         else
+            print_task_fail
             print_warning "DNS record may not have been removed properly"
         fi
     else
-        print_info "No DNS record found"
+        print_task "Removing DNS record..."
+        print_task_skip
     fi
     
     # Also remove any -ipv4 PXE bootstrap record (created for --ipv6-only VMs)
@@ -851,12 +868,12 @@ EOF
     _cleanup_domain="${cleanup_hostname#*.}"
     _bootstrap_hostname="${_cleanup_short}-ipv4.${_cleanup_domain}"
     if dig @"${dnsbinder_server_ipv4_address}" +short +time=1 +tries=1 A "${_bootstrap_hostname}" | grep -q '^[0-9]'; then
-        sudo "${dnsbinder_script}" -dy "${_bootstrap_hostname}"
-        print_info "Removed PXE bootstrap record ${_bootstrap_hostname}"
+        print_task "Removing IPv4 PXE bootstrap record..."
+        fn_run_dnsbinder -dy "${_bootstrap_hostname}" || true
+        print_task_done
     fi
     
     fn_release_host_lock
-    print_success "Host '${cleanup_hostname}' has been removed from all ksmanager databases."
     exit 0
 fi
 
@@ -1182,7 +1199,6 @@ fn_check_and_create_mac_if_required() {
 
 # If MAC address was provided via --mac flag, use it directly
 if [[ -n "${mac_from_flag}" ]]; then
-    print_info "Using MAC address provided via --mac flag: ${mac_from_flag}"
     mac_address_of_host="${mac_from_flag}"
     # Validate the provided MAC address
     if ! fn_validate_mac "${mac_address_of_host}"; then
@@ -1614,7 +1630,7 @@ if ! $invoked_with_golden_image; then
 fi
 
 if $invoked_with_golden_image; then
-    print_task "Setting environment variables in network config..."
+    print_task "Setting environment variables..."
     fn_set_environment "${ksmanager_hub_dir}"/golden-boot-mac-configs/network-config-"${ipxe_cfg_mac_address}"
     # Strip irrelevant fields based on stack mode
     _net_cfg="${ksmanager_hub_dir}/golden-boot-mac-configs/network-config-${ipxe_cfg_mac_address}"
@@ -1860,8 +1876,8 @@ _summary+="
   ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${lab_infra_server_hostname}
   ${MAKE_IT_CYAN}✓ Requested OS     :${RESET_COLOR} ${os_name_and_version}"
 
-# Skipped for golden image builds: that VM is temporary scaffolding and its
-# address details already appear in the DNS record output above.
+# Skipped for golden image builds: that VM is temporary scaffolding, so its
+# address and MAC are of no use once the disk is captured.
 if $golden_image_creation_not_requested; then
     echo -e "$_summary"
 fi

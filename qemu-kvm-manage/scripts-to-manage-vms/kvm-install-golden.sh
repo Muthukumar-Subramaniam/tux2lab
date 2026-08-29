@@ -225,7 +225,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fi
 
     # Run ksmanager and extract VM details
-    print_task "Generating MAC address for VM \"${qemu_kvm_hostname}\"..."
+    print_task "Generating MAC address..."
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/generate-mac-address.sh
     if ! GENERATED_MAC=$(generate_unique_mac "${qemu_kvm_hostname}"); then
         print_task_fail
@@ -235,7 +235,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
     fi
     print_task_done
 
-    print_info "Creating first boot environment for '${qemu_kvm_hostname}' using ksmanager..."
+    print_info "Creating first boot environment via ksmanager..."
 
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/run-ksmanager.sh
     ksmanager_opts="--qemu-kvm --golden-image --mac ${GENERATED_MAC} --distro $OS_DISTRO --version $VERSION_TYPE"
@@ -269,7 +269,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Update /etc/hosts (skip temp IPv4 for --ipv6-only VMs)
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/update-etc-hosts.sh
-    print_task "Updating /etc/hosts for ${qemu_kvm_hostname}..."
+    print_task "Updating /etc/hosts..."
     _etc_hosts_ipv4="${IPV4_ADDRESS}"
     [[ "${STACK_MODE}" == "ipv6" ]] && _etc_hosts_ipv4=""
     if ! add_etc_hosts_entry "${qemu_kvm_hostname}" "${_etc_hosts_ipv4}" "${IPV6_ADDRESS}"; then
@@ -302,7 +302,7 @@ for qemu_kvm_hostname in "${HOSTNAMES[@]}"; do
 
     # Show completion message for single VM
     source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/show-vm-completion-message.sh
-    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "installation via golden image disk" "Installation via golden image disk takes ~1 minute per VM."
+    show_vm_completion_message "${qemu_kvm_hostname}" "${ATTACH_CONSOLE}" "${TOTAL_VMS}" "Installation" "Installation via golden image disk takes ~1 minute per VM."
 done
 
 # Summary for multiple VMs

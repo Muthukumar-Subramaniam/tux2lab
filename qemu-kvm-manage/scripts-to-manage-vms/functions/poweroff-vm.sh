@@ -13,8 +13,8 @@
 #   # Strict mode: errors cause return 1
 #   POWEROFF_VM_STRICT=true poweroff_vm "vm-hostname"
 #   
-#   # Custom message context
-#   POWEROFF_VM_CONTEXT="before reimaging" poweroff_vm "vm-hostname"
+#   # Custom message context, used as the whole task line
+#   POWEROFF_VM_CONTEXT="Powering off before reimaging" poweroff_vm "vm-hostname"
 #
 # Environment Variables:
 #   POWEROFF_VM_STRICT - If "true", return 1 on errors (default: warnings only)
@@ -40,7 +40,7 @@ poweroff_vm() {
     fi
     
     # VM is running, proceed with force power-off
-    print_task "Powering off VM \"$vm_hostname\" (${context})..."
+    print_task "${context}..."
     
     if error_msg=$(sudo virsh destroy "$vm_hostname" 2>&1); then
         print_task_done
