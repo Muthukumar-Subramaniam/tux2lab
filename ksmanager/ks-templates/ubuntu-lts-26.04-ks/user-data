@@ -42,6 +42,9 @@ autoinstall:
     install-server: true
 
   storage:
+    # curtin allocates a multi-GB /swap.img by default, which the lab does not need
+    swap:
+      size: 0
     config:
 # Configure Disk
       - ptable: gpt
