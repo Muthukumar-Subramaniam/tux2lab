@@ -61,7 +61,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 | Feature | Detail |
 |---|---|
-| **Image** | `ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.0.0` |
+| **Image** | `ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.0.1` |
 | **Runtime** | Podman (rootful, `--network=host --privileged`) |
 | **Persistence** | All state in `/tux2lab-data/` (bind-mounted into container) |
 | **Lifecycle** | Start/stop/rebuild without touching the host |
