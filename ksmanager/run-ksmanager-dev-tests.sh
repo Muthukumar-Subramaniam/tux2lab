@@ -25,7 +25,7 @@ FAIL_COUNT=0
 
 cleanup() {
 	rm -rf "${TEST_ROOT}"
-	rm -rf "${LAB_ROOT}/tux2lab-data" "${LAB_ROOT}/almalinux/10"
+	rm -rf "${LAB_ROOT}/tux2lab-data" "${LAB_ROOT}/almalinux/10" "${LAB_ROOT}/azure-linux/3.0"
 }
 trap cleanup EXIT
 
@@ -194,7 +194,9 @@ setup_sandbox() {
 	mkdir -p "${SANDBOX_HUB}/ksmanager/golden-boot-templates"
 	mkdir -p "${SANDBOX_HUB}/ksmanager/post-install-templates"
 	mkdir -p "${SANDBOX_HUB}/named-manage"
-	mkdir -p "${TEST_ROOT}/etc"
+	mkdir -p "${SANDBOX_HUB}/shared-functions"
+	mkdir -p "${LAB_ROOT}/tux2lab-data"
+	mkdir -p "${LAB_ROOT}/tux2lab-data/kea"
 
 	cat > "${SANDBOX_HUB}/common-utils/color-functions.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -205,6 +207,7 @@ print_success() { echo "[OK] $*"; }
 print_task() { echo "[TASK] $*"; }
 print_task_done() { echo "[TASK] done"; }
 print_task_fail() { echo "[TASK] fail"; }
+print_task_skip() { echo "[TASK] skipped"; }
 print_notify() { echo "$*"; }
 print_green() { echo "$*"; }
 print_yellow() { echo "$*"; }
@@ -220,6 +223,7 @@ declare -A DISTRO_AVAILABLE_VERSIONS=(
 	[rhel]="10 9 8"
 	[ubuntu-lts]="26.04 24.04 22.04"
 	[opensuse-leap]="16.0"
+	[azure-linux]="3.0"
 )
 declare -A DISTRO_DISPLAY_NAMES=(
 	[almalinux]="AlmaLinux"
@@ -229,7 +233,13 @@ declare -A DISTRO_DISPLAY_NAMES=(
 	[rhel]="Red Hat Enterprise Linux"
 	[ubuntu-lts]="Ubuntu Server LTS"
 	[opensuse-leap]="openSUSE Leap"
+	[azure-linux]="Azure Linux"
 )
+declare -A ISO_FILENAMES=(
+	[azure-linux:3.0]="AzureLinux-3.0-x86_64.iso"
+)
+declare -A REPO_URLS=()
+declare -A APPSTREAM_REPO_URLS=()
 fn_is_valid_version() {
 	local distro_base="$1"
 	local version="$2"
@@ -257,6 +267,13 @@ set host get_hostname
 set domain get_ipv4_domain
 EOF
 
+	cp "${REPO_ROOT}/ksmanager/ks-templates/azure-linux-3.0-unattended.jq" \
+		"${SANDBOX_HUB}/ksmanager/ks-templates/"
+	cp "${REPO_ROOT}/ksmanager/ipxe-templates/ipxe-template-azure-linux.ipxe" \
+		"${SANDBOX_HUB}/ksmanager/ipxe-templates/"
+	cp "${REPO_ROOT}/ksmanager/post-install-templates/post-install-azure-linux.sh.template" \
+		"${SANDBOX_HUB}/ksmanager/post-install-templates/"
+
 	cat > "${SANDBOX_HUB}/ksmanager/golden-boot-templates/tux2lab-golden-boot.service" <<'EOF'
 [Unit]
 Description=golden-boot
@@ -283,12 +300,19 @@ exit 0
 EOF
 	chmod +x "${SANDBOX_HUB}/named-manage/dnsbinder.sh"
 
+	cat > "${SANDBOX_HUB}/shared-functions/flush-dns-cache.sh" <<'EOF'
+#!/usr/bin/env bash
+flush_dns_cache() { return 0; }
+EOF
+
 	cp "${SOURCE_KSMANAGER}" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
-	sed -i "s|^source /etc/environment|source ${TEST_ROOT}/etc/environment|" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
-	sed -i "s|/tux2lab|${SANDBOX_HUB}|g" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
+	sed -e "s|/tux2lab-data|${LAB_ROOT}/tux2lab-data|g" \
+		-e "s|/tux2lab/|${SANDBOX_HUB}/|g" \
+		"${SANDBOX_HUB}/ksmanager/ksmanager.sh" > "${SANDBOX_HUB}/ksmanager/ksmanager.sh.tmp"
+	mv "${SANDBOX_HUB}/ksmanager/ksmanager.sh.tmp" "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
 	chmod +x "${SANDBOX_HUB}/ksmanager/ksmanager.sh"
 
-	cat > "${TEST_ROOT}/etc/environment" <<EOF
+	cat > "${LAB_ROOT}/tux2lab-data/lab_environment_vars" <<EOF
 mgmt_super_user=${USER}
 dnsbinder_server_ipv4_address=192.0.2.53
 dnsbinder_server_ipv6_address=2001:db8::53
@@ -303,10 +327,34 @@ dnsbinder_last24_subnet=192.0.2.20
 dnsbinder_ipv6_gateway=
 dnsbinder_ipv6_prefix=64
 dnsbinder_ipv6_ula_subnet=fd00:1::/64
+lab_admin_shadow_password='\$6\$devtest\$mocked_shadow_hash'
+EOF
+
+	cat > "${LAB_ROOT}/tux2lab-data/kea/kea-dhcp4.conf" <<'EOF'
+{"Dhcp4":{"subnet4":[{"reservations":[]}]}}
+EOF
+	cat > "${LAB_ROOT}/tux2lab-data/kea/kea-dhcp6.conf" <<'EOF'
+{"Dhcp6":{"subnet6":[{"reservations":[]}]}}
 EOF
 
 	mkdir -p "${LAB_ROOT}/almalinux/10"
 	printf 'AlmaLinux Mock\n' > "${LAB_ROOT}/almalinux/10/.discinfo"
+
+	mkdir -p "${LAB_ROOT}/tux2lab-data/os-repos/azure-linux/3.0/config/packages"
+	cat > "${LAB_ROOT}/tux2lab-data/os-repos/azure-linux/3.0/config/attended_config.json" <<'EOF'
+{
+  "SystemConfigs": [
+    {
+      "Name": "Azure Linux Full",
+      "PackageLists": ["packages/full.json"],
+      "Packages": [],
+      "KernelOptions": {"default": "kernel"},
+      "PostInstallScripts": []
+    }
+  ]
+}
+EOF
+	printf '{"packages":["filesystem"]}\n' > "${LAB_ROOT}/tux2lab-data/os-repos/azure-linux/3.0/config/packages/full.json"
 }
 
 run_ksmanager() {
@@ -407,7 +455,7 @@ test_json_provision_result() {
 
 		local json_fields
 		json_fields=$(jq 'length' "${KSMANAGER_HUB_DIR}/kickstarts/${host}/provision-result.json")
-		assert_eq "provision-result has 20 fields" "${json_fields}" "20"
+		assert_eq "provision-result has 21 fields" "${json_fields}" "21"
 	fi
 
 	# Phase 2: Central hosts.json
@@ -433,10 +481,41 @@ test_json_provision_result() {
 	fi
 }
 
+test_create_azure_linux_host() {
+	local host="node5.example.test"
+	local mac="aa:bb:cc:dd:ee:06"
+	local mac_ipxe="aa-bb-cc-dd-ee-06"
+	local config_dir="${KSMANAGER_HUB_DIR}/kickstarts/${host}/azure-linux-3.0-config"
+
+	run_ksmanager "${host}" --distro azure-linux --version 3.0 --mac "${mac}" --qemu-kvm >"${TEST_ROOT}/ksmanager_test_azure.log" 2>&1
+	local rc=$?
+	assert_eq "azure-linux create exits 0" "${rc}" "0"
+
+	assert_true "azure-linux unattended config exists" test -f "${config_dir}/unattended_config.json"
+	assert_true "azure-linux post-install exists" test -f "${config_dir}/tux2lab-post-install.sh"
+	assert_true "azure-linux package lists copied" test -f "${config_dir}/packages/full.json"
+	assert_true "azure-linux iPXE file exists" test -f "${IPXE_DIR}/${mac_ipxe}.ipxe"
+	assert_true "azure-linux iPXE uses live ISO" grep -q "root=live:http://${TMP_INFRA_HOST}/iso-files/AzureLinux-3.0-x86_64.iso" "${IPXE_DIR}/${mac_ipxe}.ipxe"
+	assert_true "azure-linux iPXE points to host config" grep -q -- "--image-config=http://${TMP_INFRA_HOST}/ksmanager-hub/kickstarts/${host}/azure-linux-3.0-config" "${IPXE_DIR}/${mac_ipxe}.ipxe"
+
+	if command -v jq &>/dev/null; then
+		local json_hostname json_disk json_user json_post
+		json_hostname=$(jq -r '.SystemConfigs[0].Hostname' "${config_dir}/unattended_config.json")
+		assert_eq "azure-linux hostname matches" "${json_hostname}" "${host}"
+		json_disk=$(jq -r '.Disks[0].TargetDisk.Value' "${config_dir}/unattended_config.json")
+		assert_eq "azure-linux target disk matches" "${json_disk}" "/dev/vda"
+		json_user=$(jq -r '.SystemConfigs[0].Users[1].Name' "${config_dir}/unattended_config.json")
+		assert_eq "azure-linux admin user matches" "${json_user}" "${USER}"
+		json_post=$(jq -r '.SystemConfigs[0].PostInstallScripts[-1].Path' "${config_dir}/unattended_config.json")
+		assert_eq "azure-linux post-install path matches" "${json_post}" "tux2lab-post-install.sh"
+	fi
+}
+
 test_create_host_noninteractive
 test_parallel_same_host_single_cache_row
 test_parallel_remove_host_safe
 test_json_provision_result
+test_create_azure_linux_host
 
 echo "[INFO] PASS=${PASS_COUNT} FAIL=${FAIL_COUNT}"
 if [[ ${FAIL_COUNT} -ne 0 ]]; then

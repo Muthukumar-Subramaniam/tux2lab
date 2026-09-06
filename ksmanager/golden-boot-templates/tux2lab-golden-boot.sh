@@ -15,6 +15,8 @@ if [[ "${DISTRO_ID}" == "ubuntu" ]] || [[ "${DISTRO_ID_LIKE}" == *"ubuntu"* ]] |
 	DISTRO_FAMILY="debian"
 elif [[ "${DISTRO_ID}" == "opensuse-leap" ]] || [[ "${DISTRO_ID}" == "opensuse" ]] || [[ "${DISTRO_ID_LIKE}" == *"suse"* ]]; then
 	DISTRO_FAMILY="opensuse"
+elif [[ "${DISTRO_ID}" == "azurelinux" ]] || [[ "${DISTRO_ID}" == "mariner" ]]; then
+	DISTRO_FAMILY="azurelinux"
 elif [[ "${DISTRO_ID}" == "rhel" ]] || [[ "${DISTRO_ID}" == "centos" ]] || [[ "${DISTRO_ID}" == "centos-stream" ]] || [[ "${DISTRO_ID}" == "almalinux" ]] || [[ "${DISTRO_ID}" == "rocky" ]] || [[ "${DISTRO_ID}" == "ol" ]] || [[ "${DISTRO_ID}" == "oraclelinux" ]] || [[ "${DISTRO_ID}" == "fedora" ]] || [[ "${DISTRO_ID_LIKE}" == *"rhel"* ]] || [[ "${DISTRO_ID_LIKE}" == *"fedora"* ]]; then
 	DISTRO_FAMILY="redhat"
 else
@@ -247,6 +249,13 @@ case "${DISTRO_FAMILY}" in
 			[[ "${dev}" == "lo" ]] && continue
 			nmcli connection delete uuid "${uuid}" 2>/dev/null || true
 		done
+		;;
+
+	azurelinux)
+		log "Performing Azure Linux network cleanup"
+		mkdir -p /root/systemd-network-golden-image
+		cp -a /etc/systemd/network/*.network /root/systemd-network-golden-image/ 2>/dev/null || true
+		rm -f /etc/systemd/network/10-eth0.network
 		;;
 esac
 
@@ -497,6 +506,31 @@ EOF
 			error_exit "Failed to activate NetworkManager connection"
 		fi
 		;;
+
+	azurelinux)
+		log "Configuring network using systemd-networkd"
+		{
+			echo "[Match]"
+			echo "Name=eth0"
+			echo
+			echo "[Network]"
+			if [ "$IPV4_ENABLED" = true ]; then
+				echo "Address=${IPv4_ADDRESS}/${IPv4_CIDR}"
+				echo "Gateway=${IPv4_GATEWAY}"
+				echo "DNS=${IPv4_DNS_SERVER}"
+			fi
+			if [ "$IPV6_ENABLED" = true ]; then
+				echo "Address=${IPv6_ADDRESS}/${IPv6_PREFIX}"
+				echo "DNS=${IPv6_DNS_SERVER}"
+			fi
+			echo "Domains=${IPv4_DNS_DOMAIN}"
+			echo "IPv6AcceptRA=no"
+		} > /etc/systemd/network/10-eth0.network
+
+		systemctl enable systemd-networkd.service systemd-resolved.service
+		ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+		systemctl restart systemd-networkd.service
+		;;
 esac
 
 log "Waiting for network to become ready..."
@@ -550,6 +584,14 @@ case "${DISTRO_FAMILY}" in
 		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt; then
 			update-ca-certificates
 			log "SSL certificate installed and CA certificates updated (OpenSUSE)"
+		else
+			log "WARNING: Failed to download SSL certificate, continuing anyway"
+		fi
+		;;
+	azurelinux)
+		if curl -fsSL "http://get_lab_infra_server_hostname/lab-config/certs/tux2lab-nginx-selfsigned.crt" -o /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt; then
+			update-ca-trust extract
+			log "SSL certificate installed and CA trust updated (Azure Linux)"
 		else
 			log "WARNING: Failed to download SSL certificate, continuing anyway"
 		fi
