@@ -201,6 +201,12 @@ Pre-stage a specific distribution (downloads and mounts its ISO):
 tux2lab distro setup almalinux -v 10
 ```
 
+Azure Linux 3 uses its native unattended installer and can be staged the same way:
+
+```bash
+tux2lab distro setup azure-linux -v 3.0
+```
+
 <details>
 <summary>See it in action</summary>
 

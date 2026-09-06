@@ -31,7 +31,7 @@ OPTIONS:
     --remove-host           Remove all provisioning artifacts for a host
     --qemu-kvm              Invoked via tux2lab vm deploy (internal)
     --golden-image          Invoked for golden image builds (internal)
-    --distro <name>         Specify distribution (e.g., alma, rocky, ubuntu)
+    --distro <name>         Specify distribution (e.g., alma, rocky, ubuntu, azure-linux)
     --version <ver>         Specify version (e.g., 10, 24.04)
     --mac <address>         Specify MAC address for DHCP reservation
     --ipv4-only             Create IPv4-only VM (no AAAA record, no IPv6 config)
@@ -966,9 +966,11 @@ fn_select_os_distro() {
             ubuntu-lts|ubuntu)           os_distribution="ubuntu-lts" ;;
             debian)                      os_distribution="debian" ;;
             opensuse-leap|opensuse|suse) os_distribution="opensuse-leap" ;;
+            azure-linux|azurelinux|mariner|cbl-mariner)
+                                          os_distribution="azure-linux" ;;
             *)
                 print_error "Invalid distro specified with --distro flag: ${distro_from_flag}"
-                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
+                print_info "Valid options: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azure-linux"
                 exit 1
                 ;;
         esac
@@ -1306,6 +1308,7 @@ else
     done
 fi
 
+redhat_based_distro_name=""
 if [[ "${os_distribution}" == "ubuntu-lts" ]]; then
     os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
     # Codename mapping centralized in distro-versions.conf
@@ -1317,6 +1320,8 @@ elif [[ "${os_distribution}" == "debian" ]]; then
 elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
     os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
     opensuse_version_number="${version}"
+elif [[ "${os_distribution}" == "azure-linux" ]]; then
+    os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
 else
     redhat_based_distro_name="${os_distribution}"
     os_name_and_version="${DISTRO_DISPLAY_NAMES[${os_distribution}]} ${version}"
@@ -1343,7 +1348,34 @@ if ! $golden_image_creation_not_requested || ! $invoked_with_golden_image; then
 fi
 
 if ! $invoked_with_golden_image; then
-    if [[ "${os_distribution}" == "opensuse-leap" ]]; then
+    if [[ "${os_distribution}" == "azure-linux" ]]; then
+        azure_config_dir="${host_kickstart_dir}/${os_distribution}-${version}-config"
+        if [[ ! -f "${mount_dir}/config/attended_config.json" ]]; then
+            print_error "Azure Linux attended installer config not found in mounted ISO."
+            print_info "Expected: ${mount_dir}/config/attended_config.json"
+            fn_release_host_lock
+            exit 1
+        fi
+        if ! mkdir -p "${azure_config_dir}" || \
+           ! rsync -a -q --delete "${mount_dir}/config/" "${azure_config_dir}/"; then
+            print_error "Failed to copy Azure Linux installer configuration."
+            fn_release_host_lock
+            exit 1
+        fi
+        if ! jq \
+            --arg hostname "${kickstart_hostname}" \
+            --arg disk "/dev/${disk_type_for_the_vm}" \
+            --arg username "${mgmt_super_user}" \
+            --arg password_hash "${shadow_password_super_mgmt_user}" \
+            --arg post_install_script "tux2lab-post-install.sh" \
+            -f "${ksmanager_main_dir}/ks-templates/azure-linux-3.0-unattended.jq" \
+            "${azure_config_dir}/attended_config.json" \
+            > "${azure_config_dir}/unattended_config.json"; then
+            print_error "Failed to generate Azure Linux unattended installer configuration."
+            fn_release_host_lock
+            exit 1
+        fi
+    elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
         if ! rsync -a -q "${ksmanager_main_dir}/ks-templates/${os_distribution}-${version}-profile.json" "${host_kickstart_dir}/${os_distribution}-${version}-profile.json"; then
             print_error "Failed to copy Agama profile for ${os_distribution}-${version}"
             fn_release_host_lock
@@ -1445,6 +1477,9 @@ fn_generate_post_install_script() {
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-debian.sh.template"
     elif [[ "${os_distribution}" == "opensuse-leap" ]]; then
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-opensuse.sh.template"
+    elif [[ "${os_distribution}" == "azure-linux" ]]; then
+        post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-azure-linux.sh.template"
+        post_install_target="${host_kickstart_dir}/${os_distribution}-${version}-config/tux2lab-post-install.sh"
     else
         post_install_template="${ksmanager_main_dir}/post-install-templates/post-install-redhat.sh.template"
     fi
@@ -1564,6 +1599,9 @@ fn_set_environment() {
         fn_replace_token_in_file "${working_file}" "get_version" "${version}"
         fn_replace_token_in_file "${working_file}" "get_repo_url" "${REPO_URLS[${os_distribution}:${version}]:-}"
         fn_replace_token_in_file "${working_file}" "get_appstream_repo_url" "${APPSTREAM_REPO_URLS[${os_distribution}:${version}]:-}"
+        if [[ "${os_distribution}" == "azure-linux" ]]; then
+            fn_replace_token_in_file "${working_file}" "get_iso_filename" "${ISO_FILENAMES[${os_distribution}:${version}]}"
+        fi
         fn_replace_token_in_file "${working_file}" "get_opensuse_version_number" "${opensuse_version_number}"
         fn_replace_token_in_file "${working_file}" "get_ubuntu_codename" "${ubuntu_codename:-}"
         fn_replace_token_in_file "${working_file}" "get_debian_codename" "${debian_codename:-}"
@@ -1594,7 +1632,12 @@ fn_set_environment() {
 
 if ! $invoked_with_golden_image; then
 
-    fn_set_environment "${host_kickstart_dir}"
+    if [[ "${os_distribution}" == "azure-linux" ]]; then
+        fn_set_environment "${host_kickstart_dir}/${os_distribution}-${version}-config/unattended_config.json"
+        fn_set_environment "${host_kickstart_dir}/${os_distribution}-${version}-config/tux2lab-post-install.sh"
+    else
+        fn_set_environment "${host_kickstart_dir}"
+    fi
 
     # openSUSE: fix profile.json after token replacement for ipv4-only (empty IPv6 tokens)
     if [[ "${os_distribution}" == "opensuse-leap" ]] && [[ "${stack_mode}" == "ipv4" ]]; then

@@ -65,10 +65,10 @@ Subcommands:
     cleanup [distro --version|-v ver]       Unmount and remove ISO for a distro
 
 Supported distros:
-    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap
+    almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azure-linux
 
 Version:
-    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 11, 12, 13, 16.0"
+    The actual version number, e.g. 9, 10, 22.04, 24.04, 26.04, 11, 12, 13, 16.0, 3.0"
 }
 
 # ====== HELPER FUNCTIONS ======
@@ -663,6 +663,23 @@ fn_setup_distro() {
         print_task_done
     else
         print_info "ISO already mounted."
+    fi
+
+    if [[ "$distro" == "azure-linux" ]]; then
+        local required_path
+        for required_path in \
+            "${mount_dir}/isolinux/vmlinuz" \
+            "${mount_dir}/isolinux/initrd.img" \
+            "${mount_dir}/config/attended_config.json"; do
+            if [[ ! -f "$required_path" ]]; then
+                print_error "Azure Linux ISO is missing required installer artifact: ${required_path}"
+                print_info "The Azure Linux ISO layout may have changed."
+                sudo umount "$mount_dir" 2>/dev/null || true
+                sudo sed -i "\|${iso_file}.*${distro}.*${version}|d" "$ISO_MOUNTS_CONF"
+                sudo rmdir "$mount_dir" 2>/dev/null || true
+                exit 1
+            fi
+        done
     fi
 
     print_success "Setup complete for ${DISTRO_DISPLAY_NAMES[$distro]} ${version}."
