@@ -33,6 +33,9 @@
             IsIsoInstall: true,
             BootType: "efi",
             EnableGrubMkconfig: true,
+            KernelCommandLine: ($base.KernelCommandLine + {
+                ExtraCommandLine: ((($base.KernelCommandLine.ExtraCommandLine // "") + " console=ttyS0,115200n8") | ltrimstr(" "))
+            }),
             Hostname: $hostname,
             Packages: ($base.Packages // []),
             PackageRepos: [

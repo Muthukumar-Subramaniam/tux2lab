@@ -80,6 +80,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 | Debian | Ubuntu LTS | 26.04, 24.04, 22.04 | Cloud-init autoinstall |
 | | Debian | 13, 12, 11 | Preseed (netboot) |
 | SUSE | openSUSE Leap | 16.0 | Agama |
+| Microsoft | Azure Linux | 3.0 | Unattended installer |
 
 > Distros are set up automatically when needed. Running `tux2lab distro setup`
 > manually is optional (useful for pre-staging ISOs or managing disk space).
