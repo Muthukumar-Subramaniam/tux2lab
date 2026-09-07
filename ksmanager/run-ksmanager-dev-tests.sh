@@ -273,6 +273,8 @@ EOF
 		"${SANDBOX_HUB}/ksmanager/ipxe-templates/"
 	cp "${REPO_ROOT}/ksmanager/ipxe-templates/azure-linux-ping-shim.sh" \
 		"${SANDBOX_HUB}/ksmanager/ipxe-templates/"
+	cp "${REPO_ROOT}/ksmanager/ipxe-templates/azure-linux-wget-shim.sh" \
+		"${SANDBOX_HUB}/ksmanager/ipxe-templates/"
 	cp "${REPO_ROOT}/ksmanager/post-install-templates/post-install-azure-linux.sh.template" \
 		"${SANDBOX_HUB}/ksmanager/post-install-templates/"
 
@@ -351,6 +353,15 @@ EOF
       "PackageLists": ["packages/full.json"],
       "Packages": [],
       "KernelOptions": {"default": "kernel"},
+      "PackageRepos": [
+        {
+          "Name": "Azure Linux Local Build Repo",
+          "BaseUrl": "file:///mnt/cdrom/RPMS",
+          "Install": false,
+          "GPGCheck": false,
+          "RepoGPGCheck": false
+        }
+      ],
       "PostInstallScripts": []
     }
   ]
@@ -495,20 +506,29 @@ test_create_azure_linux_host() {
 
 	assert_true "azure-linux unattended config exists" test -f "${config_dir}/unattended_config.json"
 	assert_true "azure-linux post-install exists" test -f "${config_dir}/tux2lab-post-install.sh"
+	assert_true "azure-linux post-install downloads by server IP" grep -q "http://192.0.2.53/tux2lab/common-utils/tux2lab-sync" "${config_dir}/tux2lab-post-install.sh"
+	assert_true "azure-linux post-install permits IPv4 ping" grep -q -- "-A INPUT -p icmp --icmp-type 8 -j ACCEPT" "${config_dir}/tux2lab-post-install.sh"
 	assert_true "azure-linux package lists copied" test -f "${config_dir}/packages/full.json"
 	assert_true "azure-linux iPXE file exists" test -f "${IPXE_DIR}/${mac_ipxe}.ipxe"
 	assert_true "azure-linux iPXE uses live ISO by IP" grep -q "root=live:http://192.0.2.53/iso-files/AzureLinux-3.0-x86_64.iso" "${IPXE_DIR}/${mac_ipxe}.ipxe"
 	assert_true "azure-linux iPXE points to host config by IP" grep -q -- "--image-config=http://192.0.2.53/ksmanager-hub/kickstarts/${host}/azure-linux-3.0-config" "${IPXE_DIR}/${mac_ipxe}.ipxe"
 	assert_true "azure-linux iPXE injects ping shim" grep -q "azure-linux-ping-shim.sh /usr/bin/ping mode=755" "${IPXE_DIR}/${mac_ipxe}.ipxe"
+	assert_true "azure-linux iPXE injects wget shim" grep -q "azure-linux-wget-shim.sh /usr/bin/wget mode=755" "${IPXE_DIR}/${mac_ipxe}.ipxe"
 
 	if command -v jq &>/dev/null; then
-		local json_hostname json_disk json_user json_post
+		local json_hostname json_disk json_user json_repo json_local_repos json_post
 		json_hostname=$(jq -r '.SystemConfigs[0].Hostname' "${config_dir}/unattended_config.json")
 		assert_eq "azure-linux hostname matches" "${json_hostname}" "${host}"
+		assert_eq "azure-linux enables ISO install repository handling" "$(jq -r '.SystemConfigs[0].IsIsoInstall' "${config_dir}/unattended_config.json")" "true"
 		json_disk=$(jq -r '.Disks[0].TargetDisk.Value' "${config_dir}/unattended_config.json")
 		assert_eq "azure-linux target disk matches" "${json_disk}" "/dev/vda"
 		json_user=$(jq -r '.SystemConfigs[0].Users[1].Name' "${config_dir}/unattended_config.json")
 		assert_eq "azure-linux admin user matches" "${json_user}" "${USER}"
+		assert_eq "azure-linux preserves official direct package list" "$(jq '.SystemConfigs[0].Packages | length' "${config_dir}/unattended_config.json")" "0"
+		json_repo=$(jq -r '.SystemConfigs[0].PackageRepos[0].BaseUrl' "${config_dir}/unattended_config.json")
+		assert_eq "azure-linux package repo uses PXE server" "${json_repo}" "http://192.0.2.53/os-repos/azure-linux/3.0/RPMS"
+		json_local_repos=$(jq '[.SystemConfigs[0].PackageRepos[] | select(.BaseUrl | startswith("file://"))] | length' "${config_dir}/unattended_config.json")
+		assert_eq "azure-linux package repo has no local file URL" "${json_local_repos}" "0"
 		json_post=$(jq -r '.SystemConfigs[0].PostInstallScripts[-1].Path' "${config_dir}/unattended_config.json")
 		assert_eq "azure-linux post-install path matches" "${json_post}" "tux2lab-post-install.sh"
 	fi
