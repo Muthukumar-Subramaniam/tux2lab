@@ -87,6 +87,16 @@ fi
 
 /usr/bin/systemctl enable systemd-networkd.service systemd-resolved.service sshd.service
 
+# Azure Linux's default IPv4 firewall allows SSH but drops ICMP echo requests.
+IPV4_FIREWALL_RULES=/etc/systemd/scripts/ip4save
+if [[ ! -f "$IPV4_FIREWALL_RULES" ]]; then
+    echo "Required Azure Linux firewall rules file not found: $IPV4_FIREWALL_RULES" >&2
+    exit 1
+fi
+if ! /usr/bin/grep -q -- '--icmp-type 8 .* -j ACCEPT' "$IPV4_FIREWALL_RULES"; then
+    /usr/bin/sed -i '/^COMMIT$/i -A INPUT -p icmp --icmp-type 8 -j ACCEPT' "$IPV4_FIREWALL_RULES"
+fi
+
 cat > /etc/tux2lab-sync.conf << EOF
 LAB_SERVER="get_lab_infra_server_hostname"
 ADMIN_USER="get_mgmt_super_user"
