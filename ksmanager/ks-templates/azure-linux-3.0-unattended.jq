@@ -30,19 +30,20 @@
         $base + {
             IsDefault: true,
             IsKickStartBoot: false,
-            IsIsoInstall: false,
+            IsIsoInstall: true,
             BootType: "efi",
             EnableGrubMkconfig: true,
             Hostname: $hostname,
-            Packages: (($base.Packages // []) + [
-                "ca-certificates",
-                "curl",
-                "openssh-server",
-                "rsync",
-                "sudo",
-                "systemd-networkd",
-                "systemd-resolved"
-            ] | unique),
+            Packages: ($base.Packages // []),
+            PackageRepos: [
+                {
+                    Name: "azurelinux-pxe",
+                    BaseUrl: $package_repo_url,
+                    Install: false,
+                    GPGCheck: false,
+                    RepoGPGCheck: false
+                }
+            ],
             PartitionSettings: [
                 {
                     ID: "boot",

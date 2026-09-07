@@ -271,6 +271,8 @@ EOF
 		"${SANDBOX_HUB}/ksmanager/ks-templates/"
 	cp "${REPO_ROOT}/ksmanager/ipxe-templates/ipxe-template-azure-linux.ipxe" \
 		"${SANDBOX_HUB}/ksmanager/ipxe-templates/"
+	cp "${REPO_ROOT}/ksmanager/ipxe-templates/azure-linux-ping-shim.sh" \
+		"${SANDBOX_HUB}/ksmanager/ipxe-templates/"
 	cp "${REPO_ROOT}/ksmanager/post-install-templates/post-install-azure-linux.sh.template" \
 		"${SANDBOX_HUB}/ksmanager/post-install-templates/"
 
@@ -495,8 +497,9 @@ test_create_azure_linux_host() {
 	assert_true "azure-linux post-install exists" test -f "${config_dir}/tux2lab-post-install.sh"
 	assert_true "azure-linux package lists copied" test -f "${config_dir}/packages/full.json"
 	assert_true "azure-linux iPXE file exists" test -f "${IPXE_DIR}/${mac_ipxe}.ipxe"
-	assert_true "azure-linux iPXE uses live ISO" grep -q "root=live:http://${TMP_INFRA_HOST}/iso-files/AzureLinux-3.0-x86_64.iso" "${IPXE_DIR}/${mac_ipxe}.ipxe"
-	assert_true "azure-linux iPXE points to host config" grep -q -- "--image-config=http://${TMP_INFRA_HOST}/ksmanager-hub/kickstarts/${host}/azure-linux-3.0-config" "${IPXE_DIR}/${mac_ipxe}.ipxe"
+	assert_true "azure-linux iPXE uses live ISO by IP" grep -q "root=live:http://192.0.2.53/iso-files/AzureLinux-3.0-x86_64.iso" "${IPXE_DIR}/${mac_ipxe}.ipxe"
+	assert_true "azure-linux iPXE points to host config by IP" grep -q -- "--image-config=http://192.0.2.53/ksmanager-hub/kickstarts/${host}/azure-linux-3.0-config" "${IPXE_DIR}/${mac_ipxe}.ipxe"
+	assert_true "azure-linux iPXE injects ping shim" grep -q "azure-linux-ping-shim.sh /usr/bin/ping mode=755" "${IPXE_DIR}/${mac_ipxe}.ipxe"
 
 	if command -v jq &>/dev/null; then
 		local json_hostname json_disk json_user json_post
