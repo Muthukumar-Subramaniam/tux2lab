@@ -1368,6 +1368,7 @@ if ! $invoked_with_golden_image; then
             --arg username "${mgmt_super_user}" \
             --arg password_hash "${shadow_password_super_mgmt_user}" \
             --arg post_install_script "tux2lab-post-install.sh" \
+            --arg package_repo_url "http://${ipv4_nfsserver}/os-repos/${os_distribution}/${version}/RPMS" \
             -f "${ksmanager_main_dir}/ks-templates/azure-linux-3.0-unattended.jq" \
             "${azure_config_dir}/attended_config.json" \
             > "${azure_config_dir}/unattended_config.json"; then

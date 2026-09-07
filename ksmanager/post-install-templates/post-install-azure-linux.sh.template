@@ -95,7 +95,7 @@ IPV6_GATEWAY="get_ipv6_gateway"
 EOF
 /usr/bin/chmod 0644 /etc/tux2lab-sync.conf
 
-/usr/bin/curl -fsSL "http://get_lab_infra_server_hostname/tux2lab/common-utils/tux2lab-sync" -o /usr/local/bin/tux2lab-sync
+/usr/bin/curl -fsSL "http://get_ipv4_nfsserver/tux2lab/common-utils/tux2lab-sync" -o /usr/local/bin/tux2lab-sync
 /usr/bin/chmod +x /usr/local/bin/tux2lab-sync
 
 # Keep the install environment resolver until all network downloads finish.
