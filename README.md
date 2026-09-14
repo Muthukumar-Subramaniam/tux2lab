@@ -61,10 +61,10 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 | Feature | Detail |
 |---|---|
-| **Image** | `ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.0.1` |
+| **Image** | `ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.1.1` |
 | **Runtime** | Podman (rootful, `--network=host --privileged`) |
 | **Persistence** | All state in `/tux2lab-data/` (bind-mounted into container) |
-| **Lifecycle** | Start/stop/rebuild without touching the host |
+| **Lifecycle** | Start, stop, and rebuild lab services, including host-side NFS |
 | **Resources** | Minimal, shares host kernel, no VM overhead |
 
 ---
@@ -135,7 +135,7 @@ git clone https://github.com/Muthukumar-Subramaniam/tux2lab.git /tux2lab
 This script:
 - Installs QEMU/KVM, libvirt, Podman, jq, and all dependencies (supports `apt`, `dnf`, `zypper`)
 - Grants passwordless sudo to the current user
-- Creates the `labbr0` bridge network with dual-stack (IPv4/IPv6) NAT
+- Creates the `labbr0` bridge network with dual-stack addressing and IPv4 NAT
 - Sets up the `/tux2lab-data/` data directory
 - Installs the `tux2lab` CLI and bash completion
 
@@ -372,8 +372,10 @@ tux2lab vm nic-remove -H <hostname>  Remove a network interface
 
 ### VM Snapshots
 
+Snapshot creation and reversion are offline operations and require the VM to be shut off.
+
 ```
-tux2lab vm snapshot-create -H <hostname>  Create a snapshot
+tux2lab vm snapshot-create -H <hostname>  Create an offline snapshot
 tux2lab vm snapshot-list -H <hostname>    List snapshots
 tux2lab vm snapshot-info -H <hostname>    Show snapshot details
 tux2lab vm snapshot-revert -H <hostname>  Revert to a snapshot
