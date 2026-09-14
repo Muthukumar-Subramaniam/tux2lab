@@ -52,6 +52,7 @@ SUPPORTED DISTROS AND VERSIONS:
     ubuntu-lts                  26.04, 24.04, 22.04
     debian                      13, 12, 11
     opensuse-leap               16.0
+    azure-linux                 3.0
 
 EXAMPLES:
     tux2lab golden-image list
@@ -200,7 +201,7 @@ golden_image_cleanup() {
     if [[ -n "$cleanup_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$cleanup_distro]:-}" ]]; then
             print_error "Unknown distribution: $cleanup_distro"
-            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azure-linux"
             exit 1
         fi
         if [[ -z "$cleanup_version" ]]; then
@@ -401,7 +402,7 @@ golden_image_rebuild() {
     if [[ -n "$rebuild_distro" ]]; then
         if [[ -z "${DISTRO_DISPLAY_NAMES[$rebuild_distro]:-}" ]]; then
             print_error "Unknown distribution: $rebuild_distro"
-            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap"
+            print_info "Supported: almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azure-linux"
             exit 1
         fi
         if [[ -z "$rebuild_version" ]]; then

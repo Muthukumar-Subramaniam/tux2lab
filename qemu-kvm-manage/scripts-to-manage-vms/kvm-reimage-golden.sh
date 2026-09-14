@@ -37,8 +37,8 @@ Options:
   -c, --console        Attach console during reimage (single VM only)
   --reset-specs-to-default     Destroy VM and reinstall with default specs (2 vCPUs, 2 GiB RAM, 30 GiB disk)
   -d, --distro         Specify OS distribution
-                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap)
-  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0)
+                       (almalinux, rocky, oraclelinux, centos-stream, rhel, ubuntu-lts, debian, opensuse-leap, azure-linux)
+  -v, --version        Specify OS version number (e.g., 10, 9, 26.04, 16.0, 3.0)
   --ipv4-only          Reimage as IPv4-only VM
   --ipv6-only          Reimage as IPv6-only VM (golden-boot handles the rest)
   --dual-stack         Force dual-stack (override auto-detected single-stack on reimage)

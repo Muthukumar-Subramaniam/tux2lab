@@ -42,6 +42,7 @@ SUPPORTED DISTROS AND VERSIONS:
     ubuntu-lts                  26.04, 24.04, 22.04
     debian                      13, 12, 11
     opensuse-leap               16.0
+    azure-linux                 3.0
 
 EXAMPLES:
     tux2lab distro list
