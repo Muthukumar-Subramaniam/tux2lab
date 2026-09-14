@@ -7,7 +7,13 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-VERSION=$(jq -r '.version' /tux2lab/project_version.json)
+if ! VERSION=$(jq -ers '
+    select(length == 1) | .[0] | objects | .version | strings
+    | select(test("\\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\\z"))
+' project_version.json); then
+    echo "project_version.json must contain exactly one object with a non-empty version string usable as an image tag." >&2
+    exit 1
+fi
 GHCR="ghcr.io/muthukumar-subramaniam/tux2lab-engine"
 DOCKERHUB="docker.io/musubram/tux2lab-engine"
 
@@ -23,29 +29,32 @@ done
 
 echo "Building tux2lab-engine:${VERSION}..."
 
-# Remove only tux2lab-engine images
-for img in $(sudo podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep "tux2lab-engine"); do
-    sudo podman rmi -f "$img" 2>/dev/null || true
-done
-# Remove dangling images
-sudo podman image prune -f &>/dev/null || true
+BUILD_TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tux2lab-build.XXXXXXXX")
+trap 'rm -f "${BUILD_TMP_DIR}/image-id"; rmdir "${BUILD_TMP_DIR}"' EXIT
 
 # Build
 # --network=host avoids podman creating a throwaway bridge just for the apk step
-sudo podman build --no-cache --network=host -t "${GHCR}:${VERSION}" -f container/Containerfile .
+sudo podman build --no-cache --pull=always --network=host \
+    --iidfile "${BUILD_TMP_DIR}/image-id" \
+    -t "${GHCR}:${VERSION}" -f container/Containerfile .
+
+if [[ ! -s "${BUILD_TMP_DIR}/image-id" ]]; then
+    echo "Build completed without an image ID; refusing to tag or push." >&2
+    exit 1
+fi
+IMAGE_ID=$(sudo cat "${BUILD_TMP_DIR}/image-id")
 
 # Tag
-sudo podman tag "${GHCR}:${VERSION}" "${GHCR}:latest"
-sudo podman tag "${GHCR}:${VERSION}" "${DOCKERHUB}:${VERSION}"
-sudo podman tag "${GHCR}:${VERSION}" "${DOCKERHUB}:latest"
+sudo podman tag "${IMAGE_ID}" "${GHCR}:latest"
+sudo podman tag "${IMAGE_ID}" "${DOCKERHUB}:${VERSION}"
+sudo podman tag "${IMAGE_ID}" "${DOCKERHUB}:latest"
 
 # Push
-echo "Pushing to GHCR..."
-sudo podman push "${GHCR}:${VERSION}"
-sudo podman push "${GHCR}:latest"
-
-echo "Pushing to Docker Hub..."
-sudo podman push "${DOCKERHUB}:${VERSION}"
-sudo podman push "${DOCKERHUB}:latest"
+for tag in "${VERSION}" latest; do
+    for repository in "${GHCR}" "${DOCKERHUB}"; do
+        echo "Pushing ${repository}:${tag}..."
+        sudo podman push "${IMAGE_ID}" "docker://${repository}:${tag}"
+    done
+done
 
 echo "Done. Image: tux2lab-engine:${VERSION}"
