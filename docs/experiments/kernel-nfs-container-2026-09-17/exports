@@ -1,0 +1,2 @@
+/export 10.28.28.0/22(ro,sync,fsid=0,no_subtree_check,no_root_squash,crossmnt) *.musubram.internal(ro,sync,fsid=0,no_subtree_check,no_root_squash,crossmnt)
+/export/tux2lab-data 10.28.28.0/22(ro,sync,fsid=1,no_subtree_check,no_root_squash,crossmnt) *.musubram.internal(ro,sync,fsid=1,no_subtree_check,no_root_squash,crossmnt)

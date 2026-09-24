@@ -1,0 +1,5 @@
+FROM docker.io/library/alpine:3.21
+
+RUN apk add --no-cache bash nfs-utils
+
+ENTRYPOINT ["/bin/bash"]
