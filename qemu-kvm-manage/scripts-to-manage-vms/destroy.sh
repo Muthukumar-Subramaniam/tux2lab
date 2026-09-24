@@ -117,6 +117,15 @@ fi
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
 # ====== STEP 1: STOP AND REMOVE CONTAINER ======
+source /tux2lab/shared-functions/container-nfs.sh
+if sudo podman container exists "${CONTAINER_NAME}-host-nfs-backup"; then
+    print_error "An NFS migration backup is retained. Resolve migration acceptance or rollback before destroy."
+    exit 1
+fi
+if ! stop_engine_nfs "${CONTAINER_NAME}"; then
+    print_error "Cannot verify NFS shutdown. Nothing will be destroyed."
+    exit 1
+fi
 print_task "Stopping and removing tux2lab-engine container..."
 if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
     sudo podman stop "${CONTAINER_NAME}" &>/dev/null || true
@@ -183,10 +192,6 @@ if systemctl list-unit-files tux2lab.service &>/dev/null 2>&1; then
 else
     print_task_skip
 fi
-
-# ====== STEP 5.1: STOP NFS AND CLEAN HOST CONFIG ======
-source /tux2lab/shared-functions/host-nfs.sh
-stop_host_nfs
 
 # ====== STEP 6: CLEAN /etc/hosts ENTRIES ======
 print_task "Cleaning lab entries from /etc/hosts..."

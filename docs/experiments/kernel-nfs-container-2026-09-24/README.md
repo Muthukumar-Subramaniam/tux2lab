@@ -9,6 +9,10 @@ and independently checked. Both disposable guests were removed. The original
 seven VMs and `tux2lab-engine` remained running; no production integration or host
 package removal was performed.
 
+Later implementation work is tracked in the
+[migration runbook](../../nfs-container-migration.md). This directory records the
+standalone experiment, not acceptance of the integrated engine.
+
 ## What This Establishes
 
 The read-only installer workload does not need a running host NFS/RPC daemon,
@@ -217,47 +221,20 @@ depends on the server. After either stop method, verify each service, the host
 control mount, exports, eight threads, full-file reads and original guests as in
 the prior runbook. Do not treat a wrapper exit code or message alone as acceptance.
 
-## Integration Branch and Remote Backup Plan
+## Integration Branch and Remote Backup
 
-Agreed on 2026-09-24: move NFS service management from the host into a container,
-while retaining the host kernel's NFS support. Establish a dedicated integration
-branch soon, before production code changes. Do not wait for the entire host/guest
-compatibility matrix before creating and publishing the branch. Creating the
-branch is a preservation milestone, not approval to switch the running lab.
+The agreed `migration/nfs-host-to-container` branch was created from main at
+`0d0c7dc01395a484a98f2ef3a72f6aea0b465bf9`. Both experiment archives were committed
+as `a3cf462a6445780c0024ec741ce22c88b160eef1`, pushed to
+`origin/migration/nfs-host-to-container`, and the matching remote tip verified.
+That is a preservation milestone, not a live handover.
 
-1. The agreed branch name is `migration/nfs-host-to-container` (confirmed on
-   2026-09-24). At the next branch-setup step, review the worktree and confirm the
-   base revision and writable remote with the user. Do not assume the remote is named `upstream` or
-   that the canonical repository grants push access; use the agreed repository
-   or fork and configure remote tracking.
-2. Create the local branch and make its first checkpoint include both experiment
-   archives, tested scripts and the current handoff. Review the exact staged files
-   before committing. Exclude credentials, generated guest configuration, runtime
-   state, raw sensitive logs, ISO contents and VM disks. Leave unrelated changes
-   untouched.
-3. Push that checkpoint to the agreed remote branch and set its tracking branch.
-   Verify the remote branch tip matches the local commit. The backup milestone is
-   complete only after a successful push, not merely branch creation or a local
-   commit. Untracked files, uncommitted edits and stashes are not backed up by a
-   branch push; `/tmp` artifacts and a local container image are not remote backups.
-4. Continue focused standalone checks for RPC confinement, persistent state and
-   failure handling, then implement the production lifecycle on this branch.
-   Keep host NFS as the running baseline until an explicitly planned handover.
-   Perform integrated workflow, reboot and broader compatibility tests on the
-   branch; retain rollback and record remaining gaps before changing the default.
-5. Commit and push small, coherent checkpoints after verified milestones and at
-   session end. For unfinished work, use clearly labelled work-in-progress
-   checkpoints without claiming acceptance. If a push fails, report that the
-   checkpoint remains local-only. Avoid force-pushing shared history.
+Maintained service code, lifecycle integration, tests and current acceptance gaps
+are documented in the [migration runbook](../../nfs-container-migration.md).
+The experiment scripts remain unchanged reference snapshots. Runtime state,
+credentials, raw sensitive logs, ISO contents and guest disks are not in Git.
 
-Recovery on another workstation should begin by cloning the agreed remote and
-checking out this branch, then rebuilding the test environment from the committed
-runbooks. Preserve any exact image binary needed for reproduction in an approved
-artifact store separately; a mutable image recipe does not guarantee identical
-binaries. Branch creation, commits and remote publication are the next planned
-actions, not actions performed by this documentation update.
-
-## Remaining Gates
+## Gates Recorded After the Experiment
 
 1. Select engine integration versus a companion container, then implement durable
    state and deterministic startup/shutdown without copying this diagnostic

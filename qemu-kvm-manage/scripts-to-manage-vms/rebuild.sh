@@ -44,11 +44,16 @@ if [[ ! -f "${LAB_ENV_JSON}" ]]; then
 fi
 
 # ====== VERSION + INFO ======
+source /tux2lab/shared-functions/container-nfs.sh
+if sudo podman container exists "${CONTAINER_NAME}"; then
+    require_container_nfs_engine "${CONTAINER_NAME}"
+fi
+container_nfs_host_preflight
 local_version=$(jq -r '.version' /tux2lab/project_version.json)
 print_info "Rebuilding tux2lab v${local_version}..."
 
 # Auto-detect version mismatch: if running container's image tag doesn't match project version, pull
-if [[ "$pull_image" != "true" ]]; then
+if [[ "$pull_image" != "true" && -z "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
     current_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "")
     if [[ -n "$current_image" ]] && [[ "$current_image" != *":${local_version}" ]]; then
         print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
@@ -180,7 +185,9 @@ container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_v
 container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
 container_image=""
 
-if [[ "$pull_image" != "true" ]]; then
+if [[ -n "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
+    container_image="$TUX2LAB_ENGINE_IMAGE"
+elif [[ "$pull_image" != "true" ]]; then
     # Use existing local image
     container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "${container_image_primary}")
 else
@@ -239,9 +246,8 @@ data_dir="/tux2lab-data"
 
 # Destroy and recreate in background subshell
 (
-    sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
     source /tux2lab/shared-functions/run-container.sh
-    run_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${infra_fqdn}" "${data_dir}" "${ipv4_address}" "${bridge_interface}"
+    replace_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${infra_fqdn}" "${data_dir}" "${ipv4_address}" "${bridge_interface}"
 ) &
 run_pid=$!
 
@@ -252,7 +258,10 @@ while kill -0 "$run_pid" 2>/dev/null; do
     sleep 1
     recreate_elapsed=$((SECONDS - recreate_start))
 done
-wait "$run_pid" || true
+if ! wait "$run_pid"; then
+    print_error "Engine replacement failed. Inspect the container logs and retained backup."
+    exit 1
+fi
 
 # Verify container is up
 sleep 1
@@ -278,9 +287,7 @@ else
     print_warning "Some ISO mounts failed. Check /tux2lab-data/iso-mounts.conf"
 fi
 
-# ====== STEP 8: Restart NFS on host ======
-source /tux2lab/shared-functions/host-nfs.sh
-restart_host_nfs
+wait_for_engine_nfs "${CONTAINER_NAME}"
 
 # ====== STEP 9: Ensure bridge firewall is open ======
 source /tux2lab/shared-functions/bridge-firewall.sh

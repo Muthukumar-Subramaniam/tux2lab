@@ -90,6 +90,9 @@ source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
 
 # ====== STEP 5: Start container ======
+source /tux2lab/shared-functions/container-nfs.sh
+require_container_nfs_engine "${CONTAINER_NAME}"
+container_nfs_host_preflight
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     print_info "Container '${CONTAINER_NAME}' is already running."
 else
@@ -130,9 +133,7 @@ else
     print_warning "Some ISO mounts failed. Check /tux2lab-data/iso-mounts.conf"
 fi
 
-# ====== STEP 7: Start NFS on host ======
-source /tux2lab/shared-functions/host-nfs.sh
-start_host_nfs "${lab_infra_server_ipv4_address}" "${lab_infra_server_ipv6_address}"
+wait_for_engine_nfs "${CONTAINER_NAME}"
 
 # ====== STEP 8: Configure DNS on host ======
 print_task "Configuring DNS for ${lab_infra_bridge_interface}..."

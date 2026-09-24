@@ -23,6 +23,9 @@ RUN apk add --no-cache \
         chrony \
         radvd \
         iproute2 \
+        nfs-utils \
+        nftables \
+        util-linux \
     && mkdir -p /var/named/data /var/named/dynamic \
     && chown -R named:named /var/named \
     && mkdir -p /run/named \
@@ -31,7 +34,10 @@ RUN apk add --no-cache \
     && mkdir -p /var/lib/kea
 
 COPY container/entrypoint.sh /entrypoint.sh
+COPY container/nfs-service.sh shared-functions/nfs-config.sh /usr/local/lib/tux2lab/
 RUN chmod +x /entrypoint.sh
+
+LABEL io.tux2lab.nfs="container-v1"
 
 # DNS: 53/tcp+udp | DHCPv4: 67/udp | DHCPv6: 547/udp | HTTP: 80/tcp | HTTPS: 443/tcp
 # TFTP: 69/udp | NTP: 123/udp

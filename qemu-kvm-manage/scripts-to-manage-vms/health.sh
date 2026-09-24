@@ -122,12 +122,11 @@ else
     fn_deep_fail "TFTP boot file missing (/tux2lab-data/tftpboot/ipxe.efi)"
 fi
 
-# --- NFS: expected export exists (runs on host, not in container) ---
-nfs_export_check=$(sudo exportfs -v 2>/dev/null | grep -c /tux2lab-data)
-if [[ "$nfs_export_check" -ge 1 ]] 2>/dev/null; then
-    fn_deep_pass "NFS export available (/tux2lab-data)"
+source /tux2lab/shared-functions/container-nfs.sh
+if check_engine_nfs "${CONTAINER_NAME}"; then
+    fn_deep_pass "Container NFS ready (/tux2lab-data)"
 else
-    fn_deep_fail "NFS export not found (/tux2lab-data)"
+    fn_deep_fail "Container NFS unavailable or legacy host-backed engine"
 fi
 
 # --- Firewall: bridge rules in place ---

@@ -6,6 +6,10 @@ Status: experiment complete, original host NFS restored and verified. This direc
 archives the final test scripts and implementation handoff. It does not enable
 container NFS in tux2lab or change production configuration.
 
+Maintained implementation and tests now live in the project directories listed in
+the [migration runbook](../../nfs-container-migration.md). This directory remains
+historical evidence only; its scripts are not the deployment interface.
+
 Follow-up: [September 24 independence and cold-start tests](../kernel-nfs-container-2026-09-24/README.md)
 closed the running-host-daemon and unloaded-module test gaps, repeated both PXE
 installs, and exercised mountd failure rollback. The original results below remain

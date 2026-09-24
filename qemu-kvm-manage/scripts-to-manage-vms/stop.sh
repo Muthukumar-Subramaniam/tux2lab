@@ -75,6 +75,10 @@ fi
 print_cyan "--------------------------------------------------------------"
 
 # ====== STEP 1: Shutdown all guest VMs ======
+source /tux2lab/shared-functions/container-nfs.sh
+if sudo podman container exists "${CONTAINER_NAME}"; then
+    require_container_nfs_engine "${CONTAINER_NAME}"
+fi
 running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
 if [[ -n "$running_vms" ]]; then
     print_info "Sending graceful shutdown to all running VMs..."
@@ -118,21 +122,13 @@ fi
 
 # ====== STEP 2: Stop container ======
 print_task "Stopping tux2lab-engine container..."
-if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-    if sudo podman stop "${CONTAINER_NAME}" &>/dev/null; then
-        print_task_done
-    else
-        print_task_fail
-        print_warning "Failed to stop container gracefully, force removing..."
-        sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
-    fi
+if stop_engine_nfs "${CONTAINER_NAME}"; then
+    print_task_done
 else
-    print_task_skip
+    print_task_fail
+    print_error "NFS shutdown was not verified. Network and ISO mounts have been retained."
+    exit 1
 fi
-
-# ====== STEP 3: Stop NFS on host ======
-source /tux2lab/shared-functions/host-nfs.sh
-stop_host_nfs
 
 # ====== STEP 4: Remove lablink0 dummy interface ======
 source /tux2lab/shared-functions/lablink0.sh

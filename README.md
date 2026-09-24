@@ -18,6 +18,11 @@ No frameworks, no extra languages. Just Bash doing what Bash does best.
 > [!WARNING]
 > This project is intended for testing, development, and experimentation purposes only.
 
+> This development branch implements container-managed kernel NFS. It requires a
+> locally built engine and an explicit migration from the released host backend.
+> Start with the [NFS migration runbook](docs/nfs-container-migration.md); the
+> release quick-start below does not perform this migration.
+
 ---
 
 ## What You'll Get
@@ -46,25 +51,25 @@ virtual network (`labbr0` bridge, `10.28.28.0/22` + IPv6 ULA `fd28:2808:2020:300
 | NTP | chrony | Time synchronization | Container |
 | HTTP/HTTPS | nginx | Boot ISO & kickstart serving | Container |
 | IPv6 RA | radvd | Router advertisements | Container |
-| NFS | nfs-server | Shared storage | Host |
+| NFS | kernel nfsd + nfs-utils | Read-only installer exports | Container-managed, host kernel |
 
 > [!NOTE]
-> NFS is the one service that runs on the KVM host rather than in the container.
-> The kernel NFS server cannot export host-side ISO submounts from inside a
-> container because of mount namespace isolation.
+> Released v2.1.1 uses host-managed NFS. On this branch, the engine manages NFS
+> through the same host kernel, using an explicit export root and propagated ISO
+> mounts. Migration is not automatic, and the live lab has not been switched.
 
 ### Infrastructure Container
 
-All lab services except NFS run inside a single **rootful Podman container** (`tux2lab-engine`)
-based on Alpine Linux 3.21 (~60 MB). The container uses `--network=host` to bind directly to the
-lab bridge interface, providing seamless network access for all guest VMs.
+Lab services run inside a single **rootful Podman container** (`tux2lab-engine`)
+based on Alpine Linux 3.21. The container uses `--network=host`; the NFS firewall
+blocks ancillary RPC traffic arriving outside the lab bridge and loopback.
 
 | Feature | Detail |
 |---|---|
-| **Image** | `ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.1.1` |
+| **Image** | Local migration build; released `2.1.1` does not contain the new NFS service |
 | **Runtime** | Podman (rootful, `--network=host --privileged`) |
 | **Persistence** | All state in `/tux2lab-data/` (bind-mounted into container) |
-| **Lifecycle** | Start, stop, and rebuild lab services, including host-side NFS |
+| **Lifecycle** | Start, stop, and rebuild engine-owned services after explicit NFS migration |
 | **Resources** | Minimal, shares host kernel, no VM overhead |
 
 ---

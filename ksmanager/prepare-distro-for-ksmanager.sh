@@ -750,7 +750,11 @@ fn_cleanup_distro() {
             # Mount busy — flush NFS export cache to release kernel nfsd references
             print_task_skip
             print_warning "Mount busy. Flushing NFS export cache and retrying..."
-            sudo exportfs -f 2>/dev/null || true
+            source /tux2lab/shared-functions/container-nfs.sh
+            if ! flush_engine_nfs tux2lab-engine; then
+                print_error "Cannot flush the owning NFS server. ISO cleanup aborted."
+                return 1
+            fi
             sleep 1
             print_task "Unmounting ${mount_dir} (retry after NFS flush)..."
             if sudo umount "$mount_dir" 2>/dev/null; then

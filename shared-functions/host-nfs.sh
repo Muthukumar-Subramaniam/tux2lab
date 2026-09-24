@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # Shared NFS functions for host-side NFS server management.                              #
-# NFS runs on the host (not in the container) because the kernel NFS server              #
-# cannot serve host-side ISO submounts from inside a container due to mount               #
-# namespace isolation.                                                                   #
+# Legacy host backend, retained for migration reference and rollback compatibility.      #
+# Container NFS uses an explicit pseudoroot and recursive slave ISO mounts.               #
 #----------------------------------------------------------------------------------------#
 
 readonly NFS_EXPORTS_DROPIN="/etc/exports.d/tux2lab.exports"

@@ -519,6 +519,16 @@ ensure_bridge_up() {
 # START CONTAINER
 # ============================================================================
 start_container() {
+    source /tux2lab/shared-functions/container-nfs.sh
+    container_nfs_host_preflight
+    if sudo podman container exists "${CONTAINER_NAME}"; then
+        require_container_nfs_engine "${CONTAINER_NAME}"
+    fi
+    if [[ -n "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
+        source /tux2lab/shared-functions/run-container.sh
+        replace_tux2lab_container "${CONTAINER_NAME}" "$TUX2LAB_ENGINE_IMAGE" "${INFRA_FQDN}" "${TUX2LAB_DATA_DIR}" "${IPV4_ADDRESS}" "${BRIDGE_INTERFACE}"
+        return
+    fi
     print_task "Pulling tux2lab-engine container image..."
 
     # Try primary registry (ghcr.io), fallback to Docker Hub
@@ -578,12 +588,8 @@ start_container() {
     local start_begin=$SECONDS
 
     (
-        # Remove existing container if present (from failed previous run)
-        if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-            sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
-        fi
         source /tux2lab/shared-functions/run-container.sh
-        run_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${INFRA_FQDN}" "${TUX2LAB_DATA_DIR}" "${IPV4_ADDRESS}" "${BRIDGE_INTERFACE}"
+        replace_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${INFRA_FQDN}" "${TUX2LAB_DATA_DIR}" "${IPV4_ADDRESS}" "${BRIDGE_INTERFACE}"
     ) &
     local run_pid=$!
 
@@ -594,7 +600,10 @@ start_container() {
         sleep 1
         start_elapsed=$((SECONDS - start_begin))
     done
-    wait "$run_pid" || true
+    if ! wait "$run_pid"; then
+        print_error "Engine replacement failed. Inspect the container logs and retained backup."
+        exit 1
+    fi
 
     # Verify container is up
     sleep 1
@@ -708,14 +717,10 @@ rebuild_lab() {
   IPv4      : ${IPV4_ADDRESS}
   IPv6      : ${IPV6_ADDRESS}"
 
-    # Stop and remove existing container
-    print_task "Stopping existing container..."
-    if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-        sudo podman stop "${CONTAINER_NAME}" &>/dev/null || true
-        sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
-        print_task_done
-    else
-        print_task_skip
+    source /tux2lab/shared-functions/container-nfs.sh
+    container_nfs_host_preflight
+    if sudo podman container exists "${CONTAINER_NAME}"; then
+        require_container_nfs_engine "${CONTAINER_NAME}"
     fi
 
     # Regenerate service configs
@@ -724,8 +729,7 @@ rebuild_lab() {
     # Ensure bridge is UP and start container
     ensure_bridge_up
     start_container
-    source /tux2lab/shared-functions/host-nfs.sh
-    start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
+    wait_for_engine_nfs "${CONTAINER_NAME}"
 
     # Health check
     print_info "Running health check..."
@@ -763,8 +767,7 @@ main() {
     ensure_bridge_up
     start_container
     create_dhcp_pool_dns_records
-    source /tux2lab/shared-functions/host-nfs.sh
-    start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
+    wait_for_engine_nfs "${CONTAINER_NAME}"
     configure_host_dns
     configure_host_ssh
 

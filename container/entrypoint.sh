@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #----------------------------------------------------------------------------------------#
 # tux2lab-engine container entrypoint
-# Starts all lab infrastructure services, bound to the lab bridge IP only.
+# Starts lab services; NFS ancillary RPC is confined by the dedicated firewall.
 #
 # Environment variables (passed via podman run -e):
 #   TUX2LAB_BRIDGE_IP   - IP address on labbr0 (e.g., 192.168.100.1)
@@ -15,6 +15,30 @@ BRIDGE_IP="${TUX2LAB_BRIDGE_IP:-}"
 BRIDGE_IF="${TUX2LAB_BRIDGE_IF:-labbr0}"
 BRIDGE_IPV6="${TUX2LAB_BRIDGE_IPV6:-}"
 DATA_DIR="${TUX2LAB_DATA_DIR:-/tux2lab-data}"
+
+source /usr/local/lib/tux2lab/nfs-config.sh
+source /usr/local/lib/tux2lab/nfs-service.sh
+cleanup_engine() {
+    local status=$?
+    trap - EXIT INT TERM
+    if ! stop_container_nfs; then
+        printf '[ERROR] NFS cleanup failed; retaining firewall protection.\n' >&2
+        status=1
+    fi
+    exit "$status"
+}
+trap cleanup_engine EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+if [[ ! -e "$DATA_DIR" && ! -L "$DATA_DIR" ]]; then
+    mkdir -p "$(dirname "$DATA_DIR")"
+    ln -s "/export${DATA_DIR}" "$DATA_DIR"
+fi
+if [[ "$(readlink "$DATA_DIR")" != "/export${DATA_DIR}" ]]; then
+    printf '[ERROR] Invalid data mount layout; recreate the engine with this version.\n' >&2
+    exit 1
+fi
 
 if [[ -z "${BRIDGE_IP}" ]]; then
     echo "[ERROR] TUX2LAB_BRIDGE_IP must be set (e.g., 192.168.100.1)"
@@ -96,6 +120,10 @@ while ip -6 addr show dev "${BRIDGE_IF}" 2>/dev/null | grep -q "tentative"; do
     ((++elapsed))
 done
 echo "    → IPv6 ready"
+
+echo "[*] Starting container NFS..."
+start_container_nfs
+monitor_container_nfs &
 
 # --- Helper: wait for a process to be ready ---
 wait_for_pid() {
