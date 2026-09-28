@@ -60,7 +60,8 @@ Do not use those wrappers for deployment or mix them with the migration command.
   bridge addresses; ancillary RPC listeners may still show wildcard bindings.
   Fixed lockd ports are host-wide settings, so host NFS client mounts are rejected.
 - Other firewall policy still applies. The guard does not override a host DROP
-  policy, and monitoring stops the engine if the guard table disappears.
+  policy. Monitoring compares the current stateless nftables JSON with the
+  installed ruleset and stops the engine if the table or its protection changes.
 - Shutdown stops kernel threads before removing exports, daemons, control mounts
   and firewall rules. If shutdown cannot be verified, lifecycle commands retain
   network/filesystem state and fail instead of continuing ISO teardown.
@@ -102,6 +103,33 @@ Verified in this implementation checkpoint:
   Existing surrounding scripts still have baseline ShellCheck diagnostics;
   indirect-call analysis produces informational diagnostics for test mocks and
   EXIT traps. The mock test suite is checked at warning severity.
+
+## September 28 Review
+
+The first hardening pass corrected five unsafe inspection paths:
+
+- Shutdown reads the protected kernel thread count with privilege and rejects
+  failed or invalid reads instead of silently skipping them.
+- Container lookup distinguishes a genuinely missing container from a Podman
+  inspection failure. Stop, replacement and rollback abort on inspection errors.
+- Existing kernel exports are read and validated directly. Their `/proc` file
+  reports zero size even when it contains data, so a file-size test is unsafe.
+- Firewall readiness verifies the installed rules, not just table existence.
+  Removing the input rules while retaining the table now fails readiness.
+- Host preflight requires successful systemd and mount-table inspection. Active
+  or transitional units and unknown state are rejected before module loading.
+  Failed service units are accepted only with a verified zero main PID.
+
+Rootless regressions cover each path. The isolated NFS protocol, read-only,
+restart and mountd-failure checks passed again, as did the dual-stack packet
+tests and the new real firewall-rule-removal check. Touched production scripts
+pass ShellCheck; the dynamically mocked suite passes at warning severity.
+
+This completes the first review pass, not live acceptance. Actual fixed lockd
+port allocation under host networking is still unverified: the isolated service
+test deliberately skips those host-wide sysctl writes. The next stage is the
+complete-engine and ISO-propagation test plan. No host handover or registry image
+publication was performed for this review.
 
 ## Planned Handover
 

@@ -6,6 +6,30 @@ NFS_OWNS_SERVER=false
 NFS_OWNS_CONTROL=false
 NFS_OWNS_PIPEFS=false
 NFS_OWNS_FIREWALL=false
+NFS_FIREWALL_STATE=/run/tux2lab-nfs.firewall.json
+
+nfs_check_firewall() {
+    local rules
+    [[ -s "$NFS_FIREWALL_STATE" ]] || return 1
+    rules=$(nft -j -s list table inet tux2lab_nfs) || return 1
+    printf '%s\n' "$rules" | cmp -s "$NFS_FIREWALL_STATE" -
+}
+
+nfs_require_unused_exports() {
+    local exports
+    exports=$(cat /proc/fs/nfs/exports) || {
+        printf '[ERROR] Cannot inspect kernel exports; refusing takeover.\n' >&2
+        return 1
+    }
+    if [[ -z "$exports" || "$exports" != '# Version '* ]]; then
+        printf '[ERROR] Unrecognized kernel export state; refusing takeover.\n' >&2
+        return 1
+    fi
+    if grep -q '^/' <<< "$exports"; then
+        printf '[ERROR] Kernel exports already exist; refusing to replace them.\n' >&2
+        return 1
+    fi
+}
 
 nfs_wait_for_rpc() {
     local program="$1" version="$2" attempt
@@ -26,7 +50,7 @@ check_container_nfs() {
     while IFS= read -r child; do
         [[ "$child" =~ ^[0-9]+$ ]] && kill -0 "$child" 2>/dev/null || return 1
     done < /run/tux2lab-nfs.ready
-    nft list table inet tux2lab_nfs >/dev/null 2>&1 || return 1
+    nfs_check_firewall || return 1
     timeout 5 rpcinfo -n 2049 -t "${BRIDGE_IP:?}" 100003 3 >/dev/null 2>&1 || return 1
     timeout 5 rpcinfo -n 2049 -t "$BRIDGE_IP" 100003 4 >/dev/null 2>&1
 }
@@ -57,16 +81,14 @@ start_container_nfs() {
         NFS_OWNS_CONTROL=true
     fi
     [[ "$(cat "$NFS_CONTROL_DIR/threads")" == 0 ]] || return 1
-    if [[ -s /proc/fs/nfs/exports ]] && grep -q '^/' /proc/fs/nfs/exports; then
-        printf '[ERROR] Kernel exports already exist; refusing to replace them.\n' >&2
-        return 1
-    fi
+    nfs_require_unused_exports || return 1
     sysctl -w fs.nfs.nlm_tcpport=32803 fs.nfs.nlm_udpport=32769 >/dev/null || return 1
     if nft list table inet tux2lab_nfs >/dev/null 2>&1; then
         nft delete table inet tux2lab_nfs || return 1
     fi
     write_container_nfs_firewall "${BRIDGE_IF:?}" | nft -f - || return 1
     NFS_OWNS_FIREWALL=true
+    nft -j -s list table inet tux2lab_nfs > "$NFS_FIREWALL_STATE" || return 1
     if ! mountpoint -q /var/lib/nfs/rpc_pipefs; then
         mount -t rpc_pipefs sunrpc /var/lib/nfs/rpc_pipefs || return 1
         NFS_OWNS_PIPEFS=true
@@ -125,6 +147,7 @@ stop_container_nfs() {
     if "$NFS_OWNS_FIREWALL"; then
         nft delete table inet tux2lab_nfs || return 1
         NFS_OWNS_FIREWALL=false
+        rm -f "$NFS_FIREWALL_STATE" || return 1
     fi
 }
 

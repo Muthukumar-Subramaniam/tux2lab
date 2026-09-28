@@ -175,6 +175,15 @@ for namespace, addresses in [("allowed", ["192.0.2.1", "2001:db8:1::1"]),
 subprocess.run(["python3", "-c", probe, "allowed", "127.0.0.1", "::1"], check=True)
 print("PASS: real IPv4/IPv6 TCP/UDP RPC ports allow bridge/loopback and reject outside traffic")
 PYTEST
+    source "$PROJECT_ROOT/container/nfs-service.sh"
+    nft -j -s list table inet tux2lab_nfs > "$NFS_FIREWALL_STATE"
+    nfs_check_firewall
+    nft flush chain inet tux2lab_nfs input
+    if nfs_check_firewall; then
+        printf 'FAIL: an empty firewall chain remained healthy\n' >&2
+        exit 1
+    fi
+    printf 'PASS: retained table with removed protection fails readiness\n'
     exit 0
 fi
 [[ $# == 0 ]] || exit 2
@@ -222,6 +231,27 @@ printf 'PASS: RPC confinement rule generation\n'
 source "$PROJECT_ROOT/container/nfs-service.sh"
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
+NFS_FIREWALL_STATE="$test_dir/firewall.json"
+printf '{"nftables":[{"rule":{"drop":true}}]}\n' > "$NFS_FIREWALL_STATE"
+for firewall_case in matching changed unreadable empty; do
+    (
+        nft() {
+            [[ "$*" == '-j -s list table inet tux2lab_nfs' ]] || exit 99
+            case "$firewall_case" in
+                matching) cat "$NFS_FIREWALL_STATE" ;;
+                changed) printf '{"nftables":[]}\n' ;;
+                unreadable) return 1 ;;
+                empty) return 0 ;;
+            esac
+        }
+        if nfs_check_firewall 2>/dev/null; then
+            [[ "$firewall_case" == matching ]]
+        else
+            [[ "$firewall_case" != matching ]]
+        fi
+    )
+done
+printf 'PASS: firewall readiness verifies rules, not only table existence\n'
 DATA_DIR="$test_dir/data"
 NFS_CONTROL_DIR="$test_dir/control"
 mkdir -p "$DATA_DIR/nfs" "$NFS_CONTROL_DIR"
@@ -234,6 +264,26 @@ if start_container_nfs >/dev/null 2>&1; then
 fi
 [[ "$NFS_OWNS_SERVER" == false && "${#NFS_CHILDREN[@]}" == 0 ]]
 printf 'PASS: active server rejected before mutation\n'
+
+for export_case in empty occupied unreadable malformed; do
+    (
+        cat() {
+            [[ "$*" == /proc/fs/nfs/exports ]] || exit 99
+            case "$export_case" in
+                empty) printf '# Version 1.1\n# Path Client(Flags)\n' ;;
+                occupied) printf '# Version 1.1\n/unrelated 192.0.2.0/24(ro)\n' ;;
+                unreadable) return 1 ;;
+                malformed) printf 'unknown\n' ;;
+            esac
+        }
+        if nfs_require_unused_exports 2>/dev/null; then
+            [[ "$export_case" == empty ]]
+        else
+            [[ "$export_case" != empty ]]
+        fi
+    )
+done
+printf 'PASS: kernel export inspection rejects occupied or unknown state\n'
 
 (
     source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
@@ -279,13 +329,53 @@ printf 'PASS: replacement failure restores previous engine\n'
 
 (
     source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
-    sudo() { printf 'LISTEN 0 64 192.0.2.1:2049\n'; }
-    cat() { printf '0\n'; }
+    sudo() {
+        case "$*" in
+            'test -e /proc/fs/nfsd/threads') return 0 ;;
+            'cat /proc/fs/nfsd/threads') printf '0\n' ;;
+            'ss '*) printf 'LISTEN 0 64 192.0.2.1:2049\n' ;;
+            *) exit 99 ;;
+        esac
+    }
     if verify_container_nfs_stopped 2>/dev/null; then
         exit 1
     fi
 )
 printf 'PASS: residual kernel listener blocks cleanup\n'
+
+for thread_case in active stopped unreadable invalid missing inspection-error; do
+    (
+        source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+        sudo() {
+            case "$*" in
+                'test -e /proc/fs/nfsd/threads')
+                    case "$thread_case" in
+                        missing) return 1 ;;
+                        inspection-error) return 2 ;;
+                    esac ;;
+                'cat /proc/fs/nfsd/threads')
+                    case "$thread_case" in
+                        active) printf '8\n' ;;
+                        stopped) printf '0\n' ;;
+                        unreadable) return 1 ;;
+                        invalid) printf 'unknown\n' ;;
+                        *) exit 99 ;;
+                    esac ;;
+                'ss '*) return 0 ;;
+                *) exit 99 ;;
+            esac
+        }
+        if verify_container_nfs_stopped 2>/dev/null; then
+            if [[ "$thread_case" != stopped && "$thread_case" != missing ]]; then
+                printf 'FAIL: shutdown accepted %s kernel thread state\n' "$thread_case" >&2
+                exit 1
+            fi
+        else
+            [[ "$thread_case" != stopped && "$thread_case" != missing ]]
+        fi
+    )
+done
+printf 'PASS: shutdown requires privileged, valid kernel thread inspection\n'
 
 (
     source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
@@ -376,3 +466,98 @@ printf 'PASS: missing original engine blocks host rollback\n'
     [[ ! -e "$NFS_MIGRATION_DIR/snapshot-complete" ]]
 )
 printf 'PASS: failed snapshot cannot authorize host mutation\n'
+
+for lookup_status in 0 1 125; do
+    (
+        source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+        sudo() { return "$lookup_status"; }
+        if exists=$(container_nfs_exists engine 2>/dev/null); then
+            case "$lookup_status" in
+                0) [[ "$exists" == true ]] ;;
+                1) [[ "$exists" == false ]] ;;
+                *) exit 1 ;;
+            esac
+        else
+            [[ "$lookup_status" == 125 ]]
+        fi
+    )
+done
+printf 'PASS: container lookup distinguishes absence from inspection errors\n'
+
+for lookup_path in stop replace rollback; do
+    (
+        source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
+        source() { :; }
+        NFS_MIGRATION_DIR="$test_dir/lookup-error-$lookup_path"
+        mkdir -p "$NFS_MIGRATION_DIR"
+        touch "$NFS_MIGRATION_DIR/snapshot-complete"
+        container_nfs_image_check() { :; }
+        container_nfs_host_preflight() { :; }
+        prepare_container_nfs() { :; }
+        verify_container_nfs_stopped() { printf 'unsafe\n' >> "$test_dir/lookup-error"; }
+        run_tux2lab_container() { printf 'unsafe\n' >> "$test_dir/lookup-error"; }
+        sudo() {
+            case "$*" in
+                'podman container exists '*) return 125 ;;
+                *) printf 'unsafe\n' >> "$test_dir/lookup-error"; return 1 ;;
+            esac
+        }
+        case "$lookup_path" in
+            stop) if stop_engine_nfs engine 2>/dev/null; then exit 1; fi ;;
+            replace) if replace_tux2lab_container engine image lab /data 192.0.2.1 labbr0 2>/dev/null; then exit 1; fi ;;
+            rollback) if restore_host_nfs 2>/dev/null; then exit 1; fi ;;
+        esac
+        [[ ! -e "$test_dir/lookup-error" ]]
+    )
+done
+printf 'PASS: container inspection errors block stop, replacement and rollback\n'
+
+for preflight_case in stopped masked absent failed-stopped active activating query-error empty failed-running mount-error empty-mounts nfs nfs4; do
+    (
+        source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+        sudo() {
+            case "$*" in
+                'systemctl show nfs-server.service -p LoadState --value')
+                    case "$preflight_case" in
+                        query-error) return 1 ;;
+                        empty) return 0 ;;
+                        masked) printf 'masked\n' ;;
+                        absent) printf 'not-found\n' ;;
+                        *) printf 'loaded\n' ;;
+                    esac ;;
+                'systemctl show nfs-server.service -p ActiveState --value')
+                    case "$preflight_case" in
+                        active|activating) printf '%s\n' "$preflight_case" ;;
+                        failed-stopped|failed-running) printf 'failed\n' ;;
+                        *) printf 'inactive\n' ;;
+                    esac ;;
+                'systemctl show nfs-server.service -p MainPID --value')
+                    if [[ "$preflight_case" == failed-stopped ]]; then printf '0\n'; else printf '123\n'; fi ;;
+                'systemctl show '*) printf 'not-found\n' ;;
+                'modprobe '*) printf '%s\n' "$*" >> "$test_dir/preflight-$preflight_case" ;;
+                *) exit 99 ;;
+            esac
+        }
+        findmnt() {
+            [[ "$*" == '-rn -o FSTYPE' ]] || exit 99
+            case "$preflight_case" in
+                mount-error) return 1 ;;
+                empty-mounts) return 0 ;;
+                nfs|nfs4) printf 'ext4\n%s\n' "$preflight_case" ;;
+                *) printf 'ext4\nproc\n' ;;
+            esac
+        }
+        if container_nfs_host_preflight 2>/dev/null; then
+            case "$preflight_case" in
+                stopped|masked|absent|failed-stopped) [[ -s "$test_dir/preflight-$preflight_case" ]] ;;
+                *) printf 'FAIL: preflight accepted %s\n' "$preflight_case" >&2; exit 1 ;;
+            esac
+        else
+            case "$preflight_case" in
+                stopped|masked|absent|failed-stopped) exit 1 ;;
+                *) [[ ! -e "$test_dir/preflight-$preflight_case" ]] ;;
+            esac
+        fi
+    )
+done
+printf 'PASS: host preflight requires stopped units and a verified mount table\n'

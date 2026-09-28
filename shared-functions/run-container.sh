@@ -52,17 +52,19 @@ run_tux2lab_container() {
 }
 
 replace_tux2lab_container() {
-    local name="$1" image="$2" backup="${1}-rebuild-backup"
+    local name="$1" image="$2" backup="${1}-rebuild-backup" exists
     source /tux2lab/shared-functions/container-nfs.sh
     container_nfs_image_check "$image" || return 1
     container_nfs_host_preflight || return 1
     prepare_container_nfs "$4" || return 1
-    if ! sudo podman container exists "$name"; then
+    exists=$(container_nfs_exists "$name") || return 1
+    if [[ "$exists" == false ]]; then
         run_tux2lab_container "$@"
         return $?
     fi
     require_container_nfs_engine "$name" || return 1
-    if sudo podman container exists "$backup"; then
+    exists=$(container_nfs_exists "$backup") || return 1
+    if [[ "$exists" == true ]]; then
         printf 'Previous rebuild backup exists: %s. Resolve it before rebuilding.\n' "$backup" >&2
         return 1
     fi
@@ -73,7 +75,8 @@ replace_tux2lab_container() {
         return $?
     fi
     printf 'Replacement failed; restoring the previous engine.\n' >&2
-    if sudo podman container exists "$name"; then
+    exists=$(container_nfs_exists "$name") || return 1
+    if [[ "$exists" == true ]]; then
         stop_engine_nfs "$name" || return 1
         sudo podman rm "$name" || return 1
     fi

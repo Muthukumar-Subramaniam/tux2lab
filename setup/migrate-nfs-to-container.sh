@@ -13,10 +13,11 @@ NFS_DATA=/tux2lab-data
 NFS_UNITS=(nfs-server.service nfs-kernel-server.service nfs-mountd.service rpc-mountd.service rpc-statd.service nfs-idmapd.service rpcbind.socket rpcbind.service proc-fs-nfsd.mount)
 
 migration_preflight() {
-    local image="$1" guests exports label unit
+    local image="$1" guests exports label unit exists
     container_nfs_image_check "$image" || return 1
     [[ -f "$NFS_DATA/lab-config/lab_environment.json" ]] || return 1
-    if [[ -e "$NFS_MIGRATION_DIR" ]] || sudo podman container exists "$NFS_BACKUP"; then
+    exists=$(container_nfs_exists "$NFS_BACKUP") || return 1
+    if [[ -e "$NFS_MIGRATION_DIR" || "$exists" == true ]]; then
         printf 'A migration checkpoint already exists. Roll it back or archive it deliberately.\n' >&2
         return 1
     fi
@@ -30,10 +31,7 @@ migration_preflight() {
         printf 'Unrelated host exports exist. This migration requires a dedicated lab NFS server.\n' >&2
         return 1
     fi
-    if findmnt -rn -t nfs,nfs4 | grep -q .; then
-        printf 'Host NFS client mounts must be unmounted before migration.\n' >&2
-        return 1
-    fi
+    container_nfs_require_no_client_mounts || return 1
     for unit in "${NFS_UNITS[@]}"; do
         if [[ "$(sudo systemctl show "$unit" -p LoadState --value)" == loaded ]] &&
            [[ "$(sudo systemctl show "$unit" -p ActiveState --value)" != active &&
@@ -71,11 +69,13 @@ snapshot_host_nfs() {
 }
 
 restore_host_nfs() {
-    local unit active enabled status=0
+    local unit active enabled status=0 exists
     [[ -f "$NFS_MIGRATION_DIR/snapshot-complete" ]] || return 1
-    if sudo podman container exists "$NFS_BACKUP"; then
+    exists=$(container_nfs_exists "$NFS_BACKUP") || return 1
+    if [[ "$exists" == true ]]; then
         [[ "$(sudo podman inspect "$NFS_BACKUP" --format '{{.Id}}')" == "$(cat "$NFS_MIGRATION_DIR/engine-id")" ]] || return 1
-        if sudo podman container exists "$NFS_ENGINE"; then
+        exists=$(container_nfs_exists "$NFS_ENGINE") || return 1
+        if [[ "$exists" == true ]]; then
             stop_engine_nfs "$NFS_ENGINE" || return 1
             sudo podman rm "$NFS_ENGINE" || return 1
         fi
