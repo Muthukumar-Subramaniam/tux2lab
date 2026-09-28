@@ -72,6 +72,11 @@ work; reservation does not imply that statd runs or that locking is validated.
 
 ## Build and Test
 
+Development images stay local throughout implementation and acceptance testing.
+Publishing a development image to a registry is not a required migration step.
+After acceptance, build and validate the final release image, then publish it
+before release using the normal release workflow.
+
 From `/tux2lab`:
 
 ```bash
