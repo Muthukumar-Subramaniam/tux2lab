@@ -43,10 +43,24 @@ nfs_wait_for_rpc() {
     return 1
 }
 
+nfs_wait_for_tracking_daemon() {
+    local child="$1" attempt
+    for ((attempt = 0; attempt < 100; attempt++)); do
+        kill -0 "$child" 2>/dev/null || break
+        if grep -qs '^inotify ' "/proc/$child"/fdinfo/*; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    printf '[ERROR] NFS client tracking daemon did not initialize its pipe watch.\n' >&2
+    return 1
+}
+
 check_container_nfs() {
     local child
     [[ -s /run/tux2lab-nfs.ready ]] || return 1
     [[ "$(cat "$NFS_CONTROL_DIR/threads")" -gt 0 ]] || return 1
+    [[ -p /var/lib/nfs/rpc_pipefs/nfsd/cld ]] || return 1
     while IFS= read -r child; do
         [[ "$child" =~ ^[0-9]+$ ]] && kill -0 "$child" 2>/dev/null || return 1
     done < /run/tux2lab-nfs.ready
@@ -95,6 +109,7 @@ start_container_nfs() {
     fi
     nfsdcld -F -p /var/lib/nfs/rpc_pipefs -s /var/lib/nfs/nfsdcld &
     NFS_CHILDREN+=("$!")
+    nfs_wait_for_tracking_daemon "${NFS_CHILDREN[0]}" || return 1
     local rpcbind_hosts=(-h "$BRIDGE_IP")
     [[ -z "${BRIDGE_IPV6:-}" ]] || rpcbind_hosts+=(-h "$BRIDGE_IPV6")
     rpcbind -f "${rpcbind_hosts[@]}" &

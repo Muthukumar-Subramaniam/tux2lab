@@ -231,6 +231,42 @@ printf 'PASS: RPC confinement rule generation\n'
 source "$PROJECT_ROOT/container/nfs-service.sh"
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
+for tracking_case in ready delayed dead timeout unreadable; do
+    (
+        tracking_checks=0
+        tracking_waits=0
+        kill() {
+            [[ "$*" == '-0 12345' ]] || exit 99
+            [[ "$tracking_case" != dead ]]
+        }
+        grep() {
+            [[ "$1" == -qs && "$2" == '^inotify ' ]] || exit 99
+            ((tracking_checks += 1))
+            case "$tracking_case" in
+                ready) return 0 ;;
+                delayed) [[ "$tracking_checks" -ge 3 ]] ;;
+                unreadable) return 2 ;;
+                *) return 1 ;;
+            esac
+        }
+        sleep() {
+            [[ "$*" == 0.1 ]] || exit 99
+            ((tracking_waits += 1))
+        }
+        if nfs_wait_for_tracking_daemon 12345 2>/dev/null; then
+            [[ "$tracking_case" == ready || "$tracking_case" == delayed ]]
+        else
+            [[ "$tracking_case" != ready && "$tracking_case" != delayed ]]
+        fi
+        case "$tracking_case" in
+            ready) [[ "$tracking_checks:$tracking_waits" == 1:0 ]] ;;
+            delayed) [[ "$tracking_checks:$tracking_waits" == 3:2 ]] ;;
+            dead) [[ "$tracking_checks:$tracking_waits" == 0:0 ]] ;;
+            *) [[ "$tracking_checks:$tracking_waits" == 100:100 ]] ;;
+        esac
+    )
+done
+printf 'PASS: tracking daemon startup waits for its watch and rejects dead, timed-out or unreadable state\n'
 NFS_FIREWALL_STATE="$test_dir/firewall.json"
 printf '{"nftables":[{"rule":{"drop":true}}]}\n' > "$NFS_FIREWALL_STATE"
 for firewall_case in matching changed unreadable empty; do
