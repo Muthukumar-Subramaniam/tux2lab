@@ -203,7 +203,10 @@ lockd sysctl values were unchanged. No development image was published.
 ## Planned Handover
 
 Do not execute this section until an integrated acceptance window is authorized.
-Use a dedicated lab host with no unrelated NFS exports or clients. Shut down
+For full end-to-end acceptance, the target is the current CBL-Mariner KVM host.
+Dedicated test-host VMs also exercise this procedure against their own released
+lab baseline, without changing the parent's NFS owner. On either target, require
+no unrelated NFS exports or clients. Shut down
 guests and finish installer sessions first. Stop any external NFS clients too;
 the preflight cannot discover every UDP client. Do not run other lab lifecycle
 commands concurrently. The migration lock serializes migration commands only.
@@ -255,25 +258,42 @@ hide that state. Inspect the retained engine, logs, kernel threads and listeners
 recover ownership in a dedicated maintenance window before retrying. Automated
 recovery from this failure class is not established by the mountd-child test.
 
-## Remaining Acceptance Gates
+## Remaining Acceptance Plan
 
-1. Full integrated engine handover and rollback with all DNS/DHCP/HTTP/TFTP/NTP/RA
-   services, actual propagated ISO mounts, and the unchanged 2 GiB Alma/Ubuntu
-   PXE workflows. Historical experiments used a standalone server.
-2. Actual fixed lockd port allocation and RPC listener audit under host networking,
-   including host firewall reloads and IPv4-only configurations.
-3. Repeated container recreation, durable handles, active-client reclaim, abrupt
-   PID 1 failure, reboot and interrupted migration recovery.
-4. Host executable/upcall dependency audit before removing any host NFS packages.
-5. Cross-distribution host verification using dedicated lab VMs, as defined below,
-   plus supported guest-version coverage. Read-only installation success does not
-   establish writable shared storage.
+Implementation, hardening and isolated complete-engine/ISO tests are complete.
+They do not replace actual lab setup, deployment or integrated PXE acceptance.
+The remaining work is split into three stages:
+
+1. **Dedicated test-VM deployment and compatibility.** Create test hosts through
+  the existing tux2lab tool, then run the real host setup and lab deployment
+  inside each distribution. Verify the deployed lab, lifecycle and recovery,
+  plus migration/rollback from a separate released baseline. The host matrix
+  and required checks are below. Do not create deeper-nested PXE guests.
+2. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
+  window on the current CBL-Mariner host, test actual NFS handover, normal
+  tux2lab VM creation and unchanged 2 GiB AlmaLinux/Ubuntu NFS-backed PXE
+  installations through installed-disk boot. Verify all deployed services, ISO
+  propagation, start/stop/rebuild, repeated container recreation, RPC ports and
+  firewall behavior, recovery and rollback. Schedule host reboot and disruptive
+  fault injection explicitly within that window. Historical standalone-server
+  experiments and sibling-VM protocol tests do not replace this workflow.
+3. **Release preparation.** Resolve findings and rerun affected checks, record
+  results and unsupported/untested configurations, and finalize cleanup and
+  documentation. Complete the host executable/upcall dependency audit before
+  any separately approved host NFS package removal. Keep development images
+  local; build and validate the final release image, then publish it through
+  the normal release workflow. Publication and merge to main require approval.
+
+This document update authorizes no VM provisioning, live handover, host reboot,
+package removal, image publication or merge. Before execution, confirm the test
+targets, resource budget and any maintenance window with the user.
 
 ## Cross-Distribution Host Verification
 
-Use dedicated VMs on the existing lab as test hosts during the compatibility
-stage, before release. Each VM runs its distribution's own kernel, systemd,
-Podman and tux2lab installation, with nested KVM guests for PXE acceptance.
+Use dedicated VMs on the existing lab as test hosts before release. Each VM runs
+its distribution's own kernel, systemd, Podman and actual tux2lab installation.
+The required outcome is a successfully set up and deployed lab, not merely a
+manually started container or a collection of passing component tests.
 Installing a distribution only as a PXE guest does not verify it as a lab host;
 running a different distribution's container still shares the parent kernel.
 
@@ -293,41 +313,78 @@ targets as untested, never infer a pass from another distribution in the family.
 
 ### Environment and Isolation
 
-- Verify nested KVM support and CPU virtualization exposure before provisioning.
-  Budget CPU, memory and storage for the test host and its nested guests without
-  exhausting the parent lab; run targets sequentially when needed.
+- Provision each dedicated test-host VM using tux2lab itself. After installation,
+  shut it down completely and update its persistent libvirt CPU XML to
+  `mode='host-passthrough'` and `check='none'`, preserving any topology settings.
+  Start it again and verify virtualization exposure and usable `/dev/kvm` inside.
+  Do not change existing production guest definitions.
+- Parent nesting was verified on September 28: `kvm_amd` nested setting `1`,
+  CPU `svm` flag and `/dev/kvm` present. This does not prove the test VM's CPU
+  configuration or KVM access; `check='none'` is not a nesting enable switch.
+  Budget CPU, memory and storage for test-host deployment without exhausting the
+  parent lab; run targets sequentially when needed.
 - Give each test host separate virtual disks and lab data on a local exportable
   filesystem. Cover ext4, XFS and Btrfs across applicable targets; do not use the
   parent's exported data tree as the test host's NFS backing store.
 - Allocate non-overlapping lab networks. Keep inner DHCP and IPv6 router
   advertisements confined to the test host's private lab bridge, with no bridge
   connection to the parent lab network.
-- Perform migration, reboot, fault injection and rollback only inside dedicated
-  test-host VMs. Preserve the parent engine, guests, host NFS ownership, exports
-  and settings. This plan update does not authorize a parent-lab handover.
+- During this stage, perform migration, reboot, fault injection and rollback
+  only inside dedicated test-host VMs. Keep the parent engine, existing guests,
+  NFS ownership, exports and settings unchanged, apart from adding/removing the
+  explicitly approved dedicated test VMs through normal tux2lab workflows.
+  Parent-host acceptance is a separate maintenance stage, not part of this setup.
 
 ### Acceptance Per Host
 
-- Verify fresh setup and existing-lab migration/rollback as separate workflows,
-  including package availability, executable paths and systemd unit differences.
+- On a fresh distro VM, run the normal documented host setup using
+  [setup/setup-host.sh](../setup/setup-host.sh), then actual lab deployment using
+  [setup/deploy-lab.sh](../setup/deploy-lab.sh). Test the migration branch and
+  explicitly selected local development image, and record their exact versions.
+  Do not substitute fixture configs or manually launched services for deployment.
+- Verify setup installs the required packages and configures working KVM/libvirt,
+  the lab bridge and networks, storage and CLI. Verify deployment generates real
+  lab/service configuration and starts the engine through the normal launcher.
+  Confirm operational DNS, DHCP, HTTP/HTTPS, TFTP, NTP and IPv6 RA services, health
+  reporting, NFS exports and host-mounted ISO visibility.
+- Exercise migration and rollback separately from fresh deployment, starting
+  from a recorded released host-NFS lab installation. Check package availability,
+  executable paths, systemd unit differences and restoration of the old owner.
 - Exercise kernel NFS support and tracking initialization, Podman privileges,
   ISO mount propagation, persistent state and actual fixed RPC port allocation.
+  Here the container uses the test VM's host network namespace, so inspect its
+  real listener allocation and lockd settings, not only generated configuration.
 - Check the distribution's enabled SELinux/AppArmor and firewall policies,
   including firewall reloads and dual-stack/IPv4-only configurations. Do not
   disable security enforcement to obtain a pass.
-- Run complete-engine service checks, start/stop/rebuild, host-VM reboot,
-  interrupted migration and failure recovery, including active-client reclaim.
-- Complete the same 2 GiB AlmaLinux and Ubuntu nested PXE workflows. Keep broader
-  guest-version coverage separate from the host matrix.
+- Run normal lab start/stop/rebuild, repeated container recreation, host-VM reboot,
+  interrupted migration and failure recovery, including abrupt engine PID 1
+  termination. Verify durable handles and active-client reclaim using controlled
+  NFS clients without creating another nested guest; retain explicit blocked
+  status for checks that cannot be performed.
+- Do not create or PXE-install further nested guests inside these test-host VMs:
+  the user reports that this extra virtualization layer hangs in this environment.
+  This exclusion does not remove any actual lab setup or deployment requirement.
+  Run the full 2 GiB AlmaLinux/Ubuntu PXE workflows on the current KVM host during
+  its approved acceptance window. A sibling PXE-client VM is not a required gate
+  and would not establish the complete test host's KVM/provisioning workflow.
 - Record distro release, kernel, Podman version, local image ID, filesystem,
   security policy, results and any blocked checks for each target.
 
+### Coverage Boundary
+
+After the required checks pass, claim actual lab setup/deployment, host-software
+compatibility and the recorded lifecycle/recovery results on the tested distro
+VMs. Claim complete KVM/PXE workflow acceptance only on the current CBL-Mariner
+host after its end-to-end tests pass. Full KVM/PXE installation workflows on
+other host distributions remain unverified, even when deployment succeeds.
+
 Bare-metal hardware validation is unavailable and is not a required gate for
-this matrix. Acceptance claims are limited to virtualized hosts running the
-tested distributions, kernels and configurations. Physical drivers, firmware,
-storage controllers and bare-metal performance remain unverified; passing nested
-tests is not hardware certification. This boundary does not waive the software
-compatibility or recovery checks above.
+this matrix. Physical drivers, firmware, storage controllers and bare-metal
+performance remain unverified; VM-based results are not hardware certification.
+Read-only installation success does not establish writable shared storage.
+These boundaries do not waive the setup, deployment, software compatibility or
+recovery checks above. All newly planned acceptance results remain pending.
 
 Push tested checkpoints to `origin/migration/nfs-host-to-container` and verify the
 remote tip. Runtime data, VM disks, generated credentials and local image binaries
