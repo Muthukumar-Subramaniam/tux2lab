@@ -265,8 +265,69 @@ recovery from this failure class is not established by the mountd-child test.
 3. Repeated container recreation, durable handles, active-client reclaim, abrupt
    PID 1 failure, reboot and interrupted migration recovery.
 4. Host executable/upcall dependency audit before removing any host NFS packages.
-5. Representative host filesystems/distributions and supported guest versions.
-   Read-only installation success does not establish writable shared storage.
+5. Cross-distribution host verification using dedicated lab VMs, as defined below,
+   plus supported guest-version coverage. Read-only installation success does not
+   establish writable shared storage.
+
+## Cross-Distribution Host Verification
+
+Use dedicated VMs on the existing lab as test hosts during the compatibility
+stage, before release. Each VM runs its distribution's own kernel, systemd,
+Podman and tux2lab installation, with nested KVM guests for PXE acceptance.
+Installing a distribution only as a PXE guest does not verify it as a lab host;
+running a different distribution's container still shares the parent kernel.
+
+Planned host matrix (not verified support claims):
+
+| Family | Test-host targets | Status |
+| --- | --- | --- |
+| Microsoft | CBL-Mariner 2.0, Azure Linux 3.0 | Dedicated-VM acceptance pending |
+| Debian-based | Debian, Ubuntu LTS | Pending |
+| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | Pending |
+| Fedora | Fedora | Pending |
+| SUSE | openSUSE Leap | Pending |
+
+Existing Mariner results remain the baseline, not a substitute for the matrix.
+Select and record exact release versions before execution. Record unavailable
+targets as untested, never infer a pass from another distribution in the family.
+
+### Environment and Isolation
+
+- Verify nested KVM support and CPU virtualization exposure before provisioning.
+  Budget CPU, memory and storage for the test host and its nested guests without
+  exhausting the parent lab; run targets sequentially when needed.
+- Give each test host separate virtual disks and lab data on a local exportable
+  filesystem. Cover ext4, XFS and Btrfs across applicable targets; do not use the
+  parent's exported data tree as the test host's NFS backing store.
+- Allocate non-overlapping lab networks. Keep inner DHCP and IPv6 router
+  advertisements confined to the test host's private lab bridge, with no bridge
+  connection to the parent lab network.
+- Perform migration, reboot, fault injection and rollback only inside dedicated
+  test-host VMs. Preserve the parent engine, guests, host NFS ownership, exports
+  and settings. This plan update does not authorize a parent-lab handover.
+
+### Acceptance Per Host
+
+- Verify fresh setup and existing-lab migration/rollback as separate workflows,
+  including package availability, executable paths and systemd unit differences.
+- Exercise kernel NFS support and tracking initialization, Podman privileges,
+  ISO mount propagation, persistent state and actual fixed RPC port allocation.
+- Check the distribution's enabled SELinux/AppArmor and firewall policies,
+  including firewall reloads and dual-stack/IPv4-only configurations. Do not
+  disable security enforcement to obtain a pass.
+- Run complete-engine service checks, start/stop/rebuild, host-VM reboot,
+  interrupted migration and failure recovery, including active-client reclaim.
+- Complete the same 2 GiB AlmaLinux and Ubuntu nested PXE workflows. Keep broader
+  guest-version coverage separate from the host matrix.
+- Record distro release, kernel, Podman version, local image ID, filesystem,
+  security policy, results and any blocked checks for each target.
+
+Bare-metal hardware validation is unavailable and is not a required gate for
+this matrix. Acceptance claims are limited to virtualized hosts running the
+tested distributions, kernels and configurations. Physical drivers, firmware,
+storage controllers and bare-metal performance remain unverified; passing nested
+tests is not hardware certification. This boundary does not waive the software
+compatibility or recovery checks above.
 
 Push tested checkpoints to `origin/migration/nfs-host-to-container` and verify the
 remote tip. Runtime data, VM disks, generated credentials and local image binaries
