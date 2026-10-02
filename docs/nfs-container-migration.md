@@ -303,7 +303,7 @@ Planned host matrix (not verified support claims):
 | --- | --- | --- |
 | Microsoft | CBL-Mariner 2.0, Azure Linux 3.0 | Dedicated-VM acceptance pending |
 | Debian-based | Debian, Ubuntu LTS | Pending |
-| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | AlmaLinux 9.8 setup complete; deployment and other targets pending |
+| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | AlmaLinux 9.8 setup, deployment and initial lifecycle checks passed with manual prerequisites; recovery and other targets pending |
 | Fedora | Fedora | Pending |
 | SUSE | openSUSE Leap | Pending |
 
@@ -311,11 +311,13 @@ Existing Mariner results remain the baseline, not a substitute for the matrix.
 Select and record exact release versions before execution. Record unavailable
 targets as untested, never infer a pass from another distribution in the family.
 
-### AlmaLinux 9.8 Setup Checkpoint (October 2, 2026)
+### AlmaLinux 9.8 Host Checkpoint (October 2, 2026)
 
 The first dedicated host was provisioned through the existing golden-image CLI
 on September 29. Actual `setup/setup-host.sh --yes` completed inside the VM.
-Deployment has not started; no deployment or lifecycle acceptance is claimed.
+Actual deployment and the initial lifecycle checks below passed on October 2,
+after the explicitly approved manual preparation. Full host acceptance is not
+yet complete.
 
 - Target: `nfs-host-alma9.musubram.internal`, AlmaLinux 9.8 (Olive Jaguar),
   kernel `5.14.0-687.42.1.el9_8.x86_64`, 2 vCPUs, 4 GiB RAM and a 60 GiB root disk.
@@ -330,7 +332,9 @@ Deployment has not started; no deployment or lifecycle acceptance is claimed.
   Local image `localhost/tux2lab-engine:nfs-migration` was transferred and its ID
   verified as `648a4a32830a5b557dc5f12dd63e38586d8178b2134b06dbb2eba616e3399ce5`.
 - SELinux was already Disabled in the golden image. No enforcement change was
-  made; enforcing-policy compatibility remains untested.
+  made; enforcing-policy compatibility remains untested. Firewalld was inactive
+  during deployment checks, so enforcing host-firewall/reload coverage is also
+  unverified. The container's own nftables NFS guard was active and tested.
 
 Two manual prerequisites were required and explicitly approved:
 
@@ -356,8 +360,66 @@ Guest evidence: `/home/musubram/nfs-host-setup.log`, RPC snapshots under
 `/home/musubram/nfs-host-sync-preparation.hSHQVFVe/`. Runtime credentials and keys
 are not source artifacts. The parent checkout remains on released main, its
 released engine retains its original uptime, and its NFS ownership was not
-changed. Actual deployment, service/ISO checks, lifecycle, reboot/recovery and
-separate released-baseline migration/rollback remain pending.
+changed.
+
+#### Deployment and Initial Lifecycle Results
+
+- Actual `TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-migration tux2lab deploy`
+  generated the real configuration and launched the expected image through the
+  production launcher. Health reported 11/11 deep checks and 6/6 dual-stack
+  service checks. The user entered credentials directly in the terminal.
+- Engine inspection confirmed privileged host networking, read-only export
+  binds with `rslave` data propagation, and persistent writable NFS state.
+  Host NFS/RPC services remained inactive. Eight kernel NFS threads were verified
+  through the container's control mount; kernel logs selected `nfsdcld` tracking
+  and skipped grace because there were no clients to reclaim.
+- Actual RPC registrations matched NFS 2049, rpcbind 111, mountd 20048 and lockd
+  TCP 32803/UDP 32769. External probes from the parent reached SSH but received
+  no RPC replies/connections on either management address for the active
+  wildcard-bound rpcbind, mountd and lockd listeners. NFS guard rules matched
+  the intended lab-bridge/loopback restriction.
+- NFSv4.1 over IPv4/IPv6 and NFSv3 over IPv4 read the full iPXE file through the
+  unchanged `:/tux2lab-data` path. A client mounted read-write still received
+  `EROFS` on attempted creation, proving server-side read-only enforcement.
+  Full iPXE checksums also matched over IPv4/IPv6 HTTP, trusted HTTPS and TFTP.
+- Normal `tux2lab distro setup almalinux -v 9` verified the copied local ISO
+  against its existing checksum file and mounted it without restarting the
+  engine. ISO SHA256:
+  `445f99e24399bbe98aab86111d60751c142eda049d2444fd76da5eb03472e4ab`.
+  Full `images/install.img` reads matched SHA256
+  `539f423b5456aa36877b255b1fd2486d86fff9bfafc34ecb83282b72a93b70a2`
+  over all three NFS variants and IPv4/IPv6 HTTP/HTTPS.
+- Two live ISO-helper unmount/remount cycles passed after export-cache flush.
+  The file disappeared inside the container and returned HTTP 404 over both
+  families while unmounted; remount restored the ISO filesystem and full
+  installer checksum. Engine startup time stayed unchanged throughout.
+- Normal `tux2lab stop --yes` produced graceful engine exit 143, zero NFS threads,
+  no reserved RPC listeners, no NFS guard and no mounted ISO. Normal
+  `tux2lab start` restored infrastructure and media, passed all health checks,
+  and initialized client tracking without a recovery warning.
+- Two normal rebuilds with the explicit local-image override recreated the
+  engine, retained the NFS state directory, passed health, and read the complete
+  installer through all three NFS variants afterward. Independent management-key
+  login still worked; the published provisioning key was no longer authorized.
+  Logs are in `/home/musubram/nfs-deployment-validation.MpUP51as/`.
+- Normal `tux2lab enable` created/enabled the boot service; unit validation and
+  starting it against the running lab passed. An actual VM reboot changed the
+  boot ID and automatically restored a healthy engine, all health checks and
+  the ISO mount. Full installer reads passed again over all three NFS variants;
+  RPC masks, disabled inherited-sync units and management-key access survived.
+  Initial SSH attempts were refused while the VM restarted. No persistent
+  journal was configured, so the previous shutdown's duration and cleanup could
+  not be verified from its logs. Automatic startup/data recovery passed, but
+  this is not evidence of clean host-shutdown ordering or active-client reclaim.
+
+File-protocol clients ran inside the test VM, with temporary NFS mounts isolated
+and cleaned up. Management-interface firewall probes originated on the parent.
+These checks do not establish real DHCP lease/RA exchanges on this deployed lab,
+active-client reclaim, abrupt engine termination recovery, or migration/rollback
+from a separately released baseline. Retain persistent shutdown/failure evidence
+before the next recovery tests. Those checks, clean host-shutdown ordering,
+enforcing security-policy coverage, other distro hosts and the separately
+approved parent PXE workflow remain pending. No deeper-nested guests were created.
 
 ### Environment and Isolation
 
