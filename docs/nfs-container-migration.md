@@ -303,13 +303,61 @@ Planned host matrix (not verified support claims):
 | --- | --- | --- |
 | Microsoft | CBL-Mariner 2.0, Azure Linux 3.0 | Dedicated-VM acceptance pending |
 | Debian-based | Debian, Ubuntu LTS | Pending |
-| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | Pending |
+| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | AlmaLinux 9.8 setup complete; deployment and other targets pending |
 | Fedora | Fedora | Pending |
 | SUSE | openSUSE Leap | Pending |
 
 Existing Mariner results remain the baseline, not a substitute for the matrix.
 Select and record exact release versions before execution. Record unavailable
 targets as untested, never infer a pass from another distribution in the family.
+
+### AlmaLinux 9.8 Setup Checkpoint (October 2, 2026)
+
+The first dedicated host was provisioned through the existing golden-image CLI
+on September 29. Actual `setup/setup-host.sh --yes` completed inside the VM.
+Deployment has not started; no deployment or lifecycle acceptance is claimed.
+
+- Target: `nfs-host-alma9.musubram.internal`, AlmaLinux 9.8 (Olive Jaguar),
+  kernel `5.14.0-687.42.1.el9_8.x86_64`, 2 vCPUs, 4 GiB RAM and a 60 GiB root disk.
+- CPU: host-passthrough with `check='none'`; `svm` and `/dev/kvm` verified inside.
+  No deeper-nested guests were created.
+- Installed host software: Podman 5.8.2, libvirt 11.10.0 and QEMU 10.1.0.
+- Storage: local XFS, with shared propagation for the lab-data backing mount.
+- Inner network: persistent/autostart libvirt NAT network `tux2lab`, bridge
+  `labbr0` at `10.10.20.1/22` and `fd60:6060:2026:1::1/64`; no management NIC
+  bridged into it and no libvirt-provided DNS or DHCP.
+- Source: `07a7ce345e8dcd052cc9023372c9a1ac97fedd4d`, copied into guest `/tux2lab`.
+  Local image `localhost/tux2lab-engine:nfs-migration` was transferred and its ID
+  verified as `648a4a32830a5b557dc5f12dd63e38586d8178b2134b06dbb2eba616e3399ce5`.
+- SELinux was already Disabled in the golden image. No enforcement change was
+  made; enforcing-policy compatibility remains untested.
+
+Two manual prerequisites were required and explicitly approved:
+
+1. **Fresh-host RPC ownership gap.** `rpcbind.service` and `rpcbind.socket` were
+   enabled and active before setup package operations and remained so afterward.
+   Container NFS preflight correctly refused this competing owner, but its
+   suggested migration command requires an existing released lab, which this
+   fresh VM lacks. After verifying no engine, guests, NFS client mounts or
+   configured/active exports, the two units were stopped and masked only in the
+   test VM. Preflight then passed. No fresh-host policy fix was implemented;
+   subsequent deployment cannot be reported as an out-of-the-box pass.
+2. **Inherited guest credential sync.** Deployment intentionally removes the
+   domain-tagged provisioning key from the host's `authorized_keys`; initially
+   that was the VM's only authorized key. A separate private management key,
+   stored outside the parent's served lab data, was authorized only on this VM.
+   Its inherited `tux2lab-sync.timer` ran every five minutes and the sync script
+   replaces `authorized_keys`, so both timer and service were disabled/stopped
+   after saving their state. Key-only SSH access and NFS preflight passed again.
+   Neither parent SSH configuration nor production sync code was changed.
+
+Guest evidence: `/home/musubram/nfs-host-setup.log`, RPC snapshots under
+`/home/musubram/nfs-fresh-host-preparation.vz8BNKoc/`, and sync-unit snapshots under
+`/home/musubram/nfs-host-sync-preparation.hSHQVFVe/`. Runtime credentials and keys
+are not source artifacts. The parent checkout remains on released main, its
+released engine retains its original uptime, and its NFS ownership was not
+changed. Actual deployment, service/ISO checks, lifecycle, reboot/recovery and
+separate released-baseline migration/rollback remain pending.
 
 ### Environment and Isolation
 
@@ -384,7 +432,8 @@ this matrix. Physical drivers, firmware, storage controllers and bare-metal
 performance remain unverified; VM-based results are not hardware certification.
 Read-only installation success does not establish writable shared storage.
 These boundaries do not waive the setup, deployment, software compatibility or
-recovery checks above. All newly planned acceptance results remain pending.
+recovery checks above. Setup alone and manual preparation do not satisfy the
+remaining acceptance checks.
 
 Push tested checkpoints to `origin/migration/nfs-host-to-container` and verify the
 remote tip. Runtime data, VM disks, generated credentials and local image binaries
