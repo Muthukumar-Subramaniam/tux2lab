@@ -387,9 +387,10 @@ It was not published to a registry.
   running/healthy and `tux2lab.service` reported successful automatic startup.
   Its boot journal recorded 11/11 deep checks and 6/6 dual-stack services.
   A later attempt to repeat full NFS installer reads was blocked by rejection of
-  the dedicated management SSH key. The cause is not established; guest-agent
-  command execution is disabled and was not enabled. Management access recovery,
-  post-reboot file reads and final guest-source synchronization remain pending.
+  the dedicated management SSH key. The inherited golden-boot hook was later
+  confirmed to have replaced authorization; management access is now repaired
+  as recorded below. Guest-agent command execution remains disabled.
+  Post-reboot file reads and final guest-source synchronization remain pending.
 - New/changed runtime helpers and harnesses pass ShellCheck at warning severity.
   The generator, destroy, setup and deployment scripts retain only their existing
   warnings, compared against the branch baseline. Bash syntax and rootless
@@ -400,6 +401,29 @@ Guest source/config checkpoint and lifecycle logs are retained at
 `/home/musubram/nfs-direct-layout-integration.hTK4zJZQ/`. This is not validation
 of active-client reclaim, enforcing SELinux/AppArmor, released-baseline host-NFS
 migration/rollback or parent-host PXE acceptance. Those gates remain pending.
+
+#### Management SSH Recovery (October 2, 2026)
+
+The golden-boot journal confirmed that `tux2lab-golden-boot.service` called
+`/usr/local/bin/tux2lab-sync` directly on the subsequent boot. It started the sync
+at 13:12:33 and logged `SSH authorized_keys updated` at 13:14:42, after successful
+management-key logins at 13:13:03 and 13:13:31. Disabling the sync timer and service
+was insufficient because this separate boot hook bypassed them. File ownership
+and permissions were correct; the management key had been replaced by the
+domain-tagged provisioning key.
+
+The user restored the existing management public key through a password login.
+Independent key-only login then passed. The completed golden-boot service was
+disabled/stopped only on this dedicated test host, and the reintroduced
+domain-tagged provisioning authorization was removed from the user's account.
+Fresh key-only login verified management-only authorization, mode 600 with the
+correct ownership, all three inherited sync units disabled/inactive, and engine
+NFS readiness. The parent and production sync code were not changed.
+
+Unit state, boot journal, unit definition and pre-cleanup authorization are saved
+privately in `/home/musubram/nfs-ssh-repair.MU8X36Mr/` on the VM. No additional
+reboot was performed during the repair; persistence across another actual reboot
+and the remaining NFS acceptance checks are not claimed here.
 
 ## Cross-Distribution Host Verification
 
@@ -466,6 +490,8 @@ Two manual prerequisites were required and explicitly approved:
    Its inherited `tux2lab-sync.timer` ran every five minutes and the sync script
    replaces `authorized_keys`, so both timer and service were disabled/stopped
    after saving their state. Key-only SSH access and NFS preflight passed again.
+  The later SSH recovery above established that the inherited golden-boot
+  service must also be disabled when this VM becomes an independent lab host.
    Neither parent SSH configuration nor production sync code was changed.
 
 Guest evidence: `/home/musubram/nfs-host-setup.log`, RPC snapshots under
