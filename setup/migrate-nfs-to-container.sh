@@ -77,7 +77,7 @@ restore_host_nfs() {
         exists=$(container_nfs_exists "$NFS_ENGINE") || return 1
         if [[ "$exists" == true ]]; then
             stop_engine_nfs "$NFS_ENGINE" || return 1
-            sudo podman rm "$NFS_ENGINE" || return 1
+            remove_engine_container "$NFS_ENGINE" || return 1
         fi
         verify_container_nfs_stopped || return 1
         sudo podman rename "$NFS_BACKUP" "$NFS_ENGINE" || return 1
@@ -117,7 +117,7 @@ restore_host_nfs() {
 }
 
 apply_nfs_migration() {
-    local image="$1" unit active enabled ipv4 ipv6 ipv4_network ipv6_network bridge hostname
+    local image="$1" unit active enabled ipv4 ipv6 ipv4_network ipv6_network bridge hostname domain
     migration_preflight "$image" || return 1
     ipv4=$(jq -er '.network.ipv4.address' "$NFS_DATA/lab-config/lab_environment.json") || return 1
     ipv6=$(jq -r '.network.ipv6.address // empty' "$NFS_DATA/lab-config/lab_environment.json") || return 1
@@ -125,8 +125,9 @@ apply_nfs_migration() {
     ipv6_network=$(jq -r '.network.ipv6.ula_subnet // empty' "$NFS_DATA/lab-config/lab_environment.json") || return 1
     bridge=$(jq -er '.network.bridge_interface' "$NFS_DATA/lab-config/lab_environment.json") || return 1
     hostname=$(jq -er '.lab.engine_fqdn' "$NFS_DATA/lab-config/lab_environment.json") || return 1
+    domain=$(jq -er '.lab.domain' "$NFS_DATA/lab-config/lab_environment.json") || return 1
     mkdir -p "$NFS_DATA/nfs"
-    write_container_nfs_exports "$NFS_DATA" "$ipv4_network" "$ipv6_network" > "$NFS_DATA/nfs/container.exports" || return 1
+    write_container_nfs_exports "$NFS_DATA" "$ipv4_network" "$ipv6_network" "$domain" > "$NFS_DATA/nfs/container.exports" || return 1
     write_container_nfs_conf "$ipv4" "$ipv6" > "$NFS_DATA/nfs/container.conf" || return 1
     prepare_container_nfs "$NFS_DATA" || return 1
     snapshot_host_nfs || return 1

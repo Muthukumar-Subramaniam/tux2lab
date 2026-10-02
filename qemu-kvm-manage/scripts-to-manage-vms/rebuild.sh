@@ -54,7 +54,7 @@ print_info "Rebuilding tux2lab v${local_version}..."
 
 # Auto-detect version mismatch: if running container's image tag doesn't match project version, pull
 if [[ "$pull_image" != "true" && -z "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
-    current_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "")
+    current_image=$(engine_image_name "${CONTAINER_NAME}" 2>/dev/null || echo "")
     if [[ -n "$current_image" ]] && [[ "$current_image" != *":${local_version}" ]]; then
         print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
         pull_image=true
@@ -189,7 +189,7 @@ if [[ -n "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
     container_image="$TUX2LAB_ENGINE_IMAGE"
 elif [[ "$pull_image" != "true" ]]; then
     # Use existing local image
-    container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "${container_image_primary}")
+    container_image=$(engine_image_name "${CONTAINER_NAME}" 2>/dev/null || echo "${container_image_primary}")
 else
     print_task "Pulling tux2lab-engine container image..."
     pull_start=$SECONDS

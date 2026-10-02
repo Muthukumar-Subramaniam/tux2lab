@@ -31,11 +31,7 @@ trap cleanup_engine EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 
-if [[ ! -e "$DATA_DIR" && ! -L "$DATA_DIR" ]]; then
-    mkdir -p "$(dirname "$DATA_DIR")"
-    ln -s "/export${DATA_DIR}" "$DATA_DIR"
-fi
-if [[ "$(readlink "$DATA_DIR")" != "/export${DATA_DIR}" ]]; then
+if [[ -L "$DATA_DIR" ]] || ! mountpoint -q "$DATA_DIR"; then
     printf '[ERROR] Invalid data mount layout; recreate the engine with this version.\n' >&2
     exit 1
 fi

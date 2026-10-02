@@ -6,16 +6,25 @@ source "$PROJECT_ROOT/shared-functions/nfs-config.sh"
 
 if [[ "${1:-}" == --service ]]; then
     [[ $# == 2 ]] || exit 2
+    source "$PROJECT_ROOT/shared-functions/engine-rootfs.sh"
+    rootfs=''
     service_dir=$(sudo mktemp -d /tux2lab-data/.nfs-service-test.XXXXXXXX)
-    trap 'sudo rm -rf -- "$service_dir"' EXIT
-    sudo mkdir -p "$service_dir/root/tux2lab-data" "$service_dir/data/nfs" "$service_dir/state"
+    cleanup_service_host() {
+        local status=$?
+        trap - EXIT
+        if [[ -n "$rootfs" ]]; then remove_engine_rootfs "$rootfs" || exit 1; fi
+        sudo rm -rf -- "$service_dir"
+        exit "$status"
+    }
+    trap cleanup_service_host EXIT
+    sudo mkdir -p "$service_dir/data/nfs" "$service_dir/state"
+    rootfs=$(prepare_engine_rootfs "$2")
     sudo podman run --rm -i --network=none --privileged \
         -e "TUX2LAB_HOST_NETNS=$(stat -Lc %i /proc/self/ns/net)" \
         -v "$PROJECT_ROOT:/tux2lab:ro" \
-        -v "$service_dir/root:/export:ro" \
-        -v "$service_dir/data:/export/tux2lab-data" \
+        -v "$service_dir/data:/tux2lab-data" \
         -v "$service_dir/state:/var/lib/nfs" \
-        --entrypoint /bin/bash "$2" /tux2lab/container/run-nfs-tests.sh --service-internal
+        --rootfs "$rootfs" /bin/bash /tux2lab/container/run-nfs-tests.sh --service-internal
     exit 0
 fi
 
@@ -32,7 +41,6 @@ run_isolated_service_test() (
     BRIDGE_IPV6=2001:db8:1::1
     BRIDGE_IF=labbr0
     DATA_DIR=/tux2lab-data
-    ln -s /export/tux2lab-data "$DATA_DIR"
     write_container_nfs_conf "$BRIDGE_IP" "$BRIDGE_IPV6" > "$DATA_DIR/nfs/container.conf"
     write_container_nfs_exports "$DATA_DIR" 192.0.2.0/24 2001:db8:1::/64 > "$DATA_DIR/nfs/container.exports"
     printf 'container NFS fixture\n' > "$DATA_DIR/fixture"
@@ -52,6 +60,9 @@ run_isolated_service_test() (
     }
     trap cleanup_service_test EXIT
     start_container_nfs
+    discovery=$(showmount -e "$BRIDGE_IP")
+    [[ "$(awk 'NR > 1 {print $1}' <<< "$discovery")" == /tux2lab-data ]]
+    printf 'PASS: discovery advertises only the original /tux2lab-data export\n'
     for protocol in v4-ipv4 v4-ipv6 v3-ipv4; do
         case "$protocol" in
             v4-ipv4) mount -t nfs -o rw,vers=4.1,proto=tcp,retry=0 192.0.2.1:/tux2lab-data /mnt/nfs-test ;;
@@ -66,6 +77,10 @@ run_isolated_service_test() (
         umount /mnt/nfs-test
         printf 'PASS: isolated %s original-path read-only export\n' "$protocol"
     done
+    mount -t nfs -o ro,vers=4.1,proto=tcp,retry=0 192.0.2.1:/ /mnt/nfs-test
+    [[ "$(ls -A /mnt/nfs-test)" == tux2lab-data ]]
+    umount /mnt/nfs-test
+    printf 'PASS: NFSv4 root exposes only the data export\n'
     stop_container_nfs
     [[ -z "$(ss -H -lntu '( sport = :111 or sport = :2049 or sport = :20048 )')" ]]
     printf 'PASS: isolated NFS service releases its listeners\n'
@@ -188,13 +203,13 @@ PYTEST
 fi
 [[ $# == 0 ]] || exit 2
 
-exports=$(write_container_nfs_exports /tux2lab-data 192.0.2.0/24 2001:db8::/64)
-[[ "$exports" == /export\ * ]]
-[[ "$exports" == *$'\n/export/tux2lab-data '* ]]
-[[ "$exports" == *'192.0.2.0/24(ro,sync,fsid=0,'* ]]
+exports=$(write_container_nfs_exports /tux2lab-data 192.0.2.0/24 2001:db8::/64 integration.test)
+[[ "$exports" == /tux2lab-data\ * && "$exports" != *$'\n'* ]]
+[[ "$exports" == *'*.integration.test(ro,sync,fsid=1,'* ]]
+[[ "$exports" == *'192.0.2.0/24(ro,sync,fsid=1,'* ]]
 [[ "$exports" == *'2001:db8::/64(ro,sync,fsid=1,'* ]]
-[[ "$exports" != *'rw,'* && "$exports" != *'*.'* ]]
-printf 'PASS: read-only pseudoroot and numeric dual-stack clients\n'
+[[ "$exports" != *'rw,'* && "$exports" != *'/export'* && "$exports" != *'fsid=0'* ]]
+printf 'PASS: single original-path read-only export and domain/dual-stack clients\n'
 
 exports=$(write_container_nfs_exports /tux2lab-data 192.0.2.0/24)
 [[ "$exports" != *'::'* ]]
@@ -337,6 +352,102 @@ printf 'PASS: kernel export inspection rejects occupied or unknown state\n'
 )
 printf 'PASS: incompatible image rejected\n'
 
+for layout_label in direct-v1 obsolete '<no value>'; do
+    (
+        source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+        sudo() {
+            case "$*" in
+                'podman image inspect test-image --format {{index .Labels "io.tux2lab.nfs"}}') printf 'container-v1\n' ;;
+                'podman image inspect test-image --format {{index .Labels "io.tux2lab.nfs.layout"}}') printf '%s\n' "$layout_label" ;;
+                *) exit 99 ;;
+            esac
+        }
+        if container_nfs_image_check test-image 2>/dev/null; then
+            [[ "$layout_label" == direct-v1 ]]
+        else
+            [[ "$layout_label" != direct-v1 ]]
+        fi
+    )
+done
+printf 'PASS: new launches require the direct-layout image contract\n'
+
+for unsafe_root in / /tux2lab-data /var/lib/tux2lab/engine-rootfs /var/lib/tux2lab/engine-rootfs/engine.12345678/../rootfs; do
+    (
+        source "$PROJECT_ROOT/shared-functions/engine-rootfs.sh"
+        sudo() { printf 'FAIL: unsafe root reached privileged operation\n' >&2; exit 99; }
+        if remove_engine_rootfs "$unsafe_root"; then exit 1; fi
+    )
+done
+printf 'PASS: root cleanup rejects paths outside managed instances\n'
+
+for cleanup_case in unused referenced inspect-error mounted mount-error symlink bad-marker; do
+    (
+        source "$PROJECT_ROOT/shared-functions/engine-rootfs.sh"
+        rootfs=/var/lib/tux2lab/engine-rootfs/engine.12345678/rootfs
+        sudo() {
+            case "$*" in
+                "readlink -e $rootfs")
+                    if [[ "$cleanup_case" == symlink ]]; then printf '/elsewhere\n'; else printf '%s\n' "$rootfs"; fi ;;
+                "cat ${rootfs%/rootfs}/owner")
+                    if [[ "$cleanup_case" == bad-marker ]]; then printf 'unknown\n'; else printf 'tux2lab-engine-rootfs-v1\n'; fi ;;
+                'podman ps -aq') printf 'container-id\n' ;;
+                'podman inspect container-id')
+                    [[ "$cleanup_case" != inspect-error ]] || return 1
+                    if [[ "$cleanup_case" == referenced ]]; then
+                        jq -n --arg root "$rootfs" '[{Rootfs: $root, Config: {Labels: {}}}]'
+                    else
+                        printf '[{"Rootfs":"","Config":{"Labels":{}}}]\n'
+                    fi ;;
+                'findmnt --json -o TARGET')
+                    [[ "$cleanup_case" != mount-error ]] || return 1
+                    if [[ "$cleanup_case" == mounted ]]; then
+                        jq -n --arg target "$rootfs/mnt" '{filesystems: [{target: $target}]}'
+                    else
+                        printf '{"filesystems":[{"target":"/"}]}\n'
+                    fi ;;
+                "rm -rf --one-file-system -- ${rootfs%/rootfs}")
+                    [[ "$cleanup_case" == unused ]] || exit 99
+                    touch "$test_dir/root-removed" ;;
+                *) printf 'Unexpected cleanup operation: %s\n' "$*" >&2; exit 99 ;;
+            esac
+        }
+        if remove_engine_rootfs "$rootfs"; then
+            [[ "$cleanup_case" == unused && -f "$test_dir/root-removed" ]]
+        else
+            [[ "$cleanup_case" != unused ]]
+        fi
+    )
+done
+printf 'PASS: root cleanup requires ownership, no references and a verified empty mount subtree\n'
+
+for restore_case in managed legacy running mismatched; do
+    (
+        source "$PROJECT_ROOT/shared-functions/engine-rootfs.sh"
+        expected_root=/var/lib/tux2lab/engine-rootfs/engine.12345678/rootfs
+        sudo() {
+            case "$*" in
+                'podman inspect backup')
+                    if [[ "$restore_case" == legacy ]]; then
+                        printf '[{"Config":{"Labels":{}}}]\n'
+                    else
+                        jq -n --arg root "$expected_root" --arg mode "$restore_case" \
+                            '[{Rootfs: (if $mode == "mismatched" then "/elsewhere" else $root end), State: {Running: ($mode == "running")}, Config: {Labels: {"io.tux2lab.rootfs": $root}}}]'
+                    fi ;;
+                "readlink -e $expected_root/etc/exports") printf '%s\n' "$expected_root/etc/exports" ;;
+                "cp $expected_root/etc/exports /destination") [[ "$restore_case" == managed ]] || exit 99 ;;
+                'podman cp backup:/etc/exports /destination') [[ "$restore_case" == legacy ]] || exit 99 ;;
+                *) printf 'Unexpected restore operation: %s\n' "$*" >&2; exit 99 ;;
+            esac
+        }
+        if restore_engine_exports backup /destination; then
+            [[ "$restore_case" == managed || "$restore_case" == legacy ]]
+        else
+            [[ "$restore_case" == running || "$restore_case" == mismatched ]]
+        fi
+    )
+done
+printf 'PASS: export rollback supports stopped managed/legacy roots and rejects unsafe sources\n'
+
 (
     source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
     source "$PROJECT_ROOT/shared-functions/run-container.sh"
@@ -346,6 +457,8 @@ printf 'PASS: incompatible image rejected\n'
     prepare_container_nfs() { :; }
     require_container_nfs_engine() { :; }
     stop_engine_nfs() { printf 'stop %s\n' "$1" >> "$test_dir/replacement"; }
+    remove_engine_container() { sudo podman rm "$1"; }
+    restore_engine_exports() { sudo podman cp "$1:/etc/exports" "$2"; }
     run_tux2lab_container() { printf 'run\n' >> "$test_dir/replacement"; return 1; }
     wait_for_engine_nfs() { printf 'ready %s\n' "$1" >> "$test_dir/replacement"; }
     sudo() {
@@ -448,6 +561,7 @@ printf 'PASS: failed NFS shutdown blocks host rollback\n'
     printf '0\n' > "$NFS_MIGRATION_DIR/lockd-udp"
     printf 'true\n' > "$NFS_MIGRATION_DIR/engine-running"
     stop_engine_nfs() { printf 'stop\n' >> "$test_dir/host-rollback.log"; }
+    remove_engine_container() { sudo podman rm "$1"; }
     verify_container_nfs_stopped() { :; }
     sudo() {
         printf '%s\n' "$*" >> "$test_dir/host-rollback.log"

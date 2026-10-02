@@ -75,7 +75,7 @@ REQUIRED_PACKAGES_APT=(
     libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0
     ovmf ed git openssl
     podman jq dnsutils
-    nfs-kernel-server rsync
+    nfs-kernel-server rsync tar
 )
 REQUIRED_PACKAGES_DNF=(
     qemu-kvm qemu-img libvirt libvirt-daemon libvirt-daemon-driver-qemu
@@ -83,7 +83,7 @@ REQUIRED_PACKAGES_DNF=(
     libosinfo python3-gobject gobject-introspection
     edk2-ovmf ed git openssl
     podman jq bind-utils
-    nfs-utils rsync
+    nfs-utils rsync tar
 )
 REQUIRED_PACKAGES_ZYPPER=(
     qemu-kvm qemu-tools libvirt libvirt-daemon libvirt-daemon-driver-qemu
@@ -91,7 +91,7 @@ REQUIRED_PACKAGES_ZYPPER=(
     libosinfo typelib-1_0-Libosinfo-1_0 python3-gobject gobject-introspection
     qemu-ovmf-x86_64 ed git openssl
     podman jq bind-utils
-    nfs-utils rsync
+    nfs-utils rsync tar
 )
 
 if command -v apt-get &>/dev/null; then

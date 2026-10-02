@@ -84,8 +84,11 @@ start_container_nfs() {
         printf '[ERROR] NFS/RPC ports are already in use; perform the documented host migration first.\n' >&2
         return 1
     fi
-    [[ -d /export && -d "/export${DATA_DIR}" ]] || return 1
-    [[ "$(stat -f -c %T /export)" != overlayfs ]] || return 1
+    [[ -d "$DATA_DIR" && ! -L "$DATA_DIR" ]] || return 1
+    case "$(findmnt -n -o FSTYPE -T /)" in
+        ext4|xfs|btrfs) ;;
+        *) printf '[ERROR] NFS requires an exportable engine root filesystem. Recreate the engine.\n' >&2; return 1 ;;
+    esac
     cp "$config_dir/container.conf" /etc/nfs.conf || return 1
     cp "$config_dir/container.exports" /etc/exports || return 1
     mkdir -p "$NFS_CONTROL_DIR" /var/lib/nfs/{v4recovery,nfsdcld,nfsdcltrack} /var/lib/nfs/rpc_pipefs || return 1

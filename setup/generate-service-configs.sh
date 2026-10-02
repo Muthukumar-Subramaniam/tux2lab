@@ -369,7 +369,7 @@ ${DATA_DIR} *.${DOMAIN}(ro,fsid=1,no_subtree_check,no_root_squash,crossmnt) ${IP
 EOF
     source /tux2lab/shared-functions/nfs-config.sh
     write_container_nfs_exports "$DATA_DIR" "${IPV4_NETWORK}/${IPV4_PREFIX}" \
-      "${IPV6_PREFIX_BASE}::/${IPV6_PREFIX}" > "${DATA_DIR}/nfs/container.exports"
+      "${IPV6_PREFIX_BASE}::/${IPV6_PREFIX}" "$DOMAIN" > "${DATA_DIR}/nfs/container.exports"
     write_container_nfs_conf "$IPV4_ADDRESS" "$IPV6_ADDRESS" > "${DATA_DIR}/nfs/container.conf"
     print_task_done
 }

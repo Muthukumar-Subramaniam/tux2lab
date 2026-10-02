@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 write_container_nfs_exports() {
-    local data_dir="$1" ipv4_network="$2" ipv6_network="${3:-}"
-    local export_path network
+    local data_dir="$1" ipv4_network="$2" ipv6_network="${3:-}" domain="${4:-}"
+    local network
     if [[ ! "$data_dir" =~ ^/[a-zA-Z0-9_/-]+$ || "$data_dir" == / || "$data_dir" == */ ]]; then
         printf 'Invalid NFS data directory: %s\n' "$data_dir" >&2
         return 1
@@ -12,16 +12,16 @@ write_container_nfs_exports() {
         printf 'Invalid NFS client network.\n' >&2
         return 1
     fi
-    local fsid=0
-    for export_path in /export "/export${data_dir}"; do
-        printf '%s' "$export_path"
-        for network in "$ipv4_network" "$ipv6_network"; do
-            [[ -n "$network" ]] || continue
-            printf ' %s(ro,sync,fsid=%s,no_subtree_check,no_root_squash,crossmnt)' "$network" "$fsid"
-        done
-        printf '\n'
-        fsid=1
+    if [[ -n "$domain" && ! "$domain" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]]; then
+        printf 'Invalid NFS client domain.\n' >&2
+        return 1
+    fi
+    printf '%s' "$data_dir"
+    for network in "${domain:+*.$domain}" "$ipv4_network" "$ipv6_network"; do
+        [[ -n "$network" ]] || continue
+        printf ' %s(ro,sync,fsid=1,no_subtree_check,no_root_squash,crossmnt)' "$network"
     done
+    printf '\n'
 }
 
 write_container_nfs_conf() {

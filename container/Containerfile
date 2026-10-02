@@ -4,9 +4,6 @@
 #
 # Usage:
 #   podman build -t tux2lab-engine:latest -f Containerfile .
-#   podman run -d --name tux2lab-engine --network=host --privileged \
-#     -v /tux2lab-data:/tux2lab-data \
-#     tux2lab-engine:latest
 
 FROM docker.io/library/alpine:3.21
 
@@ -38,6 +35,7 @@ COPY container/nfs-service.sh shared-functions/nfs-config.sh /usr/local/lib/tux2
 RUN chmod +x /entrypoint.sh
 
 LABEL io.tux2lab.nfs="container-v1"
+LABEL io.tux2lab.nfs.layout="direct-v1"
 
 # DNS: 53/tcp+udp | DHCPv4: 67/udp | DHCPv6: 547/udp | HTTP: 80/tcp | HTTPS: 443/tcp
 # TFTP: 69/udp | NTP: 123/udp

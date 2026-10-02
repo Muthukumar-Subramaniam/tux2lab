@@ -19,6 +19,7 @@ to main. This is not yet a release-ready replacement for host NFS.
 | [container/entrypoint.sh](../container/entrypoint.sh) | Engine-wide failure supervision and shutdown trap |
 | [shared-functions/nfs-config.sh](../shared-functions/nfs-config.sh) | Export, daemon and firewall configuration |
 | [shared-functions/container-nfs.sh](../shared-functions/container-nfs.sh) | Host preflight, image compatibility, readiness and shutdown verification |
+| [shared-functions/engine-rootfs.sh](../shared-functions/engine-rootfs.sh) | Exportable per-instance roots, image identity and guarded cleanup/rollback |
 | [shared-functions/run-container.sh](../shared-functions/run-container.sh) | Mount layout, launch and replacement with retained previous engine |
 | [setup/migrate-nfs-to-container.sh](../setup/migrate-nfs-to-container.sh) | Explicit host-service handover and rollback |
 | [container/run-nfs-tests.sh](../container/run-nfs-tests.sh) | Rootless regression tests and isolated integration tests |
@@ -43,13 +44,35 @@ Do not use those wrappers for deployment or mix them with the migration command.
 - Host networking means there can be only one kernel NFS owner in that network
   namespace. Active host daemons, RPC listeners and existing kernel exports cause
   startup to fail instead of being overwritten.
-- An exportable filesystem is bound at `/export` as the NFSv4 `fsid=0` root.
-  The data tree is mounted at `/export/tux2lab-data` with recursive slave mount
-  propagation. A `/tux2lab-data` symlink preserves existing engine paths and
-  NFSv3 mount requests. NFSv4 clients continue using `:/tux2lab-data`.
-- Exports are read-only and restricted to the configured numeric IPv4/IPv6
-  subnets. Existing `no_root_squash` semantics are retained: this is a trusted lab
-  export, not an authorization boundary for hostile lab clients.
+- The original layout is preserved: the host data tree is mounted directly at
+  `/tux2lab-data:ro,rslave` inside the engine. It is not a symlink. Only
+  `/tux2lab-data` is configured/advertised as an export, with `fsid=1`; both
+  NFSv3 and NFSv4 clients continue using `:/tux2lab-data`. No `/export` tree or
+  explicit `fsid=0` export is configured.
+- NFSv4's implicit root requires an exportable container filesystem; the normal
+  overlay root cannot provide it. The launcher resolves the image to its ID,
+  exports a stopped temporary image container, and extracts it into a fresh
+  root-owned instance under `/var/lib/tux2lab/engine-rootfs/engine.XXXXXXXX/rootfs`.
+  Podman runs that directory with `--rootfs` and the image's `/entrypoint.sh`.
+  The root store is outside exported lab data and must be on ext4, XFS or Btrfs.
+  Ext4 and XFS are tested; Btrfs and enforcing security policies remain unverified.
+  No host-wide Podman storage-driver setting is changed.
+- Each engine gets its own writable root. Stop/start and reboot retain it;
+  successful replacement removes only the superseded instance. Failed
+  replacement restores the previous engine/root and its exports. Destroy and
+  host-migration rollback use the same cleanup helper. Cleanup requires a
+  canonical marked path, no container references and no mounts below it;
+  inspection failures retain the directory. Do not manually delete or share
+  instance roots, including ones held by a rebuild backup.
+- Rootfs containers have empty native image fields. Labels
+  `io.tux2lab.image.name`, `io.tux2lab.image.id` and `io.tux2lab.rootfs` retain
+  provenance; `tux2lab info` and rebuild use the recorded image name. New images
+  require both `io.tux2lab.nfs=container-v1` and
+  `io.tux2lab.nfs.layout=direct-v1`; obsolete `/export` images are rejected.
+- Exports remain read-only, with the existing wildcard lab-domain authorization
+  and explicit IPv4/IPv6 client networks. Existing `no_root_squash` semantics are
+  retained: this is a trusted lab export, not an authorization boundary for
+  hostile lab clients. The NFSv4 root exposes only `tux2lab-data`.
 - NFSv3 remains enabled for Ubuntu's actual initramfs mount helper. The earlier
   Ubuntu 24.04 test required v3 despite the v4 boot argument.
 - NFS state lives in `/tux2lab-data/nfs/state`, mounted at `/var/lib/nfs`.
@@ -92,16 +115,17 @@ bash container/run-engine-tests.sh --run localhost/tux2lab-engine:nfs-migration 
 bash container/run-engine-tests.sh --failure localhost/tux2lab-engine:nfs-migration
 ```
 
-The default suite needs Bash only and uses temporary files and command mocks.
+The default suite needs Bash and jq and uses temporary files and command mocks.
 The two integration modes need rootful Podman, the built image and host kernel
 support. They create disposable private network namespaces, never share the
 host network, and never stop host services. The service test uses dedicated
-scratch directories on `/tux2lab-data` and deliberately skips host-wide lockd
+scratch directories on `/tux2lab-data`, prepares a managed exportable root, and deliberately skips host-wide lockd
 sysctl writes. It does not prove fixed lockd port allocation on the production
 network namespace. These two modes do not start the full engine or install guests.
 
-The separate engine runner needs rootful Podman, sudo, an exportable backing
-filesystem under `/tux2lab-data`, and IPv4/IPv6 kernel support. Its `--startup`
+The separate engine runner needs rootful Podman, sudo, tar, jq, exportable backing
+filesystems for `/tux2lab-data` and the managed root store, and IPv4/IPv6 kernel
+support. Its `--startup`
 mode runs client protocol checks and graceful shutdown; `--run` also tests ISO
 propagation. Supply an existing read-only ISO9660 loop mount containing
 `images/install.img`. The runner mounts that loop device at a separate scratch
@@ -224,7 +248,9 @@ It creates only container-specific NFS config files, not unrelated service confi
 Failure attempts rollback; a cleanup failure instead retains the checkpoint for
 inspection and refuses to start a second owner.
 
-An image must carry `io.tux2lab.nfs=container-v1`. Released v2.1.1 is rejected.
+An image must carry `io.tux2lab.nfs=container-v1` and
+`io.tux2lab.nfs.layout=direct-v1`. Released v2.1.1 and earlier migration images
+are rejected for new launches.
 For subsequent rebuilds, select the development image explicitly:
 
 ```bash
@@ -260,8 +286,10 @@ recovery from this failure class is not established by the mountd-child test.
 
 ## Remaining Acceptance Plan
 
-Implementation, hardening and isolated complete-engine/ISO tests are complete.
-They do not replace actual lab setup, deployment or integrated PXE acceptance.
+The implementation now preserves the original `/tux2lab-data` layout, including
+export discovery. The compatibility finding and integration results below
+supersede the earlier `/export` design. Existing tests do not replace the
+remaining actual lab setup, deployment or integrated PXE acceptance checks.
 The remaining work is split into three stages:
 
 1. **Dedicated test-VM deployment and compatibility.** Create test hosts through
@@ -287,6 +315,91 @@ The remaining work is split into three stages:
 This document update authorizes no VM provisioning, live handover, host reboot,
 package removal, image publication or merge. Before execution, confirm the test
 targets, resource budget and any maintenance window with the user.
+
+### Export Discovery Compatibility (October 2, 2026)
+
+The user requires the existing layout to remain unchanged: host and container
+data at `/tux2lab-data`, only `/tux2lab-data` advertised by `showmount -e`, and
+the existing `SERVER:/tux2lab-data` client path. Successful mounts through a
+symlink do not establish export-discovery compatibility. The previous migration
+implementation's `/export` and `/export/tux2lab-data` listing violated this
+requirement; it is replaced by the managed-root direct layout described above.
+
+A disposable private-network container inside the AlmaLinux 9.8 test VM compared
+two root filesystems using the same engine image and NFS daemons. It directly
+bound scratch data to `/tux2lab-data`, configured just that export with `fsid=1`,
+and retained wildcard-domain authorization plus test IPv4/IPv6 client networks.
+Local test-hostname resolution avoided unrelated wildcard lookup timeouts.
+
+- With the normal overlay root, discovery and NFSv3 worked, but NFSv4 over both
+  IP families failed. Mountd reported `Cannot export /, possibly unsupported
+  filesystem or fsid= required` when constructing its implicit NFSv4 root.
+- Unpacking the same image into a scratch XFS directory and running it with
+  Podman `--rootfs` passed the single-export discovery check, original-path
+  NFSv3/IPv4 and NFSv4.1/IPv4/IPv6 reads, and server-enforced read-only access.
+  No explicit root export or `/export` directory was required.
+- Two live scratch ISO mount/unmount cycles passed full installer SHA256 reads
+  and absence checks across those three protocol variants without server restart.
+  A graceful server stop/start with the ISO mounted before startup also passed.
+  Mounting the NFSv4 root exposed only `tux2lab-data`, not container `etc`, `usr`
+  or `var`; discovery continued to advertise only `/tux2lab-data`.
+
+This initial experiment established feasibility, not production integration.
+The user subsequently authorized implementing and pushing the layout-preserving
+runtime. No production launcher, export generator, image, storage-driver setting
+or deployed lab layout was changed during the initial experiment itself.
+Other kernels/filesystems and active-client recovery were not tested here.
+The disposable server and scratch mounts were removed. Probe source and logs
+are retained in the VM at `/home/musubram/nfs-layout-test.yKeNnw9Z/`.
+The parent retains its original engine uptime, NFS ownership and exact advertised
+export `/tux2lab-data *.musubram.internal,10.28.28.0/22`.
+
+### Direct-Layout Integration (October 2, 2026)
+
+The maintained launcher, exports, entrypoint, lifecycle cleanup, image reporting,
+host-migration rollback and both integration harnesses now use the direct layout.
+Local image `localhost/tux2lab-engine:nfs-direct-layout` has ID
+`ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6`.
+It was not published to a registry.
+
+- Rootless regressions cover the single export, old-image rejection, cleanup
+  refusal for unsafe/referenced/mounted roots and failed inspections, and export
+  restoration for managed and legacy engine backups.
+- On the Mariner parent with ext4, private-namespace service and complete-engine
+  tests passed NFSv3/IPv4 and NFSv4/IPv4/IPv6, read-only enforcement, single-path
+  discovery, NFSv4 root visibility, all engine client protocols, two live ISO
+  propagation rounds, graceful shutdown and injected mountd failure cleanup.
+  The parent's live server and host-wide lockd settings were not changed.
+- On the actual AlmaLinux/XFS test host, normal rebuild switched the lab to the
+  direct layout. Health passed 11/11 deep checks and 6/6 dual-stack services;
+  `tux2lab info` reported the correct image. `showmount` advertised only
+  `/tux2lab-data` with the wildcard domain and IPv4/IPv6 client networks.
+  Full installer hashes matched over the three NFS variants; NFSv4 root listing
+  exposed only `tux2lab-data`.
+- A second actual rebuild removed its superseded managed root. A deliberately
+  failed replacement exposed Podman's inability to copy the stopped rootfs
+  container's exports via `podman cp`; rollback now copies from the verified
+  managed root, retaining the legacy copy path for image-backed containers.
+  Repeating that failure test removed the failed root and restored the exact
+  previous engine ID, root directory, export listing and NFS readiness.
+- Normal stop/start retained the root and restored the original export. An actual
+  reboot changed the boot ID and retained the same managed root; the engine was
+  running/healthy and `tux2lab.service` reported successful automatic startup.
+  Its boot journal recorded 11/11 deep checks and 6/6 dual-stack services.
+  A later attempt to repeat full NFS installer reads was blocked by rejection of
+  the dedicated management SSH key. The cause is not established; guest-agent
+  command execution is disabled and was not enabled. Management access recovery,
+  post-reboot file reads and final guest-source synchronization remain pending.
+- New/changed runtime helpers and harnesses pass ShellCheck at warning severity.
+  The generator, destroy, setup and deployment scripts retain only their existing
+  warnings, compared against the branch baseline. Bash syntax and rootless
+  regressions pass. All three setup package lists explicitly include native
+  `tar` for managed-root extraction.
+
+Guest source/config checkpoint and lifecycle logs are retained at
+`/home/musubram/nfs-direct-layout-integration.hTK4zJZQ/`. This is not validation
+of active-client reclaim, enforcing SELinux/AppArmor, released-baseline host-NFS
+migration/rollback or parent-host PXE acceptance. Those gates remain pending.
 
 ## Cross-Distribution Host Verification
 

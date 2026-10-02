@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(dirname -- "${BASH_SOURCE[0]}")/engine-rootfs.sh"
+
 container_nfs_exists() {
     local status
     if sudo podman container exists "$1"; then
@@ -19,6 +21,11 @@ container_nfs_image_check() {
     label=$(sudo podman image inspect "$image" --format '{{index .Labels "io.tux2lab.nfs"}}') || return 1
     if [[ "$label" != container-v1 ]]; then
         printf 'This image does not support container NFS. Build the migration image and set TUX2LAB_ENGINE_IMAGE.\n' >&2
+        return 1
+    fi
+    label=$(sudo podman image inspect "$image" --format '{{index .Labels "io.tux2lab.nfs.layout"}}') || return 1
+    if [[ "$label" != direct-v1 ]]; then
+        printf 'This image uses the obsolete export layout. Rebuild the migration image.\n' >&2
         return 1
     fi
 }
@@ -80,7 +87,7 @@ prepare_container_nfs() {
         printf 'Container NFS configuration missing. Regenerate service configuration first.\n' >&2
         return 1
     }
-    sudo mkdir -p "$data_dir/nfs/root$data_dir" "$data_dir/nfs/state" || return 1
+    sudo mkdir -p "$data_dir/nfs/state" || return 1
     sudo chmod 700 "$data_dir/nfs/state"
 }
 

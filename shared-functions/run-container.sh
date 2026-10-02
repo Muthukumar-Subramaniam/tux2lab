@@ -13,21 +13,28 @@ run_tux2lab_container() {
     local data_dir="$4"
     local bridge_ip="$5"
     local bridge_if="$6"
-    local bridge_ipv6
+    local bridge_ipv6 rootfs image_id exists
     bridge_ipv6=$(jq -r '.network.ipv6.address' "${data_dir}/lab-config/lab_environment.json")
 
     source /tux2lab/shared-functions/container-nfs.sh
-    container_nfs_image_check "$image" || return 1
+    image_id=$(sudo podman image inspect "$image" --format '{{.Id}}') || return 1
+    container_nfs_image_check "$image_id" || return 1
     container_nfs_host_preflight || return 1
     prepare_container_nfs "$data_dir" || return 1
-    sudo mkdir -p "${data_dir}/logs"/{nginx,named,kea,radvd} "${data_dir}/nginx/stream.d"
+    sudo mkdir -p "${data_dir}/logs"/{nginx,named,kea,radvd} "${data_dir}/nginx/stream.d" || return 1
     sudo chown named:named "${data_dir}/logs/named" 2>/dev/null || true
-    sudo podman run -d \
+    rootfs=$(prepare_engine_rootfs "$image_id") || return 1
+    if ! sudo podman run -d \
         --name "${name}" \
         --hostname "${hostname}" \
         --uts=private \
         --network=host \
         --privileged \
+        --label io.tux2lab.nfs=container-v1 \
+        --label io.tux2lab.nfs.layout=direct-v1 \
+        --label "io.tux2lab.image.name=${image}" \
+        --label "io.tux2lab.image.id=${image_id}" \
+        --label "io.tux2lab.rootfs=${rootfs}" \
         --stop-timeout=30 \
         --health-cmd='/bin/bash /usr/local/lib/tux2lab/nfs-service.sh check' \
         --health-interval=15s \
@@ -36,18 +43,21 @@ run_tux2lab_container() {
         --log-driver=k8s-file \
         --log-opt "path=${data_dir}/logs/tux2lab-engine.log" \
         --log-opt "max-size=10mb" \
-        -v "${data_dir}/nfs/root:/export:ro" \
-        -v "${data_dir}:/export${data_dir}:ro,rslave" \
+        -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "${data_dir}/nfs/state:/var/lib/nfs" \
         -v "/tux2lab:/tux2lab:ro" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
-        -v "${data_dir}/logs:/export${data_dir}/logs" \
-        -v "${data_dir}/nginx/stream.d:/export${data_dir}/nginx/stream.d" \
+        -v "${data_dir}/logs:${data_dir}/logs" \
+        -v "${data_dir}/nginx/stream.d:${data_dir}/nginx/stream.d" \
         -e "TUX2LAB_BRIDGE_IP=${bridge_ip}" \
         -e "TUX2LAB_BRIDGE_IF=${bridge_if}" \
         -e "TUX2LAB_BRIDGE_IPV6=${bridge_ipv6}" \
         -e "TUX2LAB_DATA_DIR=${data_dir}" \
-        "${image}" &>/dev/null || return 1
+        --rootfs "$rootfs" /entrypoint.sh &>/dev/null; then
+        exists=$(container_nfs_exists "$name") || return 1
+        if [[ "$exists" == false ]]; then remove_engine_rootfs "$rootfs" || return 1; fi
+        return 1
+    fi
     wait_for_engine_nfs "$name"
 }
 
@@ -71,15 +81,17 @@ replace_tux2lab_container() {
     stop_engine_nfs "$name" || return 1
     sudo podman rename "$name" "$backup" || return 1
     if run_tux2lab_container "$@"; then
-        sudo podman rm "$backup"
+        remove_engine_container "$backup"
         return $?
     fi
     printf 'Replacement failed; restoring the previous engine.\n' >&2
     exists=$(container_nfs_exists "$name") || return 1
     if [[ "$exists" == true ]]; then
         stop_engine_nfs "$name" || return 1
-        sudo podman rm "$name" || return 1
+        remove_engine_container "$name" || return 1
     fi
+    restore_engine_exports "$backup" "$4/nfs/container.exports" || return 1
+    sudo chown --reference="$4/lab-config/lab_environment.json" "$4/nfs/container.exports" || return 1
     sudo podman rename "$backup" "$name" || return 1
     sudo podman start "$name" || return 1
     wait_for_engine_nfs "$name" || return 1

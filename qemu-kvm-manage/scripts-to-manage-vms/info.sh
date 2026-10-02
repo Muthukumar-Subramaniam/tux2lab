@@ -59,7 +59,8 @@ else
 fi
 
 # Container image
-container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "N/A")
+source /tux2lab/shared-functions/engine-rootfs.sh
+container_image=$(engine_image_name "${CONTAINER_NAME}" 2>/dev/null || echo "N/A")
 
 # Auto-start
 if sudo systemctl is-enabled --quiet tux2lab.service 2>/dev/null; then

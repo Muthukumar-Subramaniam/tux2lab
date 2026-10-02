@@ -128,8 +128,10 @@ if ! stop_engine_nfs "${CONTAINER_NAME}"; then
 fi
 print_task "Stopping and removing tux2lab-engine container..."
 if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-    sudo podman stop "${CONTAINER_NAME}" &>/dev/null || true
-    sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
+    if ! remove_engine_container "${CONTAINER_NAME}"; then
+        print_error "Engine removal was not verified. Remaining lab data has been retained."
+        exit 1
+    fi
     print_task_done
 else
     print_task_skip

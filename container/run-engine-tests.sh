@@ -3,6 +3,7 @@ set -Eeuo pipefail
 trap 'printf "FAIL: line %s (status %s): %.180s\n" "$LINENO" "$?" "$BASH_COMMAND" >&2' ERR
 
 PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+source "$PROJECT_ROOT/shared-functions/engine-rootfs.sh"
 
 generate_engine_fixtures() {
     if [[ "${TUX2LAB_TEST_FIXTURES:-}" != 1 || -e /tux2lab-data/lab-config/lab_environment.json ]]; then
@@ -83,7 +84,10 @@ boot_test_engine() {
 }
 
 check_engine_clients() {
-    local address
+    local address discovery
+    discovery=$(showmount -e 192.0.2.1)
+    [[ "$(awk 'NR > 1 {print $1}' <<< "$discovery")" == /tux2lab-data ]]
+    printf 'PASS: deployed discovery advertises only /tux2lab-data\n'
     for address in 192.0.2.1 2001:db8:1::1; do
         [[ "$(dig "@$address" engine.integration.test A +short +time=2 +tries=1)" == 192.0.2.1 ]]
         [[ "$(dig "@$address" engine.integration.test AAAA +tcp +short +time=2 +tries=1)" == 2001:db8:1::1 ]]
@@ -298,7 +302,7 @@ ISOCLIENT
 
 run_engine_tests() (
     local image="$1" iso_mount="${2:-}" scratch container_name engine_created=false data_mounted=false attempt
-    local iso_source iso_checksum iso_hash round filesystem engine_pid exit_code
+    local iso_source iso_checksum iso_hash round filesystem engine_pid exit_code rootfs=''
     local inject_failure="${3:-false}" observer_name observer_created=false
     sudo podman image inspect "$image" >/dev/null
     if [[ -n "$iso_mount" ]]; then
@@ -326,7 +330,11 @@ run_engine_tests() (
             sudo podman stop --time 5 "$observer_name" >/dev/null || exit 1
             sudo podman rm "$observer_name" >/dev/null || exit 1
         fi
-        if "$engine_created"; then sudo podman rm "$container_name" >/dev/null || exit 1; fi
+        if "$engine_created"; then
+            remove_engine_container "$container_name" >/dev/null || exit 1
+        elif [[ -n "$rootfs" ]]; then
+            remove_engine_rootfs "$rootfs" || exit 1
+        fi
         if mountpoint -q "$scratch/data/os-repos/dynamic"; then
             sudo umount "$scratch/data/os-repos/dynamic" || exit 1
         fi
@@ -338,23 +346,27 @@ run_engine_tests() (
     trap 'exit 130' INT
     trap 'exit 143' TERM
     sudo chmod 755 "$scratch"
-    sudo mkdir -p "$scratch/root/tux2lab-data" "$scratch/data" "$scratch/state"
+    sudo mkdir -p "$scratch/data" "$scratch/state"
     sudo podman run --rm --network=host -e TUX2LAB_TEST_FIXTURES=1 -v "$PROJECT_ROOT:/tux2lab:ro" \
         -v "$scratch/data:/tux2lab-data" --entrypoint /bin/bash "$image" \
         -c 'apk add --no-cache jq openssl >/dev/null && bash /tux2lab/container/run-engine-tests.sh --fixtures'
     sudo mount --bind "$scratch/data" "$scratch/data"
     data_mounted=true
     sudo mount --make-shared "$scratch/data"
+    rootfs=$(prepare_engine_rootfs "$image")
     sudo podman create --name "$container_name" --network=none --privileged --stop-timeout=30 \
         --hostname engine.integration.test \
+        --label "io.tux2lab.rootfs=$rootfs" \
+        --add-host engine.integration.test:192.0.2.1 --add-host client.integration.test:192.0.2.2 \
+        --add-host engine6.integration.test:2001:db8:1::1 --add-host client6.integration.test:2001:db8:1::2 \
         -e "TUX2LAB_HOST_NETNS=$(stat -Lc %i /proc/self/ns/net)" \
         -e TUX2LAB_BRIDGE_IP=192.0.2.1 -e TUX2LAB_BRIDGE_IPV6=2001:db8:1::1 -e TUX2LAB_BRIDGE_IF=labbr0 \
-        -v "$PROJECT_ROOT:/tux2lab:ro" -v "$scratch/root:/export:ro" \
-        -v "$scratch/data:/export/tux2lab-data:ro,rslave" -v "$scratch/state:/var/lib/nfs" \
-        -v "$scratch/data/logs:/export/tux2lab-data/logs" \
-        -v "$scratch/data/nginx/stream.d:/export/tux2lab-data/nginx/stream.d" \
+        -v "$PROJECT_ROOT:/tux2lab:ro" \
+        -v "$scratch/data:/tux2lab-data:ro,rslave" -v "$scratch/state:/var/lib/nfs" \
+        -v "$scratch/data/logs:/tux2lab-data/logs" \
+        -v "$scratch/data/nginx/stream.d:/tux2lab-data/nginx/stream.d" \
         -v "$scratch/data/kea/leases:/var/lib/kea" \
-        --entrypoint /bin/bash "$image" /tux2lab/container/run-engine-tests.sh --boot >/dev/null
+        --rootfs "$rootfs" /bin/bash /tux2lab/container/run-engine-tests.sh --boot >/dev/null
     engine_created=true
     sudo podman start "$container_name" >/dev/null
     for ((attempt = 0; attempt < 45; attempt++)); do
@@ -379,7 +391,7 @@ print("PASS: authenticated Kea control agent reaches both DHCP daemons")'
         engine_pid=$(sudo podman inspect "$container_name" --format '{{.State.Pid}}')
         for round in 1 2; do
             sudo mount -t iso9660 -o ro "$iso_source" "$scratch/data/os-repos/dynamic"
-            filesystem=$(sudo podman exec "$container_name" stat -f -c %T /export/tux2lab-data/os-repos/dynamic)
+            filesystem=$(sudo podman exec "$container_name" stat -f -c %T /tux2lab-data/os-repos/dynamic)
             [[ "$filesystem" == isofs ]] || {
                 printf 'FAIL: mounted ISO reports filesystem %s inside the engine\n' "$filesystem" >&2
                 return 1
@@ -388,12 +400,12 @@ print("PASS: authenticated Kea control agent reaches both DHCP daemons")'
                 bash /tux2lab/container/run-engine-tests.sh --iso-client "$iso_hash"
             sudo podman exec "$container_name" exportfs -f
             sudo umount "$scratch/data/os-repos/dynamic"
-            filesystem=$(sudo podman exec "$container_name" stat -f -c %T /export/tux2lab-data/os-repos/dynamic)
+            filesystem=$(sudo podman exec "$container_name" stat -f -c %T /tux2lab-data/os-repos/dynamic)
             [[ "$filesystem" != isofs ]] || {
                 printf 'FAIL: unmounted ISO remains visible inside the engine\n' >&2
                 return 1
             }
-            sudo podman exec "$container_name" test ! -e /export/tux2lab-data/os-repos/dynamic/images/install.img
+            sudo podman exec "$container_name" test ! -e /tux2lab-data/os-repos/dynamic/images/install.img
             [[ "$(sudo podman inspect "$container_name" --format '{{.State.Pid}}')" == "$engine_pid" ]]
             sudo podman exec "$container_name" bash /tux2lab/container/run-engine-tests.sh --ready
             printf 'PASS: ISO mount/unmount propagation round %s without engine restart\n' "$round"
