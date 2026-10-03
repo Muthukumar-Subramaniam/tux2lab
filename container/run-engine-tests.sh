@@ -440,7 +440,196 @@ print("PASS: authenticated Kea control agent reaches both DHCP daemons")'
     printf 'PASS: retained test namespace has no NFS threads, exports, service listeners or firewall table\n'
 )
 
+run_recovery_client() (
+    local server="$1" relative_file="$2" client_mount
+    [[ "$relative_file" != /* && "/$relative_file/" != */../* ]] || return 1
+    [[ "$(stat -Lc %i /proc/self/ns/mnt)" != "$(stat -Lc %i /proc/1/ns/mnt)" ]] || return 1
+    client_mount=$(mktemp -d /tmp/tux2lab-recovery-client.XXXXXXXX)
+    cleanup_recovery_client() {
+        local status=$?
+        trap - EXIT
+        if mountpoint -q "$client_mount"; then umount "$client_mount" || exit 1; fi
+        rmdir "$client_mount"
+        exit "$status"
+    }
+    trap cleanup_recovery_client EXIT
+    timeout -k 5 25 mount -t nfs -o ro,vers=4.1,proto=tcp,hard,timeo=10,retrans=2,retry=0 \
+        "$server:/tux2lab-data" "$client_mount"
+    python3 /dev/fd/3 "$client_mount/$relative_file" 3<<'RECOVERYCLIENT'
+import hashlib
+import json
+import mmap
+import os
+import sys
+
+block_size = 1024 * 1024
+descriptor = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECT)
+try:
+    with mmap.mmap(-1, block_size) as buffer:
+        count = os.readv(descriptor, [buffer])
+        assert count == block_size
+        expected = hashlib.sha256(buffer).hexdigest()
+        print(json.dumps({"event": "ready", "sha256": expected}), flush=True)
+        assert sys.stdin.readline().strip() == "read"
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        print(json.dumps({"event": "reading"}), flush=True)
+        count = os.readv(descriptor, [buffer])
+        assert count == block_size
+        actual = hashlib.sha256(buffer).hexdigest()
+        assert actual == expected
+        print(json.dumps({"event": "recovered", "sha256": actual}), flush=True)
+        assert sys.stdin.readline().strip() == "close"
+finally:
+    os.close(descriptor)
+RECOVERYCLIENT
+)
+
+run_deployed_restart_test() (
+    local expected_host="$1" relative_file="$2" evidence="$3" shutdown_mode="${4:-stop}" bridge_ip
+    [[ "$(hostname -f)" == "$expected_host" && "$expected_host" != localhost ]] || return 1
+    [[ -d "$evidence" && "$(readlink -e "$evidence")" == "$evidence" && "$evidence" != /tux2lab-data* ]] || return 1
+    [[ "$relative_file" != /* && "/$relative_file/" != */../* ]] || return 1
+    source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+    require_container_nfs_engine tux2lab-engine
+    check_engine_nfs tux2lab-engine
+    bridge_ip=$(jq -er '.network.ipv4.address' /tux2lab-data/lab-config/lab_environment.json)
+    python3 - "$PROJECT_ROOT" "$bridge_ip" "$relative_file" "$evidence" "$shutdown_mode" <<'RECOVERYHOST'
+import json
+from pathlib import Path
+import select
+import subprocess
+import sys
+import time
+
+project, server, relative_file, evidence_path, shutdown_mode = sys.argv[1:]
+assert shutdown_mode in ("stop", "kill")
+evidence = Path(evidence_path)
+engine = "tux2lab-engine"
+client = None
+restart_needed = False
+started_at = str(int(time.time()))
+
+def command(arguments, timeout=45, log=None):
+    result = subprocess.run(arguments, text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, timeout=timeout)
+    if log is not None:
+        (evidence / log).write_text(result.stdout)
+    if result.returncode:
+        print(result.stdout, file=sys.stderr)
+        result.check_returncode()
+    return result.stdout
+
+def inspect_engine():
+    return json.loads(command(["sudo", "-n", "podman", "inspect", engine]))[0]
+
+def receive(timeout):
+    assert client is not None
+    assert select.select([client.stdout], [], [], timeout)[0], "Client response timed out"
+    line = client.stdout.readline()
+    assert line, "Client exited before completing recovery"
+    message = json.loads(line)
+    print(json.dumps(message), flush=True)
+    return message
+
+def client_states():
+    return command(["sudo", "-n", "podman", "exec", engine, "sh", "-c",
+                    "cat /proc/fs/nfsd/clients/*/states"])
+
+def snapshot_exports(phase):
+    output = command(["sudo", "-n", "podman", "exec", engine, "cat",
+                      "/proc/net/rpc/nfsd.fh/content", "/proc/net/rpc/nfsd.export/content"])
+    (evidence / ("export-cache-" + phase + ".txt")).write_text(output)
+
+def restart_engine():
+    command(["/usr/local/bin/tux2lab", "start"], timeout=150, log="restart.log")
+    command(["sudo", "-n", "podman", "exec", engine, "/bin/bash",
+             "/usr/local/lib/tux2lab/nfs-service.sh", "check"])
+
+original = inspect_engine()
+assert original["State"]["Running"]
+assert original["Config"]["Labels"]["io.tux2lab.nfs.layout"] == "direct-v1"
+assert not command(["sudo", "-n", "virsh", "list", "--name"]).strip(), "Test host has running guests"
+assert not command(["sudo", "-n", "podman", "exec", engine, "ls", "-A",
+                    "/proc/fs/nfsd/clients"]).strip(), "Existing NFSv4 clients must be drained first"
+
+with (evidence / "client.stderr").open("wb") as client_errors:
+    try:
+        client = subprocess.Popen(
+            ["sudo", "-n", "unshare", "--mount", "--propagation", "private", "bash",
+             project + "/container/run-engine-tests.sh", "--recovery-client", server, relative_file],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=client_errors,
+            bufsize=0, start_new_session=True)
+        ready = receive(40)
+        assert ready["event"] == "ready"
+        states = client_states()
+        (evidence / "open-states-before.txt").write_text(states)
+        assert "type: open" in states, "No server-side NFSv4 OPEN state"
+        snapshot_exports("before")
+        firewall = command(["sudo", "-n", "nft", "-j", "-s", "list", "table", "inet", "tux2lab_nfs"],
+                           log="firewall-before.json")
+        restart_needed = True
+        if shutdown_mode == "kill":
+            command(["sudo", "-n", "podman", "kill", "--signal", "KILL", engine], log="stop.log")
+            assert command(["sudo", "-n", "podman", "wait", engine], timeout=30).strip() == "137"
+            assert inspect_engine()["State"]["ExitCode"] == 137
+            retained = command(["sudo", "-n", "nft", "-j", "-s", "list", "table", "inet", "tux2lab_nfs"],
+                               log="firewall-after.json")
+            assert json.loads(retained) == json.loads(firewall), "Crash changed NFS firewall protection"
+            print("PASS: PID1 SIGKILL exits 137 and retains NFS firewall protection", flush=True)
+        else:
+            command(["sudo", "-n", "podman", "stop", "--time", "30", engine], log="stop.log")
+            assert inspect_engine()["State"]["ExitCode"] == 143
+        assert not command(["sudo", "-n", "ss", "-H", "-lntu",
+                            "( sport = :2049 or sport = :111 or sport = :20048 )"],
+                           log="listeners-after.txt").strip(), "RPC listeners survived engine exit"
+        client.stdin.write(b"read\n")
+        assert receive(10)["event"] == "reading"
+        assert not select.select([client.stdout], [], [], 2)[0], "Uncached read did not block during outage"
+        print("PASS: an open-handle direct read blocks while the engine is stopped", flush=True)
+        restart_engine()
+        restart_needed = False
+        snapshot_exports("after")
+        recovered = receive(150)
+        assert recovered["event"] == "recovered" and recovered["sha256"] == ready["sha256"]
+        states = client_states()
+        (evidence / "open-states-after.txt").write_text(states)
+        assert "type: open" in states, "Recovered client has no NFSv4 OPEN state"
+        client.stdin.write(b"close\n")
+        client.stdin.close()
+        assert client.wait(timeout=20) == 0
+        current = inspect_engine()
+        assert current["Id"] == original["Id"] and current["Rootfs"] == original["Rootfs"]
+        print("PASS: same mounted NFSv4 file descriptor resumes matching direct reads after engine restart", flush=True)
+    finally:
+        try:
+            if restart_needed:
+                restart_engine()
+        finally:
+            try:
+                with (evidence / "kernel-recovery.log").open("w") as kernel_log:
+                    subprocess.run(["sudo", "-n", "journalctl", "-k", "--since", "@" + started_at,
+                                    "--no-pager"], stdout=kernel_log, stderr=subprocess.STDOUT, timeout=15)
+            finally:
+                if client is not None and client.poll() is None:
+                    subprocess.run(["sudo", "-n", "kill", "-TERM", "--", "-" + str(client.pid)], check=False)
+                    try:
+                        client.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        subprocess.run(["sudo", "-n", "kill", "-KILL", "--", "-" + str(client.pid)], check=False)
+                        client.wait(timeout=15)
+RECOVERYHOST
+)
+
 case "${1:-}" in
+    --deployed-restart)
+        [[ $# == 4 ]] || exit 2
+        run_deployed_restart_test "$2" "$3" "$4" ;;
+    --deployed-crash)
+        [[ $# == 4 ]] || exit 2
+        run_deployed_restart_test "$2" "$3" "$4" kill ;;
+    --recovery-client)
+        [[ $# == 3 ]] || exit 2
+        run_recovery_client "$2" "$3" ;;
     --fixtures) generate_engine_fixtures ;;
     --boot) boot_test_engine ;;
     --clients) check_engine_clients ;;
@@ -459,5 +648,5 @@ case "${1:-}" in
     --failure)
         [[ $# == 2 ]] || exit 2
         run_engine_tests "$2" '' true ;;
-    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n' >&2; exit 2 ;;
+    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n' >&2; exit 2 ;;
 esac

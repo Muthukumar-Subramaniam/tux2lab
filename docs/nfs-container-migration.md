@@ -10,6 +10,8 @@ scripts and results are backed up on origin in commit
 The live lab still uses its released engine and host NFS. Implementation and
 isolated tests do not authorize a live handover, host package removal or a merge
 to main. This is not yet a release-ready replacement for host NFS.
+Hot-added ISO loop devices can produce unstable NFS filehandles across engine
+restart; the October 3 active-client checkpoint below records this open blocker.
 
 ## Maintained Code
 
@@ -488,6 +490,70 @@ actual deployed DHCPv4/DHCPv6 and RA transactions, released-host migration/rollb
 enforcing security policies, other distro hosts, and separately approved
 parent-host PXE acceptance. No deeper-nested guests, parent handover, host package
 removal, registry publication or merge to main occurred.
+
+#### Active-Client and PID1 Recovery (October 3, 2026)
+
+The deployed Alma host now has a guarded recovery harness:
+
+```bash
+bash container/run-engine-tests.sh --deployed-restart EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR
+bash container/run-engine-tests.sh --deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR
+```
+
+These are disruptive tests for a dedicated host, not live-lab commands. They
+require the exact host name, a ready direct-layout engine, no running guests,
+no existing NFSv4 clients, and an existing canonical evidence directory outside
+the served tree. The client uses a private mount namespace on the server host,
+NFSv4.1/IPv4, a hard mount and one open read-only descriptor with direct I/O.
+It verifies a one-MiB read blocks during the outage, then resumes with the same
+checksum and server-side OPEN state after ordinary `tux2lab start`. This is not
+a full-file checksum test, an independent-host client, or host-reboot recovery.
+
+Observed results:
+
+- A base-XFS ISO file recovered after graceful engine shutdown.
+- An installer on an ISO device visible at engine startup recovered after both
+  graceful shutdown and PID1 SIGKILL. Container identity and managed root were
+  unchanged. The crash returned 137, retained the NFS firewall rules and left no
+  reserved RPC listeners. A separate no-client SIGKILL probe independently
+  measured zero NFS threads through a temporary private control mount. Normal
+  startup recovered without manual kernel cleanup or host NFS takeover.
+- The first installer restart failed with client EIO and kernel NFSv4 `ESTALE`
+  (`-116`). Warm-device repeats, including a live remount, passed. Those passes
+  did not resolve the original failure.
+- A new loop device allocated after engine startup was absent from its private
+  `/dev`, although the ISO mount and file contents propagated correctly. The
+  new-device probe reproduced the failure. Before restart mountd used the
+  device-derived UUID `00000701:00000000:00000000:00000000`; after restart that
+  filehandle mapping was negative. The already-open file could not reclaim.
+- Positive control: exposing only another new loop device node inside the
+  running engine before its first NFS read made the identical test pass. Both
+  cache snapshots used the ISO UUID `20260524:07153000:00000000:00000000`.
+  This isolates missing hot-added block-device visibility as the cause.
+
+**Open blocker:** choose and implement a device-visibility policy that gives
+mountd stable ISO identity before any client can receive a fallback handle.
+No permanent device bind, watcher, explicit child export or layout change was
+introduced. Merely ordering startup ISOs earlier does not cover later distro
+additions. The single `/tux2lab-data` export contract remains unchanged.
+
+Private evidence under `/home/musubram/` on the Alma VM:
+`nfs-active-recovery.sMe1s7mS` (initial failure),
+`nfs-active-base-control.Wu5gh38i` (base-file pass),
+`nfs-iso-handle-probe.0SGgCJpq` and `nfs-live-iso-recovery.QGX9hMNC`
+(warm-device passes), `nfs-pid1-failure.wAGx6L9g` (no-client crash),
+`nfs-active-pid1-recovery.TapDrMuI` (active ISO crash),
+`nfs-new-loop-recovery.1CGQFEBS` (reproduced failure), and
+`nfs-loop-visible-control.CMtuouk0` (positive control). The harness retains
+before/after export caches, OPEN states, client errors, restart and kernel logs.
+Test loop attachments and private client mounts were removed; the normal ISO
+helper restored the original mount and the engine is ready. Runtime source and
+image are unchanged in this checkpoint.
+
+Active ISO recovery is not accepted until the hot-add defect is fixed and
+retested. Independent-client/host-reboot recovery, deployed DHCP/RA transactions,
+migration/rollback, enforcing security policies and other distro hosts remain
+unverified. Parent handover/PXE still requires separate approval.
 
 ## Cross-Distribution Host Verification
 
