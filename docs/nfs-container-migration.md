@@ -613,13 +613,55 @@ Planned host matrix (not verified support claims):
 | --- | --- | --- |
 | Microsoft | CBL-Mariner 2.0, Azure Linux 3.0 | Dedicated-VM acceptance pending |
 | Debian-based | Debian, Ubuntu LTS | Pending |
-| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | AlmaLinux 9.8 setup, deployment and initial lifecycle checks passed with manual prerequisites; recovery and other targets pending |
+| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | AlmaLinux 9.8 setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below, other targets pending |
 | Fedora | Fedora | Pending |
 | SUSE | openSUSE Leap | Pending |
 
 Existing Mariner results remain the baseline, not a substitute for the matrix.
 Select and record exact release versions before execution. Record unavailable
 targets as untested, never infer a pass from another distribution in the family.
+
+### AlmaLinux Remaining Work (October 3, 2026)
+
+Implementation checkpoint `90b0342b39e07f9de8b50df9102d68761a246499` includes
+the tested device-visibility fix. Passed checks include actual setup/deployment
+with the documented manual prerequisites, normal lifecycle and reboot startup,
+full installer reads, original export-layout compatibility, and NFSv4.1
+same-host-client engine restart/SIGKILL recovery with hot-added ISO devices.
+The parent lab remains unchanged. The dated sections below retain earlier
+checkpoint results; they are not the current remaining-work list.
+
+Remaining Alma-only work and rough active-work estimates:
+
+| Work | Estimate | Acceptance Still Needed |
+| --- | --- | --- |
+| Deployed DHCPv4/DHCPv6 and RA | 0.5-1 hour | Client transactions against the actual deployed configuration, not fixture services |
+| Released-host migration and rollback | 2-3 hours | Handover from a recorded released host-NFS baseline and recovery from failed handover |
+| SELinux/firewalld validation | 2-3 hours | Enforcing-policy compatibility, including firewall reload/restart; this VM currently has SELinux disabled and firewalld inactive |
+| Host prerequisites/dependencies | 1-2 hours | Required host NFS utilities and resolution or explicit documentation of the fresh-host RPC preparation gap |
+| Documentation and final checkpoint | 0.5-1 hour | Record final results, limitations and verified remote checkpoint |
+
+Total: **6-10 hours**, assuming no substantial new defects. This is a planning
+estimate, not a completion guarantee. It excludes other distributions,
+parent-host handover/PXE and the independent-client reboot test below.
+
+No additional VM will be installed inside the Alma test VM. The proposed
+DHCP/RA client is an ordinary process in a temporary Linux network namespace,
+connected by a virtual Ethernet pair to the existing private `labbr0`. It shares
+Alma's kernel and adds no QEMU, KVM instance or guest operating system. Keep DHCP
+and RA off the management interface and parent network; remove the temporary
+client namespace and links afterward. This approach avoids another nested
+virtualization layer, but is not a guarantee against host freezes. Migration,
+rollback and policy tests also require no inner VM. No new tests were started
+as part of this planning clarification.
+
+Active-client recovery across an Alma **host reboot** remains unverified.
+A client namespace inside Alma cannot survive that reboot. This check requires
+a separately connected external client and an agreed network setup; without
+that setup, retain its unverified status rather than creating an inner VM.
+The estimates and proposed topology do not authorize additional disruptive
+tests, policy changes or package removal. Parent handover/PXE requires its own
+approval; the no-deeper-nesting constraint remains in force.
 
 ### AlmaLinux 9.8 Host Checkpoint (October 2, 2026)
 
