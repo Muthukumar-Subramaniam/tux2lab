@@ -76,6 +76,20 @@ require_container_nfs_engine() {
     fi
 }
 
+prepare_container_nfs_data_mount() {
+    local data_dir="$1" mount_target propagation
+    [[ "$data_dir" != / && "$(readlink -e "$data_dir")" == "$data_dir" ]] || return 1
+    mount_target=$(findmnt -rn -o TARGET -T "$data_dir") || return 1
+    [[ "$mount_target" == /* ]] || return 1
+    if [[ "$mount_target" != "$data_dir" ]]; then
+        sudo mount --rbind "$data_dir" "$data_dir" || return 1
+        sudo mount --make-rprivate "$data_dir" || return 1
+    fi
+    sudo mount --make-rshared "$data_dir" || return 1
+    propagation=$(findmnt -rn -o PROPAGATION --mountpoint "$data_dir") || return 1
+    [[ ",$propagation," == *,shared,* ]]
+}
+
 prepare_container_nfs() {
     local data_dir="$1" filesystem
     filesystem=$(findmnt -n -o FSTYPE -T "$data_dir") || return 1
@@ -88,7 +102,8 @@ prepare_container_nfs() {
         return 1
     }
     sudo mkdir -p "$data_dir/nfs/state" || return 1
-    sudo chmod 700 "$data_dir/nfs/state"
+    sudo chmod 700 "$data_dir/nfs/state" || return 1
+    prepare_container_nfs_data_mount "$data_dir"
 }
 
 check_engine_nfs() {

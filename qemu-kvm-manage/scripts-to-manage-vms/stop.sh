@@ -141,7 +141,10 @@ print_task_done
 
 # ====== STEP 6: Stop libvirtd ======
 print_task "Stopping libvirtd..."
-if sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
+if [[ "$(systemctl is-system-running 2>/dev/null || true)" == stopping ]]; then
+    print_task_skip
+    print_info "Host shutdown will stop libvirtd after lab cleanup."
+elif sudo systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket 2>/dev/null; then
     print_task_done
 else
     print_task_fail

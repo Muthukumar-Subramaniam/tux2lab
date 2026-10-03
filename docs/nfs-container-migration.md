@@ -18,7 +18,7 @@ to main. This is not yet a release-ready replacement for host NFS.
 | [container/nfs-service.sh](../container/nfs-service.sh) | Daemon supervision, readiness, persistent state, export registration and cleanup |
 | [container/entrypoint.sh](../container/entrypoint.sh) | Engine-wide failure supervision and shutdown trap |
 | [shared-functions/nfs-config.sh](../shared-functions/nfs-config.sh) | Export, daemon and firewall configuration |
-| [shared-functions/container-nfs.sh](../shared-functions/container-nfs.sh) | Host preflight, image compatibility, readiness and shutdown verification |
+| [shared-functions/container-nfs.sh](../shared-functions/container-nfs.sh) | Host preflight, shared data mount preparation, image compatibility, readiness and shutdown verification |
 | [shared-functions/engine-rootfs.sh](../shared-functions/engine-rootfs.sh) | Exportable per-instance roots, image identity and guarded cleanup/rollback |
 | [shared-functions/run-container.sh](../shared-functions/run-container.sh) | Mount layout, launch and replacement with retained previous engine |
 | [setup/migrate-nfs-to-container.sh](../setup/migrate-nfs-to-container.sh) | Explicit host-service handover and rollback |
@@ -49,6 +49,13 @@ Do not use those wrappers for deployment or mix them with the migration command.
   `/tux2lab-data` is configured/advertised as an export, with `fsid=1`; both
   NFSv3 and NFSv4 clients continue using `:/tux2lab-data`. No `/export` tree or
   explicit `fsid=0` export is configured.
+- Launch and restart prepare a dedicated shared mount at the host data path.
+  If it is not already a mountpoint, a recursive self-bind preserves existing
+  submounts; making that new bind recursively private before recursively shared
+  gives it a separate propagation group. This avoids duplicate ISO mount events
+  from aliasing a shared host root. Repeated preparation reuses an existing mount.
+  Startup repeats this preparation after reboot, before starting the engine;
+  no fstab entry or changed client path is required.
 - NFSv4's implicit root requires an exportable container filesystem; the normal
   overlay root cannot provide it. The launcher resolves the image to its ID,
   exports a stopped temporary image container, and extracts it into a fresh
@@ -89,6 +96,9 @@ Do not use those wrappers for deployment or mix them with the migration command.
 - Shutdown stops kernel threads before removing exports, daemons, control mounts
   and firewall rules. If shutdown cannot be verified, lifecycle commands retain
   network/filesystem state and fail instead of continuing ISO teardown.
+  During host shutdown, the CLI leaves libvirt service/socket teardown to systemd
+  rather than waiting on later stop jobs from inside its own `ExecStop`. Normal
+  interactive stop still waits for those units synchronously.
 
 Reserved ports: TCP `111,2049,20048,32803,32765`; UDP
 `111,2049,20048,32769,32765,32766`. Statd ports are reserved for future recovery
@@ -390,7 +400,8 @@ It was not published to a registry.
   the dedicated management SSH key. The inherited golden-boot hook was later
   confirmed to have replaced authorization; management access is now repaired
   as recorded below. Guest-agent command execution remains disabled.
-  Post-reboot file reads and final guest-source synchronization remain pending.
+  Post-reboot file reads and final guest-source synchronization were completed
+  in the October 3 follow-up below.
 - New/changed runtime helpers and harnesses pass ShellCheck at warning severity.
   The generator, destroy, setup and deployment scripts retain only their existing
   warnings, compared against the branch baseline. Bash syntax and rootless
@@ -424,6 +435,59 @@ Unit state, boot journal, unit definition and pre-cleanup authorization are save
 privately in `/home/musubram/nfs-ssh-repair.MU8X36Mr/` on the VM. No additional
 reboot was performed during the repair; persistence across another actual reboot
 and the remaining NFS acceptance checks are not claimed here.
+
+#### Reboot and ISO Recovery (October 3, 2026)
+
+Tracked source was synchronized to the actual AlmaLinux 9.8 host, preserving its
+custom `labbr0.xml`; the rootless suite passed locally and on the VM. Persistent
+journal storage was enabled on this VM using its existing `Storage=auto` setting,
+so the previous boot's shutdown could be checked instead of inferred.
+
+Two real lifecycle defects were reproduced and corrected:
+
+- The lab `ExecStop` waited on `systemctl stop` for libvirt sockets that systemd
+  orders after the lab service during shutdown. The first reboot hit the
+  120-second stop timeout before ISO cleanup. The shutdown-state guard now leaves
+  these later jobs to systemd. Repeated actual reboots completed lab cleanup in
+  about one second or less, including ISO unmount, with successful unit
+  deactivation and no timeout. This was a no-guest test host, not guest-shutdown
+  or active-client recovery validation.
+- A post-reboot health check passed while a full NFS installer read failed: the
+  host ISO was mounted, but the container data bind was private and did not see
+  it. A dedicated shared data mount restored propagation. An intermediate
+  self-bind inherited the host root's shared group and duplicated ISO events;
+  isolating the new bind before making it shared corrected that. The final
+  reboot established different root/data shared groups, a slave container bind,
+  and exactly one host ISO mount without manual mount preparation.
+
+Final boot ID: `5f217af5-801c-49ac-ab06-4055e5745005`. Automatic startup retained
+the same container ID and managed root. The management authorization and custom
+network XML checksums remained unchanged; all three inherited credential-sync
+units stayed disabled/inactive. The existing local image `ef259c909b57...` was
+unchanged; fixes affect host lifecycle scripts, not image contents.
+
+Full 1,264,664,576-byte installer reads matched the recorded SHA256 over
+NFSv3/IPv4 and NFSv4.1/IPv4/IPv6. Read-write client mounts received read-only
+filesystem errors on attempted creation. Discovery advertised only
+`/tux2lab-data`, and the NFSv4 root exposed only that directory. Health passed
+11/11 deep checks and 6/6 dual-stack services. A live ISO unmount/remount then
+disappeared/reappeared inside the engine, preserved its PID, restored the complete
+installer checksum, and left exactly one ISO mount. Isolated client mounts were
+removed after testing.
+
+New regressions cover shutdown versus ordinary CLI stop, failed system-state
+queries, mount preparation failure, unsafe paths and repeated preparation.
+ShellCheck, Bash syntax, editor diagnostics and whitespace checks passed for
+the changed code. Evidence and pre-change backups are retained privately in
+`/home/musubram/nfs-resume-20261003.8QWjGHh4/` on the VM, including failed and
+successful shutdown/read logs. Parent main, released-engine uptime, NFS export,
+eight threads, lockd settings and original guests remained unchanged.
+
+Remaining gates: active-client recovery, abrupt engine PID1 failure/recovery,
+actual deployed DHCPv4/DHCPv6 and RA transactions, released-host migration/rollback,
+enforcing security policies, other distro hosts, and separately approved
+parent-host PXE acceptance. No deeper-nested guests, parent handover, host package
+removal, registry publication or merge to main occurred.
 
 ## Cross-Distribution Host Verification
 

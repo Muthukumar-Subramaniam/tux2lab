@@ -711,3 +711,99 @@ for preflight_case in stopped masked absent failed-stopped active activating que
     )
 done
 printf 'PASS: host preflight requires stopped units and a verified mount table\n'
+
+for shutdown_state in running degraded stopping unknown query-error; do
+    (
+        source() { :; }
+        export CONTAINER_NAME=tux2lab-engine
+        shutdown_log="$test_dir/shutdown-$shutdown_state"
+        print_cyan() { :; }
+        print_info() { :; }
+        print_task() { :; }
+        print_task_done() { :; }
+        print_task_skip() { :; }
+        print_task_fail() { exit 99; }
+        print_success() { :; }
+        stop_engine_nfs() { printf 'nfs\n' >> "$shutdown_log"; }
+        remove_lablink0() { printf 'link\n' >> "$shutdown_log"; }
+        remove_etc_hosts_block() { printf 'hosts\n' >> "$shutdown_log"; }
+        systemctl() {
+            [[ "$*" == is-system-running ]] || exit 99
+            [[ "$shutdown_state" != query-error ]] || return 1
+            printf '%s\n' "$shutdown_state"
+            [[ "$shutdown_state" == running ]]
+        }
+        sudo() {
+            case "$*" in
+                'podman container exists tux2lab-engine') return 1 ;;
+                'virsh list --state-running --name') return 0 ;;
+                'virsh net-destroy tux2lab') printf 'network\n' >> "$shutdown_log" ;;
+                'systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket')
+                    [[ "$shutdown_state" != stopping ]] || exit 99
+                    printf 'libvirt\n' >> "$shutdown_log" ;;
+                '/tux2lab/common-utils/tux2lab-iso-mounts.sh stop') printf 'iso\n' >> "$shutdown_log" ;;
+                *) printf 'Unexpected shutdown operation: %s\n' "$*" >&2; exit 99 ;;
+            esac
+        }
+        builtin source "$PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/stop.sh" --yes
+        if [[ "$shutdown_state" == stopping ]]; then
+            [[ "$(cat "$shutdown_log")" == $'nfs\nlink\nnetwork\niso\nhosts' ]]
+        else
+            [[ "$(cat "$shutdown_log")" == $'nfs\nlink\nnetwork\nlibvirt\niso\nhosts' ]]
+        fi
+    )
+done
+printf 'PASS: host shutdown defers libvirt jobs and completes cleanup; normal CLI stop remains synchronous\n'
+
+for data_mount_case in directory mounted bind-error private-error share-error inspect-error empty-target verify-error private symlink; do
+    (
+        source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+        expected_data=/tux2lab-data
+        data_mount_log="$test_dir/data-mount-$data_mount_case"
+        readlink() {
+            [[ "$*" == "-e $expected_data" ]] || exit 99
+            if [[ "$data_mount_case" == symlink ]]; then printf '/elsewhere\n'; else printf '%s\n' "$expected_data"; fi
+        }
+        findmnt() {
+            case "$*" in
+                "-rn -o TARGET -T $expected_data")
+                    [[ "$data_mount_case" != inspect-error ]] || return 1
+                    [[ "$data_mount_case" != empty-target ]] || return 0
+                    if [[ "$data_mount_case" == mounted ]]; then printf '%s\n' "$expected_data"; else printf '/\n'; fi ;;
+                "-rn -o PROPAGATION --mountpoint $expected_data")
+                    [[ "$data_mount_case" != verify-error ]] || return 1
+                    if [[ "$data_mount_case" == private ]]; then printf 'private\n'; else printf 'shared\n'; fi ;;
+                *) exit 99 ;;
+            esac
+        }
+        sudo() {
+            case "$*" in
+                "mount --rbind $expected_data $expected_data")
+                    [[ "$data_mount_case" != mounted ]] || exit 99
+                    [[ "$data_mount_case" != bind-error ]] || return 1
+                    printf 'bind\n' >> "$data_mount_log" ;;
+                "mount --make-rprivate $expected_data")
+                    [[ "$data_mount_case" != mounted ]] || exit 99
+                    [[ "$data_mount_case" != private-error ]] || return 1
+                    printf 'private\n' >> "$data_mount_log" ;;
+                "mount --make-rshared $expected_data")
+                    [[ "$data_mount_case" != share-error ]] || return 1
+                    printf 'shared\n' >> "$data_mount_log" ;;
+                *) exit 99 ;;
+            esac
+        }
+        if prepare_container_nfs_data_mount "$expected_data"; then
+            case "$data_mount_case" in
+                directory) [[ "$(cat "$data_mount_log")" == $'bind\nprivate\nshared' ]] ;;
+                mounted) [[ "$(cat "$data_mount_log")" == shared ]] ;;
+                *) exit 1 ;;
+            esac
+        else
+            case "$data_mount_case" in
+                directory|mounted) exit 1 ;;
+                inspect-error|empty-target|symlink) [[ ! -e "$data_mount_log" ]] ;;
+            esac
+        fi
+    )
+done
+printf 'PASS: launch/restart data mount preparation is idempotent and rejects failed or unsafe mount state\n'

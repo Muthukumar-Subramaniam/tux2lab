@@ -93,6 +93,7 @@ open_bridge_firewall "${lab_infra_bridge_interface}"
 source /tux2lab/shared-functions/container-nfs.sh
 require_container_nfs_engine "${CONTAINER_NAME}"
 container_nfs_host_preflight
+prepare_container_nfs /tux2lab-data
 if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/dev/null | grep -q "Up"; then
     print_info "Container '${CONTAINER_NAME}' is already running."
 else
