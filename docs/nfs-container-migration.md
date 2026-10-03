@@ -11,7 +11,8 @@ The live lab still uses its released engine and host NFS. Implementation and
 isolated tests do not authorize a live handover, host package removal or a merge
 to main. This is not yet a release-ready replacement for host NFS.
 The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
-the Alma test host. Broader distro, security-policy and migration gates remain.
+the Alma test host. Ubuntu and current-host acceptance, security-policy and
+migration gates remain.
 
 ## Maintained Code
 
@@ -305,13 +306,23 @@ The implementation now preserves the original `/tux2lab-data` layout, including
 export discovery. The compatibility finding and integration results below
 supersede the earlier `/export` design. Existing tests do not replace the
 remaining actual lab setup, deployment or integrated PXE acceptance checks.
-The remaining work is split into three stages:
+The release scope is bounded to AlmaLinux, Ubuntu 24.04 LTS and the current
+CBL-Mariner KVM host, followed by release preparation. This supersedes the
+earlier expectation of completing the wider host matrix before publication.
+Other host families and additional distro/version combinations move to
+follow-up work, with their unverified status documented.
 
-1. **Dedicated test-VM deployment and compatibility.** Create test hosts through
-  the existing tux2lab tool, then run the real host setup and lab deployment
-  inside each distribution. Verify the deployed lab, lifecycle and recovery,
-  plus migration/rollback from a separate released baseline. The host matrix
-  and required checks are below. Do not create deeper-nested PXE guests.
+The remaining work follows this sequence:
+
+1. **Finish Alma, then validate Ubuntu 24.04 LTS.** Complete the remaining
+  Alma checks below. Then provision the Ubuntu test host through the existing
+  tux2lab tool and run real host setup and lab deployment. Verify deployed
+  services, NFS/ISO behavior, lifecycle and recovery, migration/rollback from
+  a released baseline, and applicable security policies. Reuse the shared
+  implementation; do not create deeper-nested guests. Alma provides
+  representative RHEL-family evidence, not certification of every listed
+  distro/version. Check material known differences without making an
+  exhaustive Red Hat matrix a release gate.
 2. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
   window on the current CBL-Mariner host, test actual NFS handover, normal
   tux2lab VM creation and unchanged 2 GiB AlmaLinux/Ubuntu NFS-backed PXE
@@ -327,9 +338,40 @@ The remaining work is split into three stages:
   local; build and validate the final release image, then publish it through
   the normal release workflow. Publication and merge to main require approval.
 
+### Effort and Scope Boundaries
+
+| Remaining Stage | Rough Active Work |
+| --- | --- |
+| Finish Alma acceptance | 6-10 hours |
+| Ubuntu 24.04 representative host validation | 5-8 hours |
+| Approved Mariner handover, real PXE installs and rollback | 6-10 hours |
+| Final review, release image, packaging and publication checks | 3-4 hours |
+| **Total** | **20-32 hours** |
+
+These are planning estimates, not a calendar schedule or guaranteed completion
+time. Work proceeds as the user is available; other commitments, maintenance
+windows, approvals and newly discovered defects can change elapsed time and
+effort. No publication date or daily work commitment is set.
+
+Keep the release focused on its acceptance gates and release-blocking fixes.
+Rerun affected checks after fixes, but do not add unrelated improvements or
+expand the test matrix without agreement. Deferred coverage is not a pass:
+distinguish tested hosts from expected compatibility, and record known
+limitations. The independent-client Alma reboot check remains unverified
+unless an external-client setup is agreed; it must not lead to an inner VM.
+Deferral does not waive the selected hosts' functional/security checks or the
+current host's real provisioning and rollback acceptance.
+
+Use [RELEASE_PROCESS.md](../RELEASE_PROCESS.md) for final validation, version
+approval, publication of the tested image, clean-source tarball verification
+and release notes. The user creates the GitHub release and tag after the
+verified handoff. Keep development images local until the approved release
+publication step.
+
 This document update authorizes no VM provisioning, live handover, host reboot,
-package removal, image publication or merge. Before execution, confirm the test
-targets, resource budget and any maintenance window with the user.
+security-policy changes, package removal, image publication or merge. Before
+execution, confirm the relevant resource budget and maintenance window with
+the user. Recording the release plan does not start its next test stage.
 
 ### Export Discovery Compatibility (October 2, 2026)
 
@@ -600,26 +642,32 @@ other-kernel/distro and independent-client host-reboot coverage remain pending.
 
 ## Cross-Distribution Host Verification
 
-Use dedicated VMs on the existing lab as test hosts before release. Each VM runs
-its distribution's own kernel, systemd, Podman and actual tux2lab installation.
+Use AlmaLinux and Ubuntu 24.04 LTS as dedicated representative test hosts before
+release, followed by acceptance on the existing CBL-Mariner KVM host. Each test
+VM runs its own kernel, systemd, Podman and actual tux2lab installation.
 The required outcome is a successfully set up and deployed lab, not merely a
 manually started container or a collection of passing component tests.
 Installing a distribution only as a PXE guest does not verify it as a lab host;
 running a different distribution's container still shares the parent kernel.
 
-Planned host matrix (not verified support claims):
+Release and follow-up host matrix (not verified support claims):
 
 | Family | Test-host targets | Status |
 | --- | --- | --- |
-| Microsoft | CBL-Mariner 2.0, Azure Linux 3.0 | Dedicated-VM acceptance pending |
-| Debian-based | Debian, Ubuntu LTS | Pending |
-| Enterprise RPM | AlmaLinux, Rocky Linux, RHEL where available | AlmaLinux 9.8 setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below, other targets pending |
-| Fedora | Fedora | Pending |
-| SUSE | openSUSE Leap | Pending |
+| Enterprise RPM | AlmaLinux 9.8 | Release gate: setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below |
+| Debian-based | Ubuntu 24.04 LTS | Release gate: next representative host after Alma; validation pending |
+| Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
+| Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
+| Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
+| Microsoft | Azure Linux 3.0 | Follow-up validation; unverified |
+| Fedora | Fedora | Follow-up validation; unverified |
+| SUSE | openSUSE Leap | Follow-up validation; unverified |
 
-Existing Mariner results remain the baseline, not a substitute for the matrix.
-Select and record exact release versions before execution. Record unavailable
-targets as untested, never infer a pass from another distribution in the family.
+Existing Mariner results remain the baseline, not a substitute for its release
+acceptance. Record exact versions and environments when executing a test.
+Representative coverage supports an expectation of compatibility, never a
+claim that an untested distro/version passed. Follow-up rows are not additional
+pre-publication gates unless a material finding changes the agreed scope.
 
 ### AlmaLinux Remaining Work (October 3, 2026)
 
@@ -800,6 +848,9 @@ approved parent PXE workflow remain pending. No deeper-nested guests were create
   Parent-host acceptance is a separate maintenance stage, not part of this setup.
 
 ### Acceptance Per Host
+
+Apply these checks to the selected release-test hosts. The follow-up matrix
+does not require additional host deployments before this release.
 
 - On a fresh distro VM, run the normal documented host setup using
   [setup/setup-host.sh](../setup/setup-host.sh), then actual lab deployment using
