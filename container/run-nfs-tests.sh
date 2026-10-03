@@ -449,6 +449,29 @@ done
 printf 'PASS: export rollback supports stopped managed/legacy roots and rejects unsafe sources\n'
 
 (
+    source "$PROJECT_ROOT/shared-functions/run-container.sh"
+    source() { :; }
+    jq() { printf '\n'; }
+    container_nfs_image_check() { [[ "$1" == image-id ]]; }
+    container_nfs_host_preflight() { :; }
+    prepare_container_nfs() { [[ "$1" == /data ]]; }
+    prepare_engine_rootfs() { printf '/var/lib/tux2lab/engine-rootfs/engine.12345678/rootfs\n'; }
+    wait_for_engine_nfs() { [[ "$1" == engine ]]; }
+    sudo() {
+        case "$*" in
+            'podman image inspect test-image --format {{.Id}}') printf 'image-id\n' ;;
+            'mkdir -p '*|'chown named:named '*) return 0 ;;
+            'podman run '*) printf '%s\n' "$@" > "$test_dir/launch-arguments" ;;
+            *) printf 'Unexpected launch operation: %s\n' "$*" >&2; exit 99 ;;
+        esac
+    }
+    run_tux2lab_container engine test-image lab /data 192.0.2.1 labbr0
+    grep -qx '/dev:/dev:ro' "$test_dir/launch-arguments"
+    grep -qx '/data:/data:ro,rslave' "$test_dir/launch-arguments"
+)
+printf 'PASS: launcher binds host devices read-only and preserves the data layout\n'
+
+(
     source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
     source "$PROJECT_ROOT/shared-functions/run-container.sh"
     source() { :; }

@@ -10,8 +10,8 @@ scripts and results are backed up on origin in commit
 The live lab still uses its released engine and host NFS. Implementation and
 isolated tests do not authorize a live handover, host package removal or a merge
 to main. This is not yet a release-ready replacement for host NFS.
-Hot-added ISO loop devices can produce unstable NFS filehandles across engine
-restart; the October 3 active-client checkpoint below records this open blocker.
+The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
+the Alma test host. Broader distro, security-policy and migration gates remain.
 
 ## Maintained Code
 
@@ -43,6 +43,9 @@ Do not use those wrappers for deployment or mix them with the migration command.
 ## Design
 
 - The host still supplies the kernel, NFS modules, ISO mounts and bridge.
+- The privileged engine binds host `/dev` at `/dev:ro` so mountd can identify
+  ISO loop devices created after engine startup. Read-only applies to the mount,
+  not underlying device I/O; this is not an additional device-security boundary.
 - Host networking means there can be only one kernel NFS owner in that network
   namespace. Active host daemons, RPC listeners and existing kernel exports cause
   startup to fail instead of being overwritten.
@@ -531,7 +534,7 @@ Observed results:
   cache snapshots used the ISO UUID `20260524:07153000:00000000:00000000`.
   This isolates missing hot-added block-device visibility as the cause.
 
-**Open blocker:** choose and implement a device-visibility policy that gives
+**Blocker at this checkpoint (resolved below):** choose a device-visibility policy that gives
 mountd stable ISO identity before any client can receive a fallback handle.
 No permanent device bind, watcher, explicit child export or layout change was
 introduced. Merely ordering startup ISOs earlier does not cover later distro
@@ -550,10 +553,50 @@ Test loop attachments and private client mounts were removed; the normal ISO
 helper restored the original mount and the engine is ready. Runtime source and
 image are unchanged in this checkpoint.
 
-Active ISO recovery is not accepted until the hot-add defect is fixed and
+At this checkpoint, active ISO recovery was not accepted until the hot-add defect was fixed and
 retested. Independent-client/host-reboot recovery, deployed DHCP/RA transactions,
 migration/rollback, enforcing security policies and other distro hosts remain
 unverified. Parent handover/PXE still requires separate approval.
+
+#### Hot-Added Device Visibility Fix (October 3, 2026)
+
+With user approval, the launcher now includes `-v /dev:/dev:ro`. A disposable
+container first verified startup, host/device inode identity and directory-write
+rejection with `EROFS`, without changing the host device mounts or live engine.
+The actual Alma engine was then rebuilt through normal `tux2lab rebuild --yes`
+using the existing local image. Its inspected mount is read-only and host device
+mounts remained unchanged. The source image did not require rebuilding.
+
+The missing-device failure was retested with genuinely new loop devices created
+after this engine started, not reused warm devices. `/dev/loop3` became visible
+automatically before the first client read, without `mknod` or engine restart.
+The same open NFSv4.1 installer descriptor blocked during graceful shutdown and
+recovered after normal startup. A separate new `/dev/loop4` passed the same
+test with PID1 SIGKILL, including retained firewall protection and no residual
+reserved RPC listeners. Before/after caches in both cases retained the real ISO
+UUID `20260524:07153000:00000000:00000000`. This resolves the reproduced
+hot-added-device identity failure on this host.
+
+The existing complete-engine harness now uses the same device bind. On Alma,
+its isolated fixture suite passed dual-stack DNS, HTTP/HTTPS, TFTP and NTP;
+DHCPv4/v6 and RA exchanges; Kea API access; two live ISO propagation cycles with
+full installer checksums; graceful exit; and retained-namespace cleanup. These
+fixture exchanges do not complete the separate deployed DHCP/RA acceptance gate.
+
+Actual deployed NFSv3/IPv4 and NFSv4.1/IPv4/IPv6 full installer reads matched
+SHA256 `539f423b5456aa36877b255b1fd2486d86fff9bfafc34ecb83282b72a93b70a2`.
+Read-write client mounts received server-enforced `EROFS`. Discovery advertised
+only `/tux2lab-data`, and the NFSv4 root contained only that directory. Temporary
+loop attachments were removed and the normal ISO helper restored `/dev/loop0`.
+Evidence, pre-change launcher backup and rebuild/recovery/protocol logs are in
+`/home/musubram/nfs-device-bind-validation.WH1UWipv/` on the Alma VM.
+
+Existing development engines need a rebuild to acquire the new mount; restarting
+an old container does not change its mount configuration. No explicit child
+exports, alternative export paths, device-node watcher or ISO ordering workaround
+was added. The engine remains privileged: a read-only `/dev` mount is not a claim
+of read-only device I/O or recursively read-only child mounts. Enforcing-policy,
+other-kernel/distro and independent-client host-reboot coverage remain pending.
 
 ## Cross-Distribution Host Verification
 

@@ -361,6 +361,7 @@ run_engine_tests() (
         --add-host engine6.integration.test:2001:db8:1::1 --add-host client6.integration.test:2001:db8:1::2 \
         -e "TUX2LAB_HOST_NETNS=$(stat -Lc %i /proc/self/ns/net)" \
         -e TUX2LAB_BRIDGE_IP=192.0.2.1 -e TUX2LAB_BRIDGE_IPV6=2001:db8:1::1 -e TUX2LAB_BRIDGE_IF=labbr0 \
+        -v /dev:/dev:ro \
         -v "$PROJECT_ROOT:/tux2lab:ro" \
         -v "$scratch/data:/tux2lab-data:ro,rslave" -v "$scratch/state:/var/lib/nfs" \
         -v "$scratch/data/logs:/tux2lab-data/logs" \

@@ -43,6 +43,7 @@ run_tux2lab_container() {
         --log-driver=k8s-file \
         --log-opt "path=${data_dir}/logs/tux2lab-engine.log" \
         --log-opt "max-size=10mb" \
+        -v "/dev:/dev:ro" \
         -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "${data_dir}/nfs/state:/var/lib/nfs" \
         -v "/tux2lab:/tux2lab:ro" \
