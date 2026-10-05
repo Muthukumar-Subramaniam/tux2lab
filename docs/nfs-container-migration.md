@@ -15,8 +15,9 @@ the Alma test host. October 5 adds actual deployed DHCPv4/DHCPv6 and RA acceptan
 and a host dependency inventory, followed by released-baseline migration and
 rollback acceptance on Alma. Ubuntu and current-host acceptance, security-policy
 gates remain. Scoped kernel-helper tracing is complete with host packages
-retained. Firewalld reload exposed an unresolved libvirt bridge-zone conflict;
-enforcing SELinux still requires boot/relabel preparation.
+retained. The libvirt bridge-zone conflict is corrected on Alma with firewalld
+enabled; reload/restart and real client reads pass. SELinux permissive relabel
+boot is prepared but enforcing acceptance is not yet complete.
 
 ## Maintained Code
 
@@ -859,6 +860,45 @@ Enforcing acceptance requires backed-up boot/config changes, a permissive
 relabel boot and then controlled enforcing tests. None of those changes or a
 host reboot was performed in this checkpoint.
 
+#### Approved Zone Correction and Relabel Preparation (October 5, 2026)
+
+The user approved changing Alma's custom bridge zone and preparing SELinux through
+a permissive relabel boot. Only `zone='trusted'` was added to both the custom
+source XML and existing libvirt definition. Structural comparison verified that
+all other XML content, including UUID, MAC and addresses, was preserved.
+
+The first network restart exposed an additional requirement: libvirt rejects an
+explicit zone when firewalld is inactive (`zone trusted requested ... but
+firewalld is not active`). The guarded procedure restored the original definition
+and healthy lab. The attempted unconditional change to the general template was
+therefore discarded. The shared template remains zone-free for hosts that do not
+run firewalld; an explicit zone is a documented prerequisite for a firewalld-managed
+lab network, not a new mandatory firewalld dependency on every host.
+
+With firewalld active, the corrected Alma network started normally. Fresh SSH,
+DHCPv4/v6, RA and full NFSv3/IPv4 and NFSv4.1/IPv4/IPv6 installer reads passed
+before reload, after reload and after firewalld restart. `labbr0` remained trusted,
+`eth0` remained public, and exact NFS rule readiness passed throughout. No runtime
+zone reapplication was needed after reload/restart.
+
+Firewalld is now enabled on Alma so the explicit-zone network can start after
+reboot. Its test recovery timer was cancelled. When returning this host to a
+firewalld-disabled configuration, restore the original zone-free network
+definition/source before the next network start; stopping firewalld alone is
+not sufficient. Network rollback files are in
+`/home/musubram/nfs-zone-validation.pVYxYMWk/`; successful firewall results are in
+`/home/musubram/nfs-firewall-validation.j71XJThp/`.
+
+SELinux recovery files are in
+`/home/musubram/nfs-selinux-validation.YcdsXLVV/`: original configuration, default
+GRUB settings, BLS entries, grubenv, kernel cmdline, boot/engine IDs and the inherited
+empty `/.autorelabel` marker. Only the default kernel entry was changed from
+`selinux=0` to `enforcing=0`; the rescue entry is unchanged. `/etc/selinux/config`
+is now permissive, root-owned mode 644. `fixfiles -F onboot` scheduled the forced
+relabel. The running kernel is still SELinux-disabled until reboot. GRUB defaults
+and `/etc/kernel/cmdline` retain their original values pending final policy setup.
+This is a recovery checkpoint before the approved reboot, not an enforcing pass.
+
 #### Scoped Kernel-Helper Audit (October 5, 2026)
 
 `sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST
@@ -935,8 +975,9 @@ leases and namespace cleanup verified. Released-baseline migration, explicit
 rollback and injected failed-handover rollback also pass, with the original
 container restored afterward. Host dependency inventory and scoped helper tracing
 are complete with packages retained. Broad kernel-helper independence is not
-claimed. Firewalld start passed; reload has the bridge-zone blocker described
-above. Enforcing SELinux and firewall restart acceptance remain pending.
+claimed. Firewalld start/reload/restart now pass with the explicitly zoned network
+and firewalld enabled. Enforcing SELinux acceptance remains pending; permissive
+relabel boot is prepared.
 The parent lab remains unchanged. The dated sections below retain earlier
 checkpoint results; they are not the current remaining-work list.
 
@@ -946,7 +987,7 @@ Remaining Alma-only work and rough active-work estimates:
 | --- | --- | --- |
 | Deployed DHCPv4/DHCPv6 and RA | Completed | Passed against the actual deployed configuration; see October 5 results above |
 | Released-host migration and rollback | Completed | Real released baseline, successful handover, explicit and post-launch-failure rollback passed |
-| SELinux/firewalld validation | Blocked | Approve and validate explicit libvirt bridge zone; then reload/restart. SELinux requires boot/relabel preparation; original disabled policy restored |
+| SELinux/firewalld validation | In progress | Explicit zone and enabled firewalld pass reload/restart; approved SELinux permissive relabel boot prepared, enforcing still pending |
 | Host prerequisites/dependencies | Scoped audit complete | Inventory, positive-control helper trace and actual workload recorded; packages retained, no package-free claim |
 | Documentation and final checkpoint | 0.5-1 hour | Record final results, limitations and verified remote checkpoint |
 
