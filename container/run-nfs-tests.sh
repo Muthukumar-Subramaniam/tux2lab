@@ -860,3 +860,29 @@ for dhcp_guard_case in query-error occupied; do
     )
 done
 printf 'PASS: deployed DHCP rejects failed or occupied guest/process inspections before mutation\n'
+
+bash -s -- "$PROJECT_ROOT" "$test_dir" <<'MIGRATIONGUARD'
+set -euo pipefail
+PROJECT_ROOT="$1"
+builtin source <(sed -n '/^restore_current_engine() {/,/^}/p' "$PROJECT_ROOT/container/run-migration-tests.sh")
+EVIDENCE="$2/migration-guard"
+SAVED_ENGINE=tux2lab-engine-acceptance-original
+check_evidence() { :; }
+hostname() { printf 'migration-test.invalid\n'; }
+cat() {
+    case "$1" in
+        "$EVIDENCE/host") printf 'migration-test.invalid\n' ;;
+        "$EVIDENCE/original-id") printf 'original-id\n' ;;
+        *) exit 99 ;;
+    esac
+}
+container_nfs_exists() { printf 'true\n'; }
+podman() {
+    [[ "$*" == "inspect $SAVED_ENGINE --format {{.Id}}" ]] || exit 99
+    printf 'unexpected-id\n'
+}
+guard_status=0
+restore_current_engine || guard_status=$?
+[[ "$guard_status" == 1 ]]
+MIGRATIONGUARD
+printf 'PASS: migration acceptance restoration rejects an unknown saved engine before mutation\n'

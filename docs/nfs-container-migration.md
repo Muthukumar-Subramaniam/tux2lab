@@ -12,8 +12,9 @@ isolated tests do not authorize a live handover, host package removal or a merge
 to main. This is not yet a release-ready replacement for host NFS.
 The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
 the Alma test host. October 5 adds actual deployed DHCPv4/DHCPv6 and RA acceptance
-and a host dependency inventory. Ubuntu and current-host acceptance,
-security-policy, migration and kernel-helper audit gates remain.
+and a host dependency inventory, followed by released-baseline migration and
+rollback acceptance on Alma. Ubuntu and current-host acceptance, security-policy
+and kernel-helper audit gates remain.
 
 ## Maintained Code
 
@@ -28,6 +29,7 @@ security-policy, migration and kernel-helper audit gates remain.
 | [setup/migrate-nfs-to-container.sh](../setup/migrate-nfs-to-container.sh) | Explicit host-service handover and rollback |
 | [container/run-nfs-tests.sh](../container/run-nfs-tests.sh) | Rootless regression tests and isolated integration tests |
 | [container/run-engine-tests.sh](../container/run-engine-tests.sh) | Complete-engine client protocols, ISO propagation and shutdown/failure checks |
+| [container/run-migration-tests.sh](../container/run-migration-tests.sh) | Dedicated-host released-baseline handover, explicit/failed-handover rollback and original-engine restoration |
 
 Deployment, start, stop, rebuild, destroy, health and busy-ISO cache flushing use
 the container owner. Legacy engines are rejected before replacement or teardown.
@@ -723,6 +725,84 @@ Retain the host packages. The fresh-host RPC conflict and its explicitly approve
 manual preparation remain documented below; no automatic policy fix was added.
 Inventory evidence is in `host-dependencies.log` in the same evidence directory.
 
+#### Released-Baseline Migration and Rollback (October 5, 2026)
+
+With explicit approval for the dedicated Alma VM only, the acceptance runner
+preserved the existing container and its managed root, stopped it cleanly, and
+renamed it to `tux2lab-engine-acceptance-original`. It saved host NFS configuration,
+unit states, lockd settings, native NFS state files and the stopped engine's
+persistent NFS directory outside served data. No host packages or security policy
+were changed, and no additional VM was created.
+
+The temporary baseline used the released source at
+`0d0c7dc01395a484a98f2ef3a72f6aea0b465bf9`, its actual container launcher and native
+host-NFS helper, and the released 2.1.1 image with ID
+`555c91f1cb895749bb28f88eec3ade896fc7debe165b7e3bfb8bdc6f01d5f3da`.
+The image was transferred from the parent's existing local image store, not
+rebuilt or published. The migration checkout and CLI link remained in place;
+the archived released helpers were sourced only for baseline preparation.
+
+The following real operations passed:
+
+1. Verify the released engine and host-NFS baseline, sole `/tux2lab-data` export,
+  and full installer checksums over NFSv3/IPv4 and NFSv4.1/IPv4/IPv6.
+2. Run the maintained migration script's `--check` and `--apply`, then verify
+  container NFS readiness and the same three full installer reads.
+3. Run `--rollback`; verify the same released engine ID, exact host export and
+  unit-state snapshots, lockd settings, and full installer reads.
+4. Inject a handover failure immediately after the real candidate engine becomes
+  ready. The migration EXIT trap removed that candidate and restored the released
+  baseline; identity, unit/export/settings comparisons and all three reads passed.
+5. Remove only the temporary released engine, restore original host settings and
+  saved NFS files, and restart the original container-NFS engine. Its original ID
+  and managed root were retained; all three full installer reads passed again.
+
+The runner does not replace production migration logic with a mock. Fault
+injection wraps the real launcher and returns failure after successful readiness.
+This establishes rollback from that specific post-launch failure, not arbitrary
+power loss, every partial snapshot failure, active-client reclaim or host reboot.
+Earlier rootless tests retain coverage of other guarded failure paths.
+
+For a separately approved dedicated-host replay, first stage a released source
+archive under `EVIDENCE/released-source` and both local images, then run:
+
+```bash
+sudo bash /tux2lab/container/run-migration-tests.sh --run \
+  nfs-host-alma9.musubram.internal "$evidence" \
+  ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.1.1 \
+  localhost/tux2lab-engine:nfs-direct-layout
+```
+
+`$evidence` must be an existing canonical private directory matching
+`/home/*/nfs-migration-validation.*`, outside served data. The runner refuses
+existing checkpoints, guests, additional containers or NFS clients, and retains
+the saved original engine until restoration. EXIT/signal cleanup attempts
+restoration and fails closed on unknown ownership. Recovery can be retried with
+`--restore EXPECTED_HOST EVIDENCE`; do not delete the saved engine or evidence
+after an incomplete restoration. A rootless regression verifies rejection of an
+unexpected saved engine ID before mutation.
+
+Observed limitations: the unmodified released 2.1.1 entrypoint has no SIGTERM
+shutdown trap, so Podman used its 30-second timeout and SIGKILL fallback when
+stopping that temporary baseline. Migration and rollback still succeeded. This
+is not a graceful-stop claim for the released engine. Systemd also emitted a
+reload warning after masking the native NFS unit; subsequent owner, unit-state
+and protocol checks passed. These warnings remain in the evidence.
+
+Final Alma health passed 11/11 checks and 6/6 dual-stack services. Only the
+original engine and `engine.YFAhvSFQ` root remain; there is no active migration
+checkpoint or temporary client mount directory. Custom network XML and disabled
+management-sync hooks are unchanged. SELinux remains disabled and firewalld
+inactive. Kernel logs selected `nfsdcld` tracking on each native/container start,
+but do not establish package-free or kernel-helper independence.
+
+Evidence and recovery archives remain in
+`/home/musubram/nfs-migration-validation.J81WMsMw/` on Alma, including stage read
+logs, `apply.log`, `rollback.log`, `injected-failure.log`, `final-health.log` and
+`kernel-tracking.log`. Completed migration snapshots remain archived under
+`/var/lib/tux2lab/nfs-migration-restored-*`. No parent NFS handover, image publication
+or main merge was performed.
+
 ## Cross-Distribution Host Verification
 
 Use AlmaLinux and Ubuntu 24.04 LTS as dedicated representative test hosts before
@@ -760,8 +840,10 @@ with the documented manual prerequisites, normal lifecycle and reboot startup,
 full installer reads, original export-layout compatibility, and NFSv4.1
 same-host-client engine restart/SIGKILL recovery with hot-added ISO devices.
 Actual deployed DHCPv4/DHCPv6 and RA transactions now also pass, with released
-leases and namespace cleanup verified. Host dependency inventory is recorded;
-kernel-upcall independence is not yet established.
+leases and namespace cleanup verified. Released-baseline migration, explicit
+rollback and injected failed-handover rollback also pass, with the original
+container restored afterward. Host dependency inventory is recorded; kernel-upcall
+independence is not yet established.
 The parent lab remains unchanged. The dated sections below retain earlier
 checkpoint results; they are not the current remaining-work list.
 
@@ -770,13 +852,13 @@ Remaining Alma-only work and rough active-work estimates:
 | Work | Estimate | Acceptance Still Needed |
 | --- | --- | --- |
 | Deployed DHCPv4/DHCPv6 and RA | Completed | Passed against the actual deployed configuration; see October 5 results above |
-| Released-host migration and rollback | 2-3 hours | Handover from a recorded released host-NFS baseline and recovery from failed handover |
+| Released-host migration and rollback | Completed | Real released baseline, successful handover, explicit and post-launch-failure rollback passed |
 | SELinux/firewalld validation | 2-3 hours | Enforcing-policy compatibility, including firewall reload/restart; this VM currently has SELinux disabled and firewalld inactive |
 | Host prerequisites/dependencies | 1-2 hours | Inventory and manual RPC prerequisite documented; kernel-helper audit pending, packages retained |
 | Documentation and final checkpoint | 0.5-1 hour | Record final results, limitations and verified remote checkpoint |
 
 The original October 3 estimate was **6-10 hours**, including the now-completed
-DHCP/RA work and assuming no substantial new defects. It is not a refreshed
+DHCP/RA and migration/rollback work and assuming no substantial new defects. It is not a refreshed
 remaining-time estimate or completion guarantee. It excludes other distributions,
 parent-host handover/PXE and the independent-client reboot test below.
 
@@ -786,9 +868,9 @@ connected by a virtual Ethernet pair to the existing private `labbr0`. It shares
 Alma's kernel and adds no QEMU, KVM instance or guest operating system. Keep DHCP
 and RA off the management interface and parent network; remove the temporary
 client namespace and links afterward. This approach avoids another nested
-virtualization layer, but is not a guarantee against host freezes. Migration,
-rollback and policy tests also require no inner VM and remain pending appropriate
-approval and guarded preparation of a released host-NFS baseline.
+virtualization layer, but is not a guarantee against host freezes. Migration and
+rollback also passed without an inner VM. Security-policy tests remain pending
+appropriate approval and guarded preparation.
 
 Active-client recovery across an Alma **host reboot** remains unverified.
 A client namespace inside Alma cannot survive that reboot. This check requires
