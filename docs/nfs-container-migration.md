@@ -18,8 +18,10 @@ gates remain. Scoped kernel-helper tracing is complete with host packages
 retained. The libvirt bridge-zone conflict is corrected on Alma with firewalld
 enabled; reload/restart and real client reads pass. Permissive relabel/automatic
 startup and controlled runtime SELinux enforcing tests also pass. Alma is left
-permissive, not configured for enforcing boot. Shared firewalld-aware network
-definition handling remains an integration gap; the Alma correction was explicit.
+permissive, not configured for enforcing boot. Shared setup/start now select the
+bridge zone according to firewalld state, with Alma transition/reload/restart
+acceptance complete. The bounded Alma checks are complete with the limitations
+below; Ubuntu 24.04 is the next representative host.
 
 ## Maintained Code
 
@@ -30,6 +32,7 @@ definition handling remains an integration gap; the Alma correction was explicit
 | [shared-functions/nfs-config.sh](../shared-functions/nfs-config.sh) | Export, daemon and firewall configuration |
 | [shared-functions/container-nfs.sh](../shared-functions/container-nfs.sh) | Host preflight, shared data mount preparation, image compatibility, readiness and shutdown verification |
 | [shared-functions/engine-rootfs.sh](../shared-functions/engine-rootfs.sh) | Exportable per-instance roots, image identity and guarded cleanup/rollback |
+| [shared-functions/bridge-firewall.sh](../shared-functions/bridge-firewall.sh) | Conditional libvirt bridge zone, identity-preserving network preparation and bridge firewall access |
 | [shared-functions/run-container.sh](../shared-functions/run-container.sh) | Mount layout, launch and replacement with retained previous engine |
 | [setup/migrate-nfs-to-container.sh](../setup/migrate-nfs-to-container.sh) | Explicit host-service handover and rollback |
 | [container/run-nfs-tests.sh](../container/run-nfs-tests.sh) | Rootless regression tests and isolated integration tests |
@@ -969,8 +972,73 @@ All boot/config backups and test logs remain under
 `permissive-boot.log`, `enforcing-fixture-fixed.log`, `enforcing-restart-user/`,
 `enforcing-firewall-client/`, `enforcing-final-audit.log` and `final-health.log`.
 The parent lab was not rebooted or migrated; no nested VM or image publication
-was involved. The shared network setup still needs a conditional solution for
-firewalld-managed hosts that does not break inactive/absent-firewalld hosts.
+was involved. Shared network integration was still pending at this checkpoint;
+the following approved implementation closes that gap.
+
+#### Conditional Network Integration (October 5, 2026)
+
+With approval to change shared setup, `ensure_bridge_network` in
+`shared-functions/bridge-firewall.sh` now owns lab network preparation for both
+`setup/setup-host.sh` and normal `tux2lab start`:
+
+- Active firewalld selects `zone='trusted'`. Inactive, absent or failed firewalld
+  selects no explicit zone, avoiding libvirt's active-firewalld requirement.
+  Failed state queries and transitional/unknown service states stop preparation.
+- Existing persistent libvirt XML is authoritative. The helper changes only the
+  managed bridge-zone attribute, preserving UUID, MAC, addresses and other network
+  settings. The source XML is used only for a missing network and is never edited.
+  Rerunning setup no longer destroys/undefines the lab network to replace it from
+  the template. Intentional address/topology changes require a separate controlled
+  libvirt configuration change, not just a source-template edit.
+- An active zone-free network cannot safely receive the zone change live. The
+  helper prepares its persistent trusted zone, returns failure with a maintenance
+  message, and leaves live XML and the running engine unchanged. After draining
+  clients/stopping guests as appropriate, normal `tux2lab stop` and `tux2lab start`
+  apply the saved change. Merely retrying start still reports restart required.
+- No live network is automatically destroyed or restarted. Transient networks,
+  custom non-trusted zones, mismatched names/bridges and invalid XML are rejected.
+  Libvirt query/define/start/autostart failures propagate instead of being hidden.
+  Persistent lookup uses `net-list --all --persistent` so stopped networks retain
+  their identity. Python's standard-library XML parser adds no package dependency.
+
+Actual Alma validation used the same original engine and custom source XML:
+
+1. Already-correct active startup preserved live/persistent XML byte-for-byte and
+   left engine ID/PID unchanged.
+2. Normal lab stop, firewalld stop, and normal start removed only the zone from
+   persistent and live definitions. DHCPv4/v6, RA and full installer checksums over
+   NFSv3/IPv4 and NFSv4.1/IPv4/IPv6 passed with firewalld inactive.
+3. Starting firewalld and invoking normal lab startup staged the persistent zone
+   and returned the expected maintenance error, without altering live XML or
+   engine ID/PID. Normal stop/start then adopted the trusted zone; both XML forms
+   matched their original saved versions and the source file stayed unchanged.
+4. The original firewall configuration was restored, then reload and restart each
+   passed bridge-zone/SSH allowance/exact NFS rules and real DHCP/RA/full NFS reads.
+   Fresh management SSH was also checked after the final restart.
+
+An initial identity assertion incorrectly compared live XML against persistent
+XML. Libvirt synthesizes a NAT port range in the live form; comparing each form
+against its own saved baseline confirmed that only the zone changed. That test's
+direct network recovery also detached the existing dummy interface; the verified
+dummy was reattached and healthy startup restored. The successful repeat used
+normal lab shutdown for recovery. The production helper never destroys the bridge
+and does not require this manual attachment step.
+
+Rootless tests cover fresh/absent-firewall paths, existing/staged networks,
+identity preservation, custom/invalid input, state-query failures and libvirt
+failure propagation. An actually package-absent host was not provisioned or tested;
+its systemd inactive response is covered without removing packages. The full host
+setup script was not rerun, avoiding unrelated package/host changes; its shared
+network helper was exercised through real startup and the rootless tests. Syntax,
+editor and regression checks passed. ShellCheck has no new diagnostics; setup's
+two existing package-log redirection warnings match its committed baseline.
+
+Evidence and backups are under `/home/musubram/nfs-zone-integration.yfw6UyNa/`,
+including original source scripts/network/firewall, idempotent startup,
+`inactive-client-final/`, `live-transition-final.log`, final active network XML,
+and `reload-client/`/`restart-client/`. No image, source template, package, parent
+runtime or SELinux boot policy changed. Alma remains permissive with firewalld
+active/enabled; NFS serving ownership remains in the original candidate engine.
 
 #### Scoped Kernel-Helper Audit (October 5, 2026)
 
@@ -1051,8 +1119,9 @@ are complete with packages retained. Broad kernel-helper independence is not
 claimed. Firewalld start/reload/restart now pass with the explicitly zoned network
 and firewalld enabled. Permissive relabel/automatic startup and controlled runtime
 SELinux enforcing acceptance pass. Alma is left permissive; enforcing host boot
-was not tested. The explicit Alma zone correction still needs shared setup
-integration that preserves compatibility with inactive/absent firewalld.
+was not tested. Conditional shared setup/start integration now passes actual
+inactive/active-firewalld transitions and reload/restart on Alma, with the source
+XML and original network identity preserved. The bounded Alma stage is complete.
 The parent lab remains unchanged. The dated sections below retain earlier
 checkpoint results; they are not the current remaining-work list.
 
@@ -1063,9 +1132,9 @@ Remaining Alma-only work and rough active-work estimates:
 | Deployed DHCPv4/DHCPv6 and RA | Completed | Passed against the actual deployed configuration; see October 5 results above |
 | Released-host migration and rollback | Completed | Real released baseline, successful handover, explicit and post-launch-failure rollback passed |
 | SELinux/firewalld validation | Scoped tests completed | Explicit-zone reload/restart, permissive relabel/boot and runtime enforcing workloads passed; not enforcing host boot or confined-container security |
-| Shared firewalld network handling | Open integration gap | Apply the validated zone requirement conditionally without breaking hosts where firewalld is inactive/absent; Alma's explicit correction alone is not a general fix |
+| Shared firewalld network handling | Completed | Conditional setup/start helper; actual inactive/active transitions and reload/restart passed, with live restart staged for approved maintenance |
 | Host prerequisites/dependencies | Scoped audit complete | Inventory, positive-control helper trace and actual workload recorded; packages retained, no package-free claim |
-| Documentation and final checkpoint | Results recorded | Security results, harness fixes, final policy state, recovery evidence and remaining integration gap recorded |
+| Documentation and final checkpoint | Results recorded | Security results, conditional network integration, final policy state and recovery evidence recorded; Ubuntu 24.04 follows |
 
 The original October 3 estimate was **6-10 hours**, including the now-completed
 DHCP/RA and migration/rollback work and assuming no substantial new defects. It is not a refreshed

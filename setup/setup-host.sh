@@ -231,24 +231,14 @@ run_virsh_cmd() {
     sudo virsh "$@" &>/dev/null
 }
 
-if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_labbr0" && ip addr show labbr0 | grep -q "$ipv6_labbr0" ) && \
-   sudo virsh net-info "$virsh_network_name" &>/dev/null; then
-    print_task "Setting up bridge network labbr0..."
-    print_task_skip
-else
-    print_task "Setting up bridge network labbr0..."
-    run_virsh_cmd net-destroy "$virsh_network_name" || true
-    run_virsh_cmd net-undefine "$virsh_network_name" || true
-    run_virsh_cmd net-define "$virsh_network_definition" || {
-        print_error "Failed to define network from $virsh_network_definition"
-        exit 1
-    }
-    run_virsh_cmd net-start "$virsh_network_name" || {
-        print_error "Failed to start network $virsh_network_name"
-        exit 1
-    }
-    run_virsh_cmd net-autostart "$virsh_network_name"
+source /tux2lab/shared-functions/bridge-firewall.sh
+print_task "Setting up bridge network labbr0..."
+if ensure_bridge_network "$virsh_network_name" labbr0 "$virsh_network_definition"; then
     print_task_done
+else
+    print_task_fail
+    print_error "Failed to prepare network $virsh_network_name."
+    exit 1
 fi
 
 # Remove libvirt default network (virbr0 + dnsmasq conflicts with kea)
@@ -264,7 +254,6 @@ source /tux2lab/shared-functions/lablink0.sh
 ensure_lablink0 labbr0
 
 # Open firewall for lab bridge (if host has restrictive iptables)
-source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall labbr0
 
 # ============================================================================

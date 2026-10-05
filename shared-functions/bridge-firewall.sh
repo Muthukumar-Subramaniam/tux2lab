@@ -5,6 +5,93 @@
 # Supports firewalld (Fedora/RHEL) and raw iptables (other distros).                    #
 #----------------------------------------------------------------------------------------#
 
+write_bridge_network_xml() {
+    python3 - "$@" <<'BRIDGE_XML'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+source, name, interface, zone, live = sys.argv[1:]
+if zone not in ("", "trusted"):
+    raise SystemExit("Unsupported managed bridge zone")
+
+def parse_network(data):
+    network = ET.fromstring(data)
+    bridges = network.findall("bridge")
+    if (network.tag != "network" or network.findtext("name") != name
+            or len(bridges) != 1 or bridges[0].get("name") != interface):
+        raise SystemExit("Network name or bridge does not match the requested lab")
+    if bridges[0].get("zone") not in (None, "trusted"):
+        raise SystemExit("Refusing to overwrite a custom libvirt bridge zone")
+    return network, bridges[0]
+
+original = Path(source).read_bytes()
+network, bridge = parse_network(original)
+needs_restart = False
+if live:
+    _, live_bridge = parse_network(Path(live).read_bytes())
+    needs_restart = bool(zone and live_bridge.get("zone") != zone)
+if bridge.get("zone") == (zone or None):
+    sys.stdout.buffer.write(original)
+else:
+    if zone:
+        bridge.set("zone", zone)
+    else:
+        bridge.attrib.pop("zone", None)
+    sys.stdout.buffer.write(ET.tostring(network, encoding="utf-8"))
+sys.exit(3 if needs_restart else 0)
+BRIDGE_XML
+}
+
+ensure_bridge_network() (
+    local name="$1" bridge="$2" definition="$3" state zone networks scratch xml live=''
+    local exists=false running=false comparison=0 transform_status=0
+    state=$(systemctl show firewalld.service -p ActiveState --value) || return 1
+    case "$state" in
+        active) zone=trusted ;;
+        inactive|failed) zone='' ;;
+        *) printf 'Cannot configure the lab network while firewalld state is %s.\n' "$state" >&2; return 1 ;;
+    esac
+    networks=$(sudo virsh net-list --all --name) || return 1
+    scratch=$(mktemp -d) || return 1
+    trap 'rm -rf -- "$scratch"' EXIT
+    if grep -Fxq -- "$name" <<< "$networks"; then
+        exists=true
+        networks=$(sudo virsh net-list --all --persistent --name) || return 1
+        if ! grep -Fxq -- "$name" <<< "$networks"; then
+            printf 'Refusing to replace transient network %s.\n' "$name" >&2
+            return 1
+        fi
+        xml=$(sudo virsh net-dumpxml "$name" --inactive) || return 1
+        printf '%s\n' "$xml" > "$scratch/original.xml" || return 1
+        networks=$(sudo virsh net-list --name) || return 1
+        if grep -Fxq -- "$name" <<< "$networks"; then
+            running=true
+            live="$scratch/live.xml"
+            xml=$(sudo virsh net-dumpxml "$name") || return 1
+            printf '%s\n' "$xml" > "$live" || return 1
+        fi
+    else
+        cp -- "$definition" "$scratch/original.xml" || return 1
+    fi
+    write_bridge_network_xml "$scratch/original.xml" "$name" "$bridge" "$zone" "$live" \
+        > "$scratch/network.xml" || transform_status=$?
+    [[ "$transform_status" == 0 || "$transform_status" == 3 ]] || return 1
+    cmp -s "$scratch/original.xml" "$scratch/network.xml" || comparison=$?
+    [[ "$comparison" == 0 || "$comparison" == 1 ]] || return 1
+    if ! "$exists" || [[ "$comparison" == 1 ]]; then
+        sudo virsh net-define "$scratch/network.xml" --validate >/dev/null || return 1
+    fi
+    if [[ "$transform_status" == 3 ]]; then
+        printf 'Persistent trusted zone prepared for %s; live network unchanged. Stop/start the lab in a maintenance window, then retry.\n' "$name" >&2
+        return 1
+    fi
+    if ! "$running"; then
+        sudo virsh net-start "$name" >/dev/null || return 1
+    fi
+    sudo virsh net-autostart "$name" >/dev/null || return 1
+)
+
 # Add the bridge to firewalld trusted zone, or add iptables ACCEPT rules (idempotent)
 # Usage: open_bridge_firewall <bridge_interface>
 open_bridge_firewall() {

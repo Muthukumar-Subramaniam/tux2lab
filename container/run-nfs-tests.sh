@@ -899,3 +899,116 @@ status=0
 [[ "$status" == 1 ]]
 FIREWALLGUARD
 printf 'PASS: firewall failure recovery restores state, cancels its timer and preserves failure\n'
+
+bash -s -- "$PROJECT_ROOT" "$test_dir" <<'BRIDGENETWORK'
+set -euo pipefail
+source "$1/shared-functions/bridge-firewall.sh"
+bridge_test_dir="$2/bridge-network"
+mkdir "$bridge_test_dir"
+base_xml="<network><name>tux2lab</name><uuid>7990b80f-5938-4d5f-b02b-2315aa9dac22</uuid><bridge name='labbr0' stp='on'/><mac address='52:54:00:50:21:17'/><ip address='10.10.20.1' netmask='255.255.252.0'/><ip family='ipv6' address='fd60:6060:2026:1::1' prefix='64'/><dns enable='no'/></network>"
+for network_case in fresh-active fresh-inactive fresh-absent fresh-failed existing-stopped existing-running \
+    existing-zoned-stopped remove-zone remove-zone-active live-needs-zone already-staged custom-zone transient state-error state-changing list-error \
+    persistent-error active-error dump-error live-dump-error malformed wrong-name wrong-bridge \
+    define-error start-error autostart-error; do
+    (
+        export network_case bridge_test_dir
+        printf '%s' "$base_xml" > "$bridge_test_dir/original.xml"
+        printf '%s' "$base_xml" > "$bridge_test_dir/source.xml"
+        case "$network_case" in
+            fresh-*) ;;
+            *) printf '%s' "${base_xml/10.10.20.1/192.0.2.1}" > "$bridge_test_dir/source.xml" ;;
+        esac
+        : > "$bridge_test_dir/mutations"
+        rm -f "$bridge_test_dir/defined.xml"
+        case "$network_case" in
+            existing-running|existing-zoned-stopped|remove-zone|remove-zone-active|already-staged|live-dump-error)
+                write_bridge_network_xml "$bridge_test_dir/original.xml" tux2lab labbr0 trusted '' \
+                    > "$bridge_test_dir/zoned.xml"
+                cp "$bridge_test_dir/zoned.xml" "$bridge_test_dir/original.xml" ;;
+            custom-zone) printf '%s' "${base_xml/<bridge /<bridge zone=\'public\' }" > "$bridge_test_dir/original.xml" ;;
+            malformed) printf 'invalid XML' > "$bridge_test_dir/original.xml" ;;
+            wrong-name) printf '%s' "${base_xml/<name>tux2lab/<name>other}" > "$bridge_test_dir/original.xml" ;;
+            wrong-bridge) printf '%s' "${base_xml/labbr0/otherbr0}" > "$bridge_test_dir/original.xml" ;;
+        esac
+        systemctl() {
+            [[ "$*" == 'show firewalld.service -p ActiveState --value' ]] || exit 99
+            case "$network_case" in
+                state-error) return 1 ;;
+                state-changing) printf 'activating\n' ;;
+                fresh-inactive|fresh-absent|remove-zone|remove-zone-active) printf 'inactive\n' ;;
+                fresh-failed) printf 'failed\n' ;;
+                *) printf 'active\n' ;;
+            esac
+        }
+        sudo() {
+            [[ "$1" == virsh ]] || exit 99
+            shift
+            case "$*" in
+                'net-list --all --name')
+                    [[ "$network_case" != list-error ]] || return 1
+                    case "$network_case" in fresh-*) ;; *) printf 'tux2lab\n' ;; esac ;;
+                'net-list --all --persistent --name')
+                    [[ "$network_case" != persistent-error ]] || return 1
+                    [[ "$network_case" == transient ]] || printf 'tux2lab\n' ;;
+                'net-list --name')
+                    [[ "$network_case" != active-error ]] || return 1
+                    case "$network_case" in existing-running|live-needs-zone|already-staged|live-dump-error|remove-zone-active) printf 'tux2lab\n' ;; esac ;;
+                'net-dumpxml tux2lab --inactive')
+                    [[ "$network_case" != dump-error ]] || return 1
+                    cat "$bridge_test_dir/original.xml" ;;
+                'net-dumpxml tux2lab')
+                    [[ "$network_case" != live-dump-error ]] || return 1
+                    if [[ "$network_case" == already-staged ]]; then
+                        printf '%s' "$base_xml"
+                    else
+                        cat "$bridge_test_dir/original.xml"
+                    fi ;;
+                net-define\ *)
+                    [[ "$3" == --validate && "$#" == 3 ]] || exit 99
+                    printf 'define\n' >> "$bridge_test_dir/mutations"
+                    cp "$2" "$bridge_test_dir/defined.xml"
+                    [[ "$network_case" != define-error ]] ;;
+                'net-start tux2lab')
+                    printf 'start\n' >> "$bridge_test_dir/mutations"
+                    [[ "$network_case" != start-error ]] ;;
+                'net-autostart tux2lab')
+                    printf 'autostart\n' >> "$bridge_test_dir/mutations"
+                    [[ "$network_case" != autostart-error ]] ;;
+                *) exit 99 ;;
+            esac
+        }
+        status=0
+        ensure_bridge_network tux2lab labbr0 "$bridge_test_dir/source.xml" 2>/dev/null || status=$?
+        mutations=$(cat "$bridge_test_dir/mutations")
+        case "$network_case" in
+            fresh-*|existing-stopped|remove-zone|remove-zone-active|live-needs-zone)
+                case "$network_case" in
+                    remove-zone-active) [[ "$status" == 0 && "$mutations" == $'define\nautostart' ]] ;;
+                    live-needs-zone) [[ "$status" == 1 && "$mutations" == define ]] ;;
+                    *) [[ "$status" == 0 && "$mutations" == $'define\nstart\nautostart' ]] ;;
+                esac
+                python3 - "$bridge_test_dir" "$network_case" <<'VERIFY_XML'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+directory, mode = Path(sys.argv[1]), sys.argv[2]
+original = ET.parse(directory / 'original.xml').getroot()
+defined = ET.parse(directory / 'defined.xml').getroot()
+expected = None if mode in ('fresh-inactive', 'fresh-absent', 'fresh-failed', 'remove-zone', 'remove-zone-active') else 'trusted'
+assert defined.find('bridge').get('zone') == expected
+original.find('bridge').attrib.pop('zone', None)
+defined.find('bridge').attrib.pop('zone', None)
+assert ET.tostring(original) == ET.tostring(defined)
+VERIFY_XML
+                ;;
+            existing-running) [[ "$status" == 0 && "$mutations" == autostart ]] ;;
+            existing-zoned-stopped) [[ "$status" == 0 && "$mutations" == $'start\nautostart' ]] ;;
+            define-error) [[ "$status" == 1 && "$mutations" == define ]] ;;
+            start-error) [[ "$status" == 1 && "$mutations" == $'define\nstart' ]] ;;
+            autostart-error) [[ "$status" == 1 && "$mutations" == $'define\nstart\nautostart' ]] ;;
+            *) [[ "$status" == 1 && -z "$mutations" ]] ;;
+        esac
+    )
+done
+BRIDGENETWORK
+printf 'PASS: bridge zones follow active firewalld, preserve network identity and fail closed without live restarts\n'

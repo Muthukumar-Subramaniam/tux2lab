@@ -47,21 +47,14 @@ else
 fi
 
 # ====== STEP 2: Ensure virtual network exists and is started ======
-if ! sudo virsh net-info tux2lab &>/dev/null; then
-    print_task "Defining tux2lab virtual network..."
-    if sudo virsh net-define /tux2lab/qemu-kvm-manage/labbr0.xml &>/dev/null; then
-        sudo virsh net-start tux2lab &>/dev/null || true
-        sudo virsh net-autostart tux2lab &>/dev/null || true
-        print_task_done
-    else
-        print_task_fail
-        print_error "Failed to define virtual network."
-        exit 1
-    fi
-elif ! sudo virsh net-list --name 2>/dev/null | grep -q '^tux2lab$'; then
-    print_task "Starting tux2lab virtual network..."
-    sudo virsh net-start tux2lab &>/dev/null || true
+source /tux2lab/shared-functions/bridge-firewall.sh
+print_task "Preparing tux2lab virtual network..."
+if ensure_bridge_network tux2lab "${lab_infra_bridge_interface}" /tux2lab/qemu-kvm-manage/labbr0.xml; then
     print_task_done
+else
+    print_task_fail
+    print_error "Failed to prepare virtual network."
+    exit 1
 fi
 
 # ====== STEP 3: Wait for labbr0 ======
@@ -86,7 +79,6 @@ source /tux2lab/shared-functions/lablink0.sh
 ensure_lablink0 "${lab_infra_bridge_interface}"
 
 # ====== STEP 4.1: Open bridge firewall (if host has restrictive iptables) ======
-source /tux2lab/shared-functions/bridge-firewall.sh
 open_bridge_firewall "${lab_infra_bridge_interface}"
 
 # ====== STEP 5: Start container ======
