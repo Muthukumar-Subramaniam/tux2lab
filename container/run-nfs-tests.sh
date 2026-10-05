@@ -886,3 +886,16 @@ restore_current_engine || guard_status=$?
 [[ "$guard_status" == 1 ]]
 MIGRATIONGUARD
 printf 'PASS: migration acceptance restoration rejects an unknown saved engine before mutation\n'
+
+bash -s -- "$PROJECT_ROOT" <<'FIREWALLGUARD'
+set -euo pipefail
+source <(sed -n '/^    recover_failure() {/,/^    }/p' "$1/container/run-engine-tests.sh")
+evidence=/unused
+recovery=owned-recovery
+restore_deployed_firewall() { [[ "$1" == /unused ]] || exit 99; }
+systemctl() { [[ "$*" == 'stop owned-recovery.timer' ]] || exit 99; }
+status=0
+(false; recover_failure) || status=$?
+[[ "$status" == 1 ]]
+FIREWALLGUARD
+printf 'PASS: firewall failure recovery restores state, cancels its timer and preserves failure\n'

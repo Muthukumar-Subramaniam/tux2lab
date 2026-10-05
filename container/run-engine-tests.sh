@@ -398,9 +398,180 @@ BRIDGEREADY
         2>&1 | tee "$evidence/client.log"; then
         return 1
     fi
+    if [[ "${3:-false}" == true ]]; then
+        if ! sudo -n timeout -k 5 600 ip netns exec "$namespace" unshare --mount --propagation private \
+            bash "$PROJECT_ROOT/container/run-engine-tests.sh" --deployed-nfs-client 2>&1 | tee "$evidence/nfs-client.log"; then
+            return 1
+        fi
+    fi
     [[ "$(sudo -n podman inspect tux2lab-engine --format '{{.Id}} {{.State.Pid}}')" == "$identity" ]]
     check_engine_nfs tux2lab-engine
     printf 'PASS: deployed DHCP/RA transactions completed without restarting the engine\n'
+)
+
+check_deployed_nfs_client() {
+    local ipv4 ipv6 client_address checksum
+    ip link show dev client0 >/dev/null
+    ipv4=$(jq -er '.network.ipv4.address' /tux2lab-data/lab-config/lab_environment.json)
+    ipv6=$(jq -er '.network.ipv6.address' /tux2lab-data/lab-config/lab_environment.json)
+    client_address=$(python3 - <<'CLIENTADDRESS'
+import ipaddress
+import json
+from pathlib import Path
+network = json.loads(Path('/tux2lab-data/lab-config/lab_environment.json').read_text())['network']['ipv6']
+prefix = ipaddress.IPv6Network(network['ula_subnet'])
+print(str(prefix.network_address + 2) + '/' + str(prefix.prefixlen))
+CLIENTADDRESS
+    )
+    ip -6 addr add "$client_address" dev client0 nodad
+    checksum=$(sha256sum /tux2lab-data/os-repos/almalinux/9/images/install.img)
+    bash "$PROJECT_ROOT/container/run-migration-tests.sh" --read-client "$ipv4" "$ipv6" "${checksum%% *}"
+}
+
+restore_deployed_firewall() {
+    local evidence="$1" engine_id
+    [[ "$EUID" == 0 && "$evidence" == /home/*/nfs-firewall-validation.* ]] || return 1
+    [[ "$(readlink -e "$evidence")" == "$evidence" ]] || return 1
+    [[ "$(cat "$evidence/host")" == "$(hostname -f)" ]] || return 1
+    [[ -s "$evidence/firewalld-original.tar" ]] || return 1
+    engine_id=$(podman inspect tux2lab-engine --format '{{.Id}}') || return 1
+    [[ "$engine_id" == "$(cat "$evidence/engine-id")" ]] || return 1
+    systemctl stop firewalld.service || return 1
+    if [[ ! -e "$evidence/firewalld-tested" ]]; then
+        mv /etc/firewalld "$evidence/firewalld-tested" || return 1
+    fi
+    tar -xpf "$evidence/firewalld-original.tar" -C / || return 1
+    [[ "$(systemctl show firewalld.service -p UnitFileState --value)" == disabled ]] || return 1
+    source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+    if [[ "$(podman inspect tux2lab-engine --format '{{.State.Running}}')" != true ]]; then
+        podman start tux2lab-engine || return 1
+    fi
+    wait_for_engine_nfs tux2lab-engine || return 1
+    touch "$evidence/restored" || return 1
+    printf 'PASS: original disabled firewall configuration and engine readiness restored\n'
+}
+
+run_deployed_firewall_phase() (
+    local expected_host="$1" evidence="$2" phase="$3" recovery bridge guests
+    [[ "$EUID" == 0 && "$(hostname -f)" == "$expected_host" && "$expected_host" != localhost ]]
+    [[ "$evidence" == /home/*/nfs-firewall-validation.* && "$(readlink -e "$evidence")" == "$evidence" ]]
+    source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+    source "$PROJECT_ROOT/common-utils/color-functions.sh"
+    source "$PROJECT_ROOT/shared-functions/bridge-firewall.sh"
+    check_engine_nfs tux2lab-engine
+    bridge=$(jq -er '.network.bridge_interface' /tux2lab-data/lab-config/lab_environment.json)
+    guests=$(virsh list --name)
+    [[ -z "$guests" ]]
+    ip -d -j link show dev "$bridge" | jq -e 'length == 1 and .[0].linkinfo.info_kind == "bridge"' >/dev/null
+    ip -d -j link show master "$bridge" | jq -e 'all(.[]; .linkinfo.info_kind == "dummy")' >/dev/null
+    recovery="tux2lab-firewall-recovery-${evidence##*.}"
+    if [[ "$phase" == start ]]; then
+        [[ ! -e "$evidence/host" && "$(readlink -e /etc/firewalld)" == /etc/firewalld ]]
+        [[ "$(systemctl show firewalld.service -p ActiveState --value)" == inactive ]]
+        [[ "$(systemctl show firewalld.service -p UnitFileState --value)" == disabled ]]
+        [[ "$(firewall-offline-cmd --get-default-zone)" == public ]]
+        firewall-offline-cmd --zone=public --query-service=ssh
+        hostname -f > "$evidence/host"
+        podman inspect tux2lab-engine --format '{{.Id}}' > "$evidence/engine-id"
+        tar -cpf "$evidence/firewalld-original.tar" -C / etc/firewalld
+        chmod 600 "$evidence/firewalld-original.tar"
+        systemd-run --unit="$recovery" --on-active=15m --timer-property=AccuracySec=1s \
+            /bin/bash "$PROJECT_ROOT/container/run-engine-tests.sh" --restore-deployed-firewall "$evidence"
+    else
+        [[ "$(cat "$evidence/host")" == "$expected_host" && ! -e "$evidence/restored" ]]
+        [[ "$(podman inspect tux2lab-engine --format '{{.Id}}')" == "$(cat "$evidence/engine-id")" ]]
+    fi
+    recover_failure() {
+        local status=$?
+        trap - EXIT
+        if [[ "$status" != 0 ]]; then
+            restore_deployed_firewall "$evidence" || exit 1
+            systemctl stop "$recovery.timer" || exit 1
+        fi
+        exit "$status"
+    }
+    trap recover_failure EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    case "$phase" in
+        start)
+            systemctl start firewalld.service
+            open_bridge_firewall "$bridge" ;;
+        reload) firewall-cmd --reload ;;
+        restart) systemctl restart firewalld.service ;;
+        restore)
+            restore_deployed_firewall "$evidence"
+            systemctl stop "$recovery.timer"
+            return 0 ;;
+        *) return 2 ;;
+    esac
+    systemctl is-active --quiet firewalld.service
+    firewall-cmd --zone=public --query-service=ssh
+    firewall-cmd --get-active-zones
+    firewall-cmd --zone=trusted --query-interface="$bridge"
+    check_engine_nfs tux2lab-engine
+    printf 'PASS: firewalld %s preserves SSH allowance, trusted bridge and exact NFS rules\n' "$phase"
+)
+
+run_deployed_helper_audit() (
+    local expected_host="$1" evidence="$2" instance engine_id guests status stats
+    [[ "$EUID" == 0 && "$expected_host" != localhost && "$(hostname -f)" == "$expected_host" ]]
+    [[ "$evidence" == /home/*/nfs-helper-validation.* && "$(readlink -e "$evidence")" == "$evidence" ]]
+    source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+    check_engine_nfs tux2lab-engine
+    guests=$(virsh list --name)
+    [[ -z "$guests" ]]
+    container_nfs_require_no_client_mounts
+    engine_id=$(podman inspect tux2lab-engine --format '{{.Id}}')
+    instance="/sys/kernel/tracing/instances/tux2lab-${evidence##*.}"
+    mkdir "$instance"
+    cleanup_helper_audit() {
+        local result=$?
+        trap - EXIT
+        printf '0\n' > "$instance/tracing_on" || exit 1
+        rmdir "$instance" || exit 1
+        [[ "$(podman inspect tux2lab-engine --format '{{.Id}}')" == "$engine_id" ]] || exit 1
+        if [[ "$(podman inspect tux2lab-engine --format '{{.State.Running}}')" != true ]]; then
+            podman start tux2lab-engine || exit 1
+        fi
+        wait_for_engine_nfs tux2lab-engine || exit 1
+        exit "$result"
+    }
+    trap cleanup_helper_audit EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    printf '0\n' > "$instance/tracing_on"
+    printf 'call_usermodehelper_setup\ncall_usermodehelper_exec\n' > "$instance/set_ftrace_filter"
+    printf 'function\n' > "$instance/current_tracer"
+    printf 'filename ~ "*nfs*" || filename ~ "*modprobe*" || filename ~ "*request-key*" || filename ~ "*rpc.*"\n' \
+        > "$instance/events/sched/sched_process_exec/filter"
+    printf '1\n' > "$instance/events/sched/sched_process_exec/enable"
+    printf '1\n' > "$instance/events/module/module_request/enable"
+    printf '1\n' > "$instance/tracing_on"
+    status=0
+    keyctl session - keyctl request2 user "debug:tux2lab-${evidence##*.}" negate @s \
+        > "$evidence/positive-control-command.log" 2>&1 || status=$?
+    [[ "$status" == 1 ]]
+    printf '0\n' > "$instance/tracing_on"
+    cat "$instance/trace" > "$evidence/positive-control.trace"
+    grep -q 'call_usermodehelper_setup' "$evidence/positive-control.trace"
+    grep -q 'sched_process_exec: filename=.*/request-key ' "$evidence/positive-control.trace"
+    printf 'PASS: positive control captured native request-key kernel upcall and execution\n'
+    printf '\n' > "$instance/trace"
+    printf '1\n' > "$instance/tracing_on"
+    stop_engine_nfs tux2lab-engine
+    podman start tux2lab-engine
+    wait_for_engine_nfs tux2lab-engine
+    mkdir "$evidence/network-client"
+    run_deployed_dhcp_test "$expected_host" "$evidence/network-client" true
+    printf '0\n' > "$instance/tracing_on"
+    cat "$instance/trace" > "$evidence/workload.trace"
+    for stats in "$instance"/per_cpu/cpu*/stats; do
+        cat "$stats" >> "$evidence/buffer-stats.log"
+        awk '$1 == "overrun:" && $2 != 0 {exit 1}' "$stats"
+    done
+    podman top tux2lab-engine hpid comm | grep -E 'HPID|rpc|nfs|mountd' > "$evidence/engine-helper-pids.log"
+    printf 'PASS: traced engine restart and real bridge NFS reads without trace-buffer overruns\n'
 )
 
 check_engine_iso() (
@@ -789,6 +960,19 @@ case "${1:-}" in
     --boot) boot_test_engine ;;
     --clients) check_engine_clients ;;
     --dhcp-client) check_engine_dhcp ;;
+    --deployed-network)
+        [[ $# == 3 ]] || exit 2
+        run_deployed_dhcp_test "$2" "$3" true ;;
+    --deployed-nfs-client) check_deployed_nfs_client ;;
+    --deployed-firewall)
+        [[ $# == 4 ]] || exit 2
+        run_deployed_firewall_phase "$2" "$3" "$4" ;;
+    --restore-deployed-firewall)
+        [[ $# == 2 ]] || exit 2
+        restore_deployed_firewall "$2" ;;
+    --deployed-helpers)
+        [[ $# == 3 ]] || exit 2
+        run_deployed_helper_audit "$2" "$3" ;;
     --iso-client) check_engine_iso "$2" ;;
     --ready)
         bash /usr/local/lib/tux2lab/nfs-service.sh check
@@ -804,5 +988,5 @@ case "${1:-}" in
     --failure)
         [[ $# == 2 ]] || exit 2
         run_engine_tests "$2" '' true ;;
-    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
+    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp|--deployed-network EXPECTED_HOST EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-firewall EXPECTED_HOST EVIDENCE_DIR start|reload|restart|restore\n       sudo bash container/run-engine-tests.sh --restore-deployed-firewall EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
 esac

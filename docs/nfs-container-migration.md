@@ -14,7 +14,9 @@ The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
 the Alma test host. October 5 adds actual deployed DHCPv4/DHCPv6 and RA acceptance
 and a host dependency inventory, followed by released-baseline migration and
 rollback acceptance on Alma. Ubuntu and current-host acceptance, security-policy
-and kernel-helper audit gates remain.
+gates remain. Scoped kernel-helper tracing is complete with host packages
+retained. Firewalld reload exposed an unresolved libvirt bridge-zone conflict;
+enforcing SELinux still requires boot/relabel preparation.
 
 ## Maintained Code
 
@@ -35,7 +37,8 @@ Deployment, start, stop, rebuild, destroy, health and busy-ISO cache flushing us
 the container owner. Legacy engines are rejected before replacement or teardown.
 The old host helper is retained only as migration reference; normal lifecycle
 commands no longer invoke it. Host NFS packages remain installed for rollback and
-pending kernel-helper dependency testing.
+native client/diagnostic helpers. The scoped helper audit below does not authorize
+package removal or claim package-free operation.
 
 The [September 17](experiments/kernel-nfs-container-2026-09-17/README.md) and
 [September 24](experiments/kernel-nfs-container-2026-09-24/README.md) directories
@@ -803,6 +806,94 @@ logs, `apply.log`, `rollback.log`, `injected-failure.log`, `final-health.log` an
 `/var/lib/tux2lab/nfs-migration-restored-*`. No parent NFS handover, image publication
 or main merge was performed.
 
+#### Firewalld Reload Finding (October 5, 2026)
+
+The engine runner now provides guarded `--deployed-firewall EXPECTED_HOST
+EVIDENCE_DIR start|reload|restart|restore` phases. Tests require root, the exact
+dedicated host, no running guests, and a bridge with only dummy members. Start
+requires firewalld inactive/disabled, public as the default zone, and SSH already
+allowed there. Original configuration is archived outside served data; a local
+15-minute systemd timer can restore it even if management SSH is lost. Failure
+cleanup restores the configuration, verifies engine readiness and cancels the
+timer. The separate `--restore-deployed-firewall EVIDENCE_DIR` mode supports retry.
+
+`--deployed-network EXPECTED_HOST EVIDENCE_DIR` extends the existing temporary
+bridge client with full installer reads over NFSv3/IPv4 and NFSv4.1/IPv4/IPv6.
+It retains the test IPv4 address after releasing the lease and uses the reserved
+IPv6 prefix address `::2` for NFS; it does not claim DHCPv6 address configuration.
+Its no-guests/dummy-only-bridge guard excludes competing attached lab clients.
+Client mounts use a private mount namespace and all temporary links/namespaces
+are removed. No further VM or nested virtualization is involved.
+
+Both the firewall-off baseline and firewalld-start stage passed real bridge
+DHCPv4/v6, RA and all three full NFS checksums. Start used the existing
+`open_bridge_firewall` helper, which assigned `labbr0` to `trusted` in permanent
+and runtime configuration. A fresh management SSH connection also succeeded.
+
+**Reload failed acceptance.** `firewall-cmd --reload` succeeded, but libvirt moved
+`labbr0` from `trusted` to `libvirt`; `eth0` remained in `public`. The saved
+permanent trusted-zone XML still contained `labbr0`, so this was not a missing
+permanent setting. A second guarded run reproduced the runtime reassignment.
+The NFS rules/readiness remained intact, but the required bridge policy did not.
+Restart acceptance was not reached. Both failures restored firewalld to its
+original inactive/disabled state and retained the original engine.
+
+The libvirt network has `<bridge name='labbr0'/>` without a zone attribute.
+[Libvirt's network format](https://libvirt.org/formatnetwork.html#connectivity)
+documents `libvirt` as the default zone for NAT networks and an explicit bridge
+`zone` attribute since 5.1.0. The proposed correction is `zone='trusted'` in the
+owning network definition, consistent with the project's existing bridge policy.
+This has not been applied or validated: changing the preserved custom XML and
+possibly restarting the inner lab network requires explicit approval. Addresses,
+UUID, MAC and the original NFS data layout must remain unchanged.
+
+Evidence on Alma: `/home/musubram/nfs-firewall-validation.qmpHJZpb/` contains the
+baseline, start-client results and first reload failure; the diagnostic repeat is
+in `/home/musubram/nfs-firewall-validation.QQHWEtmA/`. Archives and
+`firewalld-tested/` preserve original/tested configuration. No recovery timers
+remain active. No production firewall helper or network XML was edited.
+
+SELinux inspection found both `SELINUX=disabled` and kernel argument `selinux=0`.
+Policies/tools are installed, but `setenforce` alone cannot enable this boot.
+Enforcing acceptance requires backed-up boot/config changes, a permissive
+relabel boot and then controlled enforcing tests. None of those changes or a
+host reboot was performed in this checkpoint.
+
+#### Scoped Kernel-Helper Audit (October 5, 2026)
+
+`sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST
+EVIDENCE_DIR` uses an owned tracefs instance to observe
+`call_usermodehelper_setup`, `call_usermodehelper_exec`, module requests and
+selected executable filenames. It records no command arguments or environment.
+An isolated session-keyring request using the existing `debug:*` negate rule
+provided a positive control: both kernel helper calls and execution of native
+`/sbin/request-key` were captured. No key configuration was modified.
+
+The subsequent workload restarted the actual Alma engine, then ran DHCP/RA and
+full installer reads from the bridge client. All checks passed. The 18-event
+workload trace had no buffer overruns and showed:
+
+- NFS startup/shutdown executables, with `nfsdcld` and `rpc.mountd` PIDs matched
+  to the running engine's host-PID listing.
+- Native client `mount.nfs`, `umount.nfs` and `umount.nfs4` executions.
+- Native `/usr/libexec/nfsrahead`, owned by host `nfs-utils`, invoked through
+  the existing `99-nfs.rules` udev rule for client backing-device events.
+- No kernel usermode-helper calls, module requests, `request-key` or `nfsidmap`
+  execution during this workload, distinct from the successful positive control.
+
+This completes the scoped executable/upcall observation with packages retained.
+It is not proof that host helpers are never needed: NFS modules were already
+loaded, AUTH_SYS name mapping was disabled (`nfs4_disable_idmapping=Y`), and
+neither cold module loading nor Kerberos/named-idmapping workloads were tested.
+Native utilities remain needed by migration/rollback and host-side diagnostics;
+package removal is still unverified and unapproved.
+
+Evidence: `/home/musubram/nfs-helper-validation.3zyyxeJC/`, including the positive
+control, workload trace, buffer statistics, daemon PID mapping, bridge-client logs
+and final health. The private trace instance was removed; global tracing stayed
+at `nop` with its original enabled state. The same engine/root is running,
+health passed 11/11 and 6/6, and custom network XML remained byte-identical.
+
 ## Cross-Distribution Host Verification
 
 Use AlmaLinux and Ubuntu 24.04 LTS as dedicated representative test hosts before
@@ -842,8 +933,10 @@ same-host-client engine restart/SIGKILL recovery with hot-added ISO devices.
 Actual deployed DHCPv4/DHCPv6 and RA transactions now also pass, with released
 leases and namespace cleanup verified. Released-baseline migration, explicit
 rollback and injected failed-handover rollback also pass, with the original
-container restored afterward. Host dependency inventory is recorded; kernel-upcall
-independence is not yet established.
+container restored afterward. Host dependency inventory and scoped helper tracing
+are complete with packages retained. Broad kernel-helper independence is not
+claimed. Firewalld start passed; reload has the bridge-zone blocker described
+above. Enforcing SELinux and firewall restart acceptance remain pending.
 The parent lab remains unchanged. The dated sections below retain earlier
 checkpoint results; they are not the current remaining-work list.
 
@@ -853,8 +946,8 @@ Remaining Alma-only work and rough active-work estimates:
 | --- | --- | --- |
 | Deployed DHCPv4/DHCPv6 and RA | Completed | Passed against the actual deployed configuration; see October 5 results above |
 | Released-host migration and rollback | Completed | Real released baseline, successful handover, explicit and post-launch-failure rollback passed |
-| SELinux/firewalld validation | 2-3 hours | Enforcing-policy compatibility, including firewall reload/restart; this VM currently has SELinux disabled and firewalld inactive |
-| Host prerequisites/dependencies | 1-2 hours | Inventory and manual RPC prerequisite documented; kernel-helper audit pending, packages retained |
+| SELinux/firewalld validation | Blocked | Approve and validate explicit libvirt bridge zone; then reload/restart. SELinux requires boot/relabel preparation; original disabled policy restored |
+| Host prerequisites/dependencies | Scoped audit complete | Inventory, positive-control helper trace and actual workload recorded; packages retained, no package-free claim |
 | Documentation and final checkpoint | 0.5-1 hour | Record final results, limitations and verified remote checkpoint |
 
 The original October 3 estimate was **6-10 hours**, including the now-completed
