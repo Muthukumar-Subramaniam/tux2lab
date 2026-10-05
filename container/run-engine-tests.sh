@@ -669,7 +669,8 @@ run_engine_tests() (
     trap 'exit 143' TERM
     sudo chmod 755 "$scratch"
     sudo mkdir -p "$scratch/data" "$scratch/state"
-    sudo podman run --rm --network=host -e TUX2LAB_TEST_FIXTURES=1 -v "$PROJECT_ROOT:/tux2lab:ro" \
+    sudo podman run --rm --network=host --security-opt label=disable \
+        -e TUX2LAB_TEST_FIXTURES=1 -v "$PROJECT_ROOT:/tux2lab:ro" \
         -v "$scratch/data:/tux2lab-data" --entrypoint /bin/bash "$image" \
         -c 'apk add --no-cache jq openssl >/dev/null && bash /tux2lab/container/run-engine-tests.sh --fixtures'
     sudo mount --bind "$scratch/data" "$scratch/data"
@@ -809,6 +810,10 @@ RECOVERYCLIENT
 
 run_deployed_restart_test() (
     local expected_host="$1" relative_file="$2" evidence="$3" shutdown_mode="${4:-stop}" bridge_ip
+    if [[ "$EUID" == 0 ]]; then
+        printf 'Run deployed recovery tests as a sudo-capable non-root user.\n' >&2
+        return 1
+    fi
     [[ "$(hostname -f)" == "$expected_host" && "$expected_host" != localhost ]] || return 1
     [[ -d "$evidence" && "$(readlink -e "$evidence")" == "$evidence" && "$evidence" != /tux2lab-data* ]] || return 1
     [[ "$relative_file" != /* && "/$relative_file/" != */../* ]] || return 1

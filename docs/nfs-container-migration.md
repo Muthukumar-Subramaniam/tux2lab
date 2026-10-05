@@ -16,8 +16,10 @@ and a host dependency inventory, followed by released-baseline migration and
 rollback acceptance on Alma. Ubuntu and current-host acceptance, security-policy
 gates remain. Scoped kernel-helper tracing is complete with host packages
 retained. The libvirt bridge-zone conflict is corrected on Alma with firewalld
-enabled; reload/restart and real client reads pass. SELinux permissive relabel
-boot is prepared but enforcing acceptance is not yet complete.
+enabled; reload/restart and real client reads pass. Permissive relabel/automatic
+startup and controlled runtime SELinux enforcing tests also pass. Alma is left
+permissive, not configured for enforcing boot. Shared firewalld-aware network
+definition handling remains an integration gap; the Alma correction was explicit.
 
 ## Maintained Code
 
@@ -844,9 +846,10 @@ The libvirt network has `<bridge name='labbr0'/>` without a zone attribute.
 documents `libvirt` as the default zone for NAT networks and an explicit bridge
 `zone` attribute since 5.1.0. The proposed correction is `zone='trusted'` in the
 owning network definition, consistent with the project's existing bridge policy.
-This has not been applied or validated: changing the preserved custom XML and
-possibly restarting the inner lab network requires explicit approval. Addresses,
-UUID, MAC and the original NFS data layout must remain unchanged.
+At that checkpoint it had not been applied or validated: changing the preserved
+custom XML and possibly restarting the inner lab network required explicit
+approval. The subsequent approved results below preserve addresses, UUID, MAC
+and the original NFS data layout.
 
 Evidence on Alma: `/home/musubram/nfs-firewall-validation.qmpHJZpb/` contains the
 baseline, start-client results and first reload failure; the diagnostic repeat is
@@ -898,6 +901,76 @@ is now permissive, root-owned mode 644. `fixfiles -F onboot` scheduled the force
 relabel. The running kernel is still SELinux-disabled until reboot. GRUB defaults
 and `/etc/kernel/cmdline` retain their original values pending final policy setup.
 This is a recovery checkpoint before the approved reboot, not an enforcing pass.
+
+#### Permissive Boot and Enforcing Acceptance (October 5, 2026)
+
+The approved reboot completed the forced relabel, followed by the distribution's
+automatic second reboot. The final boot ID is
+`d13ff33f-2dea-43bf-973e-c9f0d6513401`. SELinux loaded in permissive mode,
+`/.autorelabel` was consumed, management-key labels matched policy, and all three
+inherited credential-sync hooks stayed disabled/inactive. No units were failed.
+Firewalld started before libvirtd in this boot; the explicit-zone network and
+original engine started automatically. This observes successful ordering on this
+host, not a new explicit systemd ordering dependency or a guarantee on all hosts.
+
+The relabel log reports skipped read-only systemd credential mounts, no default
+label for `/dev/mqueue`, and a bus warning plus service termination during its
+own reboot. The installed autorelabel script invokes `systemctl reboot` after
+removing the marker. Subsequent boot, label checks and the enforcing workload
+passed; the warnings remain in the evidence rather than being treated as absent.
+
+A local 15-minute systemd timer was armed to run `/usr/sbin/setenforce 0` before
+entering runtime enforcing mode. With host enforcement continuously active for
+each workload, the following passed:
+
+- Fresh key-only management SSH, actual bridge DHCPv4/v6 and RA, and full installer
+  checksums over NFSv3/IPv4 and NFSv4.1/IPv4/IPv6.
+- A freshly created isolated engine using the maintained `--run` test, all
+  protocol/control-agent checks, two live ISO mount/unmount cycles with full NFS
+  and HTTP/HTTPS reads, graceful shutdown and retained-namespace cleanup.
+- Deployed-engine restart with the same open NFSv4.1 file descriptor: its uncached
+  1 MiB read blocked while stopped, then resumed with the expected checksum and
+  recovered server OPEN state. Original container ID and managed root remained.
+- Firewalld restart, trusted bridge and exact NFS rules, another full deployed
+  DHCP/RA/NFS client pass, and a fresh management SSH connection afterward.
+
+Two test-harness issues were addressed without production policy changes. The
+nonprivileged fixture generator initially ran as `container_t` and could not read
+the host checkout's `default_t` script. Only that disposable generator now uses
+`--security-opt label=disable`, consistent with the existing privileged engine's
+labeling policy; the checkout is not relabeled and host enforcement stays on.
+This tests compatibility of the existing privileged design, not strong container
+confinement. The deployed engine's user-space NFS daemons ran as
+`container_runtime_t`, with kernel threads as `kernel_t`.
+
+The deployed recovery test was initially invoked as root, but its normal startup
+CLI rejects root. The engine was restored through the normal user CLI. The runner
+now rejects root before mutation; an actual rejection check preserved its ID/PID,
+and the full recovery test then passed as the sudo-capable `musubram` user. Run
+`--deployed-restart` and `--deployed-crash` without prefixing the runner with sudo.
+
+Audit collection uses `ausearch --input-logs` with stdin detached; otherwise an
+SSH-stdin script can be consumed as audit input. The final boot-wide audit contains
+one enforcing denial, from the original fixture-generator attempt, and none from
+the production workloads or corrected fixture. No custom allow rules, booleans,
+package removals or production container security options were introduced.
+
+Final Alma state: runtime and `/etc/selinux/config` are permissive. The default
+kernel entry, `/etc/default/grub` and `/etc/kernel/cmdline` use `enforcing=0`
+instead of `selinux=0`; the rescue BLS entry is byte-identical to its backup.
+Firewalld remains enabled/active and the bridge explicitly trusted. The SELinux
+recovery timer was cancelled. Only the original engine/root remains, no test
+namespaces or recovery-client directories remain, and health passes 11/11 plus
+6/6. This does not claim enforcing-mode host boot, independent-client host-reboot
+recovery, package-free operation or confined-container security.
+
+All boot/config backups and test logs remain under
+`/home/musubram/nfs-selinux-validation.YcdsXLVV/`, including `relabel.log`,
+`permissive-boot.log`, `enforcing-fixture-fixed.log`, `enforcing-restart-user/`,
+`enforcing-firewall-client/`, `enforcing-final-audit.log` and `final-health.log`.
+The parent lab was not rebooted or migrated; no nested VM or image publication
+was involved. The shared network setup still needs a conditional solution for
+firewalld-managed hosts that does not break inactive/absent-firewalld hosts.
 
 #### Scoped Kernel-Helper Audit (October 5, 2026)
 
@@ -976,8 +1049,10 @@ rollback and injected failed-handover rollback also pass, with the original
 container restored afterward. Host dependency inventory and scoped helper tracing
 are complete with packages retained. Broad kernel-helper independence is not
 claimed. Firewalld start/reload/restart now pass with the explicitly zoned network
-and firewalld enabled. Enforcing SELinux acceptance remains pending; permissive
-relabel boot is prepared.
+and firewalld enabled. Permissive relabel/automatic startup and controlled runtime
+SELinux enforcing acceptance pass. Alma is left permissive; enforcing host boot
+was not tested. The explicit Alma zone correction still needs shared setup
+integration that preserves compatibility with inactive/absent firewalld.
 The parent lab remains unchanged. The dated sections below retain earlier
 checkpoint results; they are not the current remaining-work list.
 
@@ -987,9 +1062,10 @@ Remaining Alma-only work and rough active-work estimates:
 | --- | --- | --- |
 | Deployed DHCPv4/DHCPv6 and RA | Completed | Passed against the actual deployed configuration; see October 5 results above |
 | Released-host migration and rollback | Completed | Real released baseline, successful handover, explicit and post-launch-failure rollback passed |
-| SELinux/firewalld validation | In progress | Explicit zone and enabled firewalld pass reload/restart; approved SELinux permissive relabel boot prepared, enforcing still pending |
+| SELinux/firewalld validation | Scoped tests completed | Explicit-zone reload/restart, permissive relabel/boot and runtime enforcing workloads passed; not enforcing host boot or confined-container security |
+| Shared firewalld network handling | Open integration gap | Apply the validated zone requirement conditionally without breaking hosts where firewalld is inactive/absent; Alma's explicit correction alone is not a general fix |
 | Host prerequisites/dependencies | Scoped audit complete | Inventory, positive-control helper trace and actual workload recorded; packages retained, no package-free claim |
-| Documentation and final checkpoint | 0.5-1 hour | Record final results, limitations and verified remote checkpoint |
+| Documentation and final checkpoint | Results recorded | Security results, harness fixes, final policy state, recovery evidence and remaining integration gap recorded |
 
 The original October 3 estimate was **6-10 hours**, including the now-completed
 DHCP/RA and migration/rollback work and assuming no substantial new defects. It is not a refreshed
@@ -1003,8 +1079,8 @@ Alma's kernel and adds no QEMU, KVM instance or guest operating system. Keep DHC
 and RA off the management interface and parent network; remove the temporary
 client namespace and links afterward. This approach avoids another nested
 virtualization layer, but is not a guarantee against host freezes. Migration and
-rollback also passed without an inner VM. Security-policy tests remain pending
-appropriate approval and guarded preparation.
+rollback also passed without an inner VM. The approved security-policy tests
+above likewise used only process clients and temporary namespaces.
 
 Active-client recovery across an Alma **host reboot** remains unverified.
 A client namespace inside Alma cannot survive that reboot. This check requires
