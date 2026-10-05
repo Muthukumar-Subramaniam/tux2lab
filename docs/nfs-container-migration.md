@@ -11,8 +11,9 @@ The live lab still uses its released engine and host NFS. Implementation and
 isolated tests do not authorize a live handover, host package removal or a merge
 to main. This is not yet a release-ready replacement for host NFS.
 The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
-the Alma test host. Ubuntu and current-host acceptance, security-policy and
-migration gates remain.
+the Alma test host. October 5 adds actual deployed DHCPv4/DHCPv6 and RA acceptance
+and a host dependency inventory. Ubuntu and current-host acceptance,
+security-policy, migration and kernel-helper audit gates remain.
 
 ## Maintained Code
 
@@ -640,6 +641,88 @@ was added. The engine remains privileged: a read-only `/dev` mount is not a clai
 of read-only device I/O or recursively read-only child mounts. Enforcing-policy,
 other-kernel/distro and independent-client host-reboot coverage remain pending.
 
+#### Deployed DHCP and RA (October 5, 2026)
+
+The maintained runner now shares a configuration-driven DHCP/RA client between
+fixture tests and the actual deployed engine. On the dedicated Alma host:
+
+```bash
+evidence=$(mktemp -d "$HOME/nfs-deployed-dhcp.XXXXXXXX")
+bash /tux2lab/container/run-engine-tests.sh \
+  --deployed-dhcp nfs-host-alma9.musubram.internal "$evidence"
+```
+
+The wrapper requires the exact host name, a ready container-NFS engine, no
+running guests, a canonical evidence directory outside served data, and a bridge
+whose existing members are dummy interfaces only. It creates an owned network
+namespace and veth pair on that bridge, waits for forwarding, and runs the client
+under a timeout. It neither starts another VM nor changes engine configuration,
+host firewall policy or management networking. Evidence contains only the
+network/domain configuration subset and client/bridge logs, not admin secrets.
+
+Actual deployed checks passed:
+
+- DHCPv4 Discover/Offer/Request/ACK with an address inside the configured pool,
+  subnet mask, gateway, DNS, domain/search, next-server and `ipxe.efi` boot file.
+- DHCPv6 Solicit/Advertise/Request/Reply with an address inside the generated
+  pool, matching client/server identities, DNS, domain and IPv6 TFTP boot URL.
+- Solicited RA with managed/other-configuration flags, the configured prefix,
+  on-link enabled, autonomous addressing disabled, RDNSS and DNSSL.
+
+Both leases were released. Independent inspection of the latest Kea CSV records
+confirmed `valid_lifetime=0`; server logs also confirmed successful releases.
+Records later reached state `2`, but requiring that later state immediately
+after the client exits produced an overly strict verification failure. Release
+verification must not depend on that subsequent state transition.
+Temporary namespaces, veths
+and scratch directories were removed. The deployed engine ID/PID remained
+unchanged and NFS readiness passed. This is a same-kernel protocol client, not an
+independent machine or a host-reboot recovery test.
+
+Initial failures were in the harness, not evidence of a Kea defect. The real
+bridge uses STP, so a new port must reach forwarding before sending requests.
+Waiting for that transition alone did not fix DHCPv4: a bounded packet capture
+then showed a valid Offer on the bridge which the unconfigured-interface UDP
+receiver missed. DHCPv4 reception now uses an interface-bound packet socket and
+validates UDP ports, transaction ID, MAC and DHCP cookie. No server or firewall
+change was needed. The shared client also passed the final isolated full-engine
+startup/protocol/shutdown suite with the direct-layout image.
+
+Rootless regressions cover failed and occupied guest/process inspections: neither
+may be mistaken for an empty list authorizing setup or cleanup. If client process
+inspection fails or processes remain, cleanup fails and retains the owned
+namespace for inspection. Bash syntax and warning-level ShellCheck passed.
+
+Evidence is retained on Alma under
+`/home/musubram/nfs-dhcp-validation.oCj1clnD/`: initial attempts, packet capture,
+successful `deployed-packet-client/` and `deployed-final/` runs, final fixture log,
+health and lease cleanup logs.
+Raw logs are local evidence; the maintained harness and this runbook are the
+Git-backed recovery material. No image was built or published for this change.
+
+#### Host Dependency Inventory (October 5, 2026)
+
+Alma still has `nfs-utils-2.5.4-42.el9_8` and `rpcbind-1.2.6-7.el9` installed.
+Native NFS server/mountd units are inactive; rpcbind service/socket are inactive
+and masked. SELinux remains disabled and firewalld inactive. No package or
+security-policy changes were made.
+
+The owning code and installed executable inventory establish these boundaries:
+
+- The engine runs its own `rpcbind`, `rpc.mountd`, `rpc.nfsd`, `exportfs` and
+  `nfsdcld`. The host still supplies the kernel/modules, systemd, Podman, tar and
+  mount/network namespace tooling.
+- Native host `exportfs` remains required by released-host migration snapshots
+  and rollback. Native `mount.nfs`, `showmount` and `rpcinfo` are used by host-side
+  client validation and diagnostics, not proof of host-owned serving daemons.
+- Host `request-key` and `nfsidmap` are present. This inventory does not trace
+  kernel upcalls or prove those helpers unused. Package-free serving and host
+  NFS package removal remain unverified and unapproved.
+
+Retain the host packages. The fresh-host RPC conflict and its explicitly approved
+manual preparation remain documented below; no automatic policy fix was added.
+Inventory evidence is in `host-dependencies.log` in the same evidence directory.
+
 ## Cross-Distribution Host Verification
 
 Use AlmaLinux and Ubuntu 24.04 LTS as dedicated representative test hosts before
@@ -669,13 +752,16 @@ Representative coverage supports an expectation of compatibility, never a
 claim that an untested distro/version passed. Follow-up rows are not additional
 pre-publication gates unless a material finding changes the agreed scope.
 
-### AlmaLinux Remaining Work (October 3, 2026)
+### AlmaLinux Remaining Work (Updated October 5, 2026)
 
 Implementation checkpoint `90b0342b39e07f9de8b50df9102d68761a246499` includes
 the tested device-visibility fix. Passed checks include actual setup/deployment
 with the documented manual prerequisites, normal lifecycle and reboot startup,
 full installer reads, original export-layout compatibility, and NFSv4.1
 same-host-client engine restart/SIGKILL recovery with hot-added ISO devices.
+Actual deployed DHCPv4/DHCPv6 and RA transactions now also pass, with released
+leases and namespace cleanup verified. Host dependency inventory is recorded;
+kernel-upcall independence is not yet established.
 The parent lab remains unchanged. The dated sections below retain earlier
 checkpoint results; they are not the current remaining-work list.
 
@@ -683,25 +769,26 @@ Remaining Alma-only work and rough active-work estimates:
 
 | Work | Estimate | Acceptance Still Needed |
 | --- | --- | --- |
-| Deployed DHCPv4/DHCPv6 and RA | 0.5-1 hour | Client transactions against the actual deployed configuration, not fixture services |
+| Deployed DHCPv4/DHCPv6 and RA | Completed | Passed against the actual deployed configuration; see October 5 results above |
 | Released-host migration and rollback | 2-3 hours | Handover from a recorded released host-NFS baseline and recovery from failed handover |
 | SELinux/firewalld validation | 2-3 hours | Enforcing-policy compatibility, including firewall reload/restart; this VM currently has SELinux disabled and firewalld inactive |
-| Host prerequisites/dependencies | 1-2 hours | Required host NFS utilities and resolution or explicit documentation of the fresh-host RPC preparation gap |
+| Host prerequisites/dependencies | 1-2 hours | Inventory and manual RPC prerequisite documented; kernel-helper audit pending, packages retained |
 | Documentation and final checkpoint | 0.5-1 hour | Record final results, limitations and verified remote checkpoint |
 
-Total: **6-10 hours**, assuming no substantial new defects. This is a planning
-estimate, not a completion guarantee. It excludes other distributions,
+The original October 3 estimate was **6-10 hours**, including the now-completed
+DHCP/RA work and assuming no substantial new defects. It is not a refreshed
+remaining-time estimate or completion guarantee. It excludes other distributions,
 parent-host handover/PXE and the independent-client reboot test below.
 
-No additional VM will be installed inside the Alma test VM. The proposed
+No additional VM will be installed inside the Alma test VM. The tested
 DHCP/RA client is an ordinary process in a temporary Linux network namespace,
 connected by a virtual Ethernet pair to the existing private `labbr0`. It shares
 Alma's kernel and adds no QEMU, KVM instance or guest operating system. Keep DHCP
 and RA off the management interface and parent network; remove the temporary
 client namespace and links afterward. This approach avoids another nested
 virtualization layer, but is not a guarantee against host freezes. Migration,
-rollback and policy tests also require no inner VM. No new tests were started
-as part of this planning clarification.
+rollback and policy tests also require no inner VM and remain pending appropriate
+approval and guarded preparation of a released host-NFS baseline.
 
 Active-client recovery across an Alma **host reboot** remains unverified.
 A client namespace inside Alma cannot survive that reboot. This check requires

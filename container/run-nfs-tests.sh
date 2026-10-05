@@ -830,3 +830,33 @@ for data_mount_case in directory mounted bind-error private-error share-error in
     )
 done
 printf 'PASS: launch/restart data mount preparation is idempotent and rejects failed or unsafe mount state\n'
+
+for dhcp_guard_case in query-error occupied; do
+    (
+        builtin source <(sed -n '/^run_deployed_dhcp_test() (/,/^)/p' "$PROJECT_ROOT/container/run-engine-tests.sh")
+        source() { :; }
+        require_container_nfs_engine() { :; }
+        check_engine_nfs() { :; }
+        hostname() { printf 'dhcp-test.invalid\n'; }
+        jq() { exit 99; }
+        sudo() {
+            [[ "$*" == '-n virsh list --name' ]] || exit 99
+            [[ "$dhcp_guard_case" != query-error ]] || return 1
+            printf 'existing-guest\n'
+        }
+        guard_status=0
+        run_deployed_dhcp_test dhcp-test.invalid "$(readlink -e "$test_dir")" || guard_status=$?
+        [[ "$guard_status" == 1 ]]
+        builtin source <(sed -n '/^    cleanup_deployed_dhcp() {/,/^    }/p' "$PROJECT_ROOT/container/run-engine-tests.sh")
+        export namespace_created=true peer_created=true namespace=owned-test-namespace scratch=/unused
+        sudo() {
+            [[ "$*" == '-n ip netns pids owned-test-namespace' ]] || exit 99
+            [[ "$dhcp_guard_case" != query-error ]] || return 1
+            printf '123\n'
+        }
+        guard_status=0
+        (cleanup_deployed_dhcp) 2>/dev/null || guard_status=$?
+        [[ "$guard_status" == 1 ]]
+    )
+done
+printf 'PASS: deployed DHCP rejects failed or occupied guest/process inspections before mutation\n'

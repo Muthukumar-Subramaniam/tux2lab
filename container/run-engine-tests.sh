@@ -138,6 +138,27 @@ for address in ("192.0.2.1", "2001:db8:1::1"):
         assert len(packet) >= 48 and packet[0] & 7 == 4
         assert packet[24:32] == timestamp and 1 <= packet[1] <= 15, packet[:4]
 print("PASS: client HTTP/HTTPS, full iPXE TFTP transfer and local NTP over IPv4/IPv6")
+CLIENT
+    check_engine_dhcp
+}
+
+check_engine_dhcp() {
+    python3 - <<'DHCPCLIENT'
+import ipaddress
+import json
+from pathlib import Path
+import secrets
+import socket
+import struct
+import subprocess
+
+configuration = json.loads(Path("/tux2lab-data/lab-config/lab_environment.json").read_text())
+network = configuration["network"]
+server4 = network["ipv4"]["address"]
+server6 = network["ipv6"]["address"]
+prefix6 = ipaddress.IPv6Network(network["ipv6"]["ula_subnet"])
+domain = configuration["lab"]["domain"]
+encoded_domain = b"".join(bytes([len(label)]) + label.encode("ascii") for label in domain.split(".")) + b"\0"
 
 mac = bytes.fromhex(Path("/sys/class/net/client0/address").read_text().strip().replace(":", ""))
 
@@ -161,7 +182,10 @@ def options4(payload):
 transaction = secrets.randbits(32)
 bootp = struct.pack("!BBBBIHH4s4s4s4s16s64s128s", 1, 1, 6, 0, transaction, 0, 0x8000,
                     bytes(4), bytes(4), bytes(4), bytes(4), mac, bytes(64), bytes(128))
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+with socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800)) as receiver, \
+        socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+    receiver.bind(("client0", 0))
+    receiver.settimeout(5)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"client0\0")
     client.settimeout(5)
@@ -169,20 +193,49 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
     def exchange4(message, expected):
         client.sendto(bootp + b"\x63\x82\x53\x63" + message + b"\xff", ("255.255.255.255", 67))
         for _ in range(10):
-            payload, _ = client.recvfrom(4096)
+            frame, _ = receiver.recvfrom(4096)
+            if len(frame) < 42 or frame[14] >> 4 != 4 or frame[23] != 17:
+                continue
+            udp_offset = 14 + (frame[14] & 15) * 4
+            if udp_offset < 34 or len(frame) < udp_offset + 8:
+                continue
+            source_port, destination_port, udp_length = struct.unpack("!HHH", frame[udp_offset:udp_offset + 6])
+            if source_port != 67 or destination_port != 68:
+                continue
+            assert udp_length >= 248 and udp_offset + udp_length <= len(frame)
+            payload = frame[udp_offset + 8:udp_offset + udp_length]
             if payload[4:8] == struct.pack("!I", transaction):
+                assert payload[0] == 2 and payload[28:34] == mac and payload[236:240] == b"\x63\x82\x53\x63"
                 options = options4(payload)
                 assert options[53] == bytes([expected])
                 return payload, options
         raise AssertionError("No matching DHCPv4 reply")
     identity = b"\x3d\x07\x01" + mac
-    offer, options = exchange4(b"\x35\x01\x01" + identity, 2)
+    requested4 = b"\x37\x05\x01\x03\x06\x0f\x77"
+    offer, options = exchange4(b"\x35\x01\x01" + identity + requested4, 2)
     address = offer[16:20]
-    assert int(ipaddress.IPv4Address("192.0.2.100")) <= int(ipaddress.IPv4Address(address)) <= int(ipaddress.IPv4Address("192.0.2.120"))
-    ack, options = exchange4(b"\x35\x01\x03\x32\x04" + address + b"\x36\x04" + options[54] + identity, 5)
-    assert ack[16:20] == address and ack[20:24] == socket.inet_aton("192.0.2.1")
-    assert ack[108:236].rstrip(b"\0") == b"ipxe.efi"
-print("PASS: client DHCPv4 discover/request receives a lease and PXE boot settings")
+    assert ipaddress.IPv4Address(network["ipv4"]["dhcp_range_start"]) <= ipaddress.IPv4Address(address) <= ipaddress.IPv4Address(network["ipv4"]["dhcp_range_end"])
+    assert options[54] == socket.inet_aton(server4)
+    ack, options = exchange4(b"\x35\x01\x03\x32\x04" + address + b"\x36\x04" + options[54] + identity + requested4, 5)
+    assert ack[16:20] == address
+    leased4 = str(ipaddress.IPv4Address(address))
+    subprocess.run(["ip", "addr", "add", leased4 + "/" + str(network["ipv4"]["prefix"]),
+                    "dev", "client0"], check=True)
+    print(json.dumps({"event": "lease4", "address": leased4, "mac": mac.hex(":")}), flush=True)
+    try:
+        assert ack[20:24] == socket.inet_aton(server4)
+        assert ack[108:236].rstrip(b"\0") == b"ipxe.efi"
+        assert options[1] == socket.inet_aton(network["ipv4"]["netmask"])
+        assert options[3] == socket.inet_aton(network["ipv4"]["gateway"])
+        assert options[6] == socket.inet_aton(server4)
+        assert options[15] == domain.encode("ascii") and options[119] == encoded_domain
+    finally:
+        release4 = bytearray(bootp)
+        release4[12:16] = address
+        release4[10:12] = bytes(2)
+        client.sendto(release4 + b"\x63\x82\x53\x63\x35\x01\x07\x36\x04" +
+                      socket.inet_aton(server4) + identity + b"\xff", (server4, 67))
+print("PASS: client DHCPv4 lease, network options, DNS/domain and PXE settings match lab configuration")
 
 def option6(code, value):
     return struct.pack("!HH", code, len(value)) + value
@@ -214,14 +267,21 @@ with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as client:
                 return options6(payload[4:])
         raise AssertionError("No matching DHCPv6 reply")
     identity6 = option6(1, struct.pack("!HH", 3, 1) + mac)
-    requested = option6(6, struct.pack("!HH", 23, 59))
+    requested = option6(6, struct.pack("!HHH", 23, 24, 59))
     advertised = exchange6(b"\x01" + identity6 + option6(3, struct.pack("!III", 42, 0, 0)) + requested, 2)
     reply = exchange6(b"\x03" + identity6 + option6(2, advertised[2]) + option6(3, advertised[3]) + requested, 7)
-    leased = ipaddress.IPv6Address(options6(reply[3][12:])[5][:16])
-    assert ipaddress.IPv6Address("2001:db8:1::3ff") <= leased <= ipaddress.IPv6Address("2001:db8:1::461")
-    assert reply[23] == socket.inet_pton(socket.AF_INET6, "2001:db8:1::1")
-    assert reply[59] == b"tftp://[2001:db8:1::1]/ipxe.efi"
-print("PASS: client DHCPv6 solicit/request receives a lease, DNS and boot URL")
+    try:
+        assert reply[1] == identity6[4:] and reply[2] == advertised[2]
+        leased = ipaddress.IPv6Address(options6(reply[3][12:])[5][:16])
+        print(json.dumps({"event": "lease6", "address": str(leased), "duid": identity6[4:].hex(":")}), flush=True)
+        assert prefix6.network_address + 0x3ff <= leased <= prefix6.network_address + 0x461
+        assert reply[23] == socket.inet_pton(socket.AF_INET6, server6)
+        assert reply[24] == encoded_domain
+        assert reply[59] == ("tftp://[" + server6 + "]/ipxe.efi").encode("ascii")
+    finally:
+        released = exchange6(b"\x08" + identity6 + option6(2, advertised[2]) + option6(3, reply[3]), 7)
+        assert released.get(13, b"\0\0")[:2] == b"\0\0", "DHCPv6 release rejected"
+print("PASS: client DHCPv6 lease, DNS/domain and boot URL match lab configuration")
 
 with socket.socket(socket.AF_INET6, socket.SOCK_RAW, socket.IPPROTO_ICMPV6) as client:
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"client0\0")
@@ -235,22 +295,113 @@ with socket.socket(socket.AF_INET6, socket.SOCK_RAW, socket.IPPROTO_ICMPV6) as c
             continue
         assert payload[5] & 0xc0 == 0xc0
         prefix_seen = False
+        dns_seen = False
+        domain_seen = False
         offset = 16
         while offset < len(payload):
             code, units = payload[offset:offset + 2]
             assert units > 0 and offset + units * 8 <= len(payload)
             option = payload[offset:offset + units * 8]
             if code == 3:
-                assert option[2] == 64 and option[16:32] == socket.inet_pton(socket.AF_INET6, "2001:db8:1::")
+                assert option[2] == prefix6.prefixlen and option[16:32] == prefix6.network_address.packed
+                assert option[3] & 0xc0 == 0x80
                 prefix_seen = True
+            elif code == 25:
+                assert option[8:] == socket.inet_pton(socket.AF_INET6, server6)
+                dns_seen = True
+            elif code == 31:
+                assert option[8:].rstrip(b"\0") == encoded_domain.rstrip(b"\0")
+                domain_seen = True
             offset += units * 8
-        assert prefix_seen
+        assert prefix_seen and dns_seen and domain_seen
         break
     else:
         raise AssertionError("No router advertisement")
-print("PASS: client router solicitation receives managed DHCPv6 flags and lab prefix")
-CLIENT
+print("PASS: router advertisement carries managed flags, lab prefix and DNS/domain")
+DHCPCLIENT
 }
+
+run_deployed_dhcp_test() (
+    local expected_host="$1" evidence="$2" bridge scratch namespace peer identity guests
+    local namespace_created=false peer_created=false
+    [[ "$(hostname -f)" == "$expected_host" && "$expected_host" != localhost ]] || return 1
+    [[ -d "$evidence" && "$(readlink -e "$evidence")" == "$evidence" && "$evidence" != /tux2lab-data* ]] || return 1
+    source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+    require_container_nfs_engine tux2lab-engine
+    check_engine_nfs tux2lab-engine
+    guests=$(sudo -n virsh list --name) || return 1
+    [[ -z "$guests" ]] || return 1
+    bridge=$(jq -er '.network.bridge_interface' /tux2lab-data/lab-config/lab_environment.json)
+    [[ "$bridge" =~ ^[a-zA-Z0-9_-]{1,15}$ && "$bridge" != lo ]] || return 1
+    ip -d -j link show dev "$bridge" | jq -e 'length == 1 and .[0].linkinfo.info_kind == "bridge"' >/dev/null
+    ip -d -j link show master "$bridge" | jq -e 'all(.[]; .linkinfo.info_kind == "dummy")' >/dev/null
+    jq '{network, lab: {domain: .lab.domain}}' /tux2lab-data/lab-config/lab_environment.json > "$evidence/network.json"
+    identity=$(sudo -n podman inspect tux2lab-engine --format '{{.Id}} {{.State.Pid}}')
+    scratch=$(mktemp -d /tmp/tux2lab-dhcp.XXXXXXXX)
+    namespace="tux2lab-dhcp-${scratch##*.}"
+    peer="t2d${scratch##*.}"
+    cleanup_deployed_dhcp() {
+        local status=$? processes
+        trap - EXIT
+        if "$namespace_created"; then
+            processes=$(sudo -n ip netns pids "$namespace") || {
+                printf 'Cannot inspect client processes; retained namespace %s and %s\n' "$namespace" "$scratch" >&2
+                exit 1
+            }
+            [[ -z "$processes" ]] || {
+                printf 'Client processes remain; retained namespace %s and %s\n' "$namespace" "$scratch" >&2
+                exit 1
+            }
+        fi
+        if "$peer_created"; then sudo -n ip link delete "$peer" || exit 1; fi
+        if "$namespace_created"; then sudo -n ip netns delete "$namespace" || exit 1; fi
+        rmdir "$scratch" || exit 1
+        exit "$status"
+    }
+    trap cleanup_deployed_dhcp EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    sudo -n ip netns add "$namespace"
+    namespace_created=true
+    sudo -n ip link add "$peer" type veth peer name client0 netns "$namespace"
+    peer_created=true
+    sudo -n ip link set "$peer" master "$bridge"
+    sudo -n ip netns exec "$namespace" ip link set lo up
+    sudo -n ip netns exec "$namespace" ip link set client0 addrgenmode none
+    sudo -n ip netns exec "$namespace" ip -6 addr add "fe80::$(openssl rand -hex 2):$(openssl rand -hex 2):$(openssl rand -hex 2):$(openssl rand -hex 2)/64" dev client0 nodad
+    sudo -n ip link set "$peer" up
+    sudo -n ip netns exec "$namespace" ip link set client0 up
+    python3 - "$peer" <<'BRIDGEREADY' > "$evidence/bridge-ready.log"
+import json
+import select
+import socket
+import subprocess
+import sys
+import time
+
+deadline = time.monotonic() + 45
+with socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, socket.NETLINK_ROUTE) as events:
+    events.bind((0, 1))
+    while True:
+        ports = json.loads(subprocess.check_output(["bridge", "-j", "link", "show", "dev", sys.argv[1]], text=True))
+        assert len(ports) == 1, "Test bridge port disappeared"
+        print("Bridge port state: " + ports[0]["state"], flush=True)
+        if ports[0]["state"] == "forwarding":
+            break
+        remaining = deadline - time.monotonic()
+        assert remaining > 0 and select.select([events], [], [], remaining)[0], "Bridge port never reached forwarding"
+        events.recv(65536)
+print("PASS: test port reached bridge forwarding state")
+BRIDGEREADY
+    cat "$evidence/bridge-ready.log"
+    if ! sudo -n timeout -k 5 150 ip netns exec "$namespace" bash "$PROJECT_ROOT/container/run-engine-tests.sh" --dhcp-client \
+        2>&1 | tee "$evidence/client.log"; then
+        return 1
+    fi
+    [[ "$(sudo -n podman inspect tux2lab-engine --format '{{.Id}} {{.State.Pid}}')" == "$identity" ]]
+    check_engine_nfs tux2lab-engine
+    printf 'PASS: deployed DHCP/RA transactions completed without restarting the engine\n'
+)
 
 check_engine_iso() (
     local expected="$1" client_dir protocol options server checksum
@@ -622,6 +773,9 @@ RECOVERYHOST
 )
 
 case "${1:-}" in
+    --deployed-dhcp)
+        [[ $# == 3 ]] || exit 2
+        run_deployed_dhcp_test "$2" "$3" ;;
     --deployed-restart)
         [[ $# == 4 ]] || exit 2
         run_deployed_restart_test "$2" "$3" "$4" ;;
@@ -634,6 +788,7 @@ case "${1:-}" in
     --fixtures) generate_engine_fixtures ;;
     --boot) boot_test_engine ;;
     --clients) check_engine_clients ;;
+    --dhcp-client) check_engine_dhcp ;;
     --iso-client) check_engine_iso "$2" ;;
     --ready)
         bash /usr/local/lib/tux2lab/nfs-service.sh check
@@ -649,5 +804,5 @@ case "${1:-}" in
     --failure)
         [[ $# == 2 ]] || exit 2
         run_engine_tests "$2" '' true ;;
-    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n' >&2; exit 2 ;;
+    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
 esac
