@@ -1217,7 +1217,9 @@ The user enters the lab password directly in the terminal, never through chat
 or model tools. Then verify deployed services, original NFS layout/read-only
 behavior, real DHCP/RA, ISO propagation, lifecycle/recovery, migration/rollback
 and security limits. The parent continues to use released 2.1.1 and host NFS;
-its seven Kubernetes guests and Ubuntu remain running, and Alma remains off.
+its seven Kubernetes guests remain running. At the final preparation check,
+Alma and Ubuntu are both off; no Ubuntu lifecycle command was run during this
+SUSE preparation. Leave those retained hosts in their observed states.
 
 ### Ubuntu 24.04 Host Preparation (October 6, 2026)
 
