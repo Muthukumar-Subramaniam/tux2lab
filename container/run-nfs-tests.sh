@@ -937,16 +937,19 @@ for shutdown_state in running degraded stopping unknown query-error; do
         remove_lablink0() { printf 'link\n' >> "$shutdown_log"; }
         remove_etc_hosts_block() { printf 'hosts\n' >> "$shutdown_log"; }
         systemctl() {
-            [[ "$*" == is-system-running ]] || exit 99
-            [[ "$shutdown_state" != query-error ]] || return 1
-            printf '%s\n' "$shutdown_state"
-            [[ "$shutdown_state" == running ]]
+            printf 'unprivileged-state\n' >> "$shutdown_log"
+            return 1
         }
         sudo() {
             case "$*" in
                 'podman container exists tux2lab-engine') return 1 ;;
                 'virsh list --state-running --name') return 0 ;;
                 'virsh net-destroy tux2lab') printf 'network\n' >> "$shutdown_log" ;;
+                'systemctl is-system-running')
+                    printf 'state\n' >> "$shutdown_log"
+                    [[ "$shutdown_state" != query-error ]] || return 1
+                    printf '%s\n' "$shutdown_state"
+                    [[ "$shutdown_state" == running ]] ;;
                 'systemctl stop libvirtd libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket')
                     [[ "$shutdown_state" != stopping ]] || exit 99
                     printf 'libvirt\n' >> "$shutdown_log" ;;
@@ -956,13 +959,13 @@ for shutdown_state in running degraded stopping unknown query-error; do
         }
         builtin source "$PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/stop.sh" --yes
         if [[ "$shutdown_state" == stopping ]]; then
-            [[ "$(cat "$shutdown_log")" == $'nfs\nlink\nnetwork\niso\nhosts' ]]
+            [[ "$(cat "$shutdown_log")" == $'nfs\nlink\nnetwork\nstate\niso\nhosts' ]]
         else
-            [[ "$(cat "$shutdown_log")" == $'nfs\nlink\nnetwork\nlibvirt\niso\nhosts' ]]
+            [[ "$(cat "$shutdown_log")" == $'nfs\nlink\nnetwork\nstate\nlibvirt\niso\nhosts' ]]
         fi
     )
 done
-printf 'PASS: host shutdown defers libvirt jobs and completes cleanup; normal CLI stop remains synchronous\n'
+printf 'PASS: privileged shutdown detection survives a missing public bus; normal CLI stop remains synchronous\n'
 
 for data_mount_case in directory mounted bind-error private-error share-error inspect-error empty-target verify-error private symlink; do
     (

@@ -73,7 +73,7 @@ Applying that file with
 the actual setup succeeded.
 An exact gateway/interface comparison confirmed the management route survived
 forwarding and bridge startup. This is an explicit test-host network prerequisite,
-not a production NFS change; persistence still requires the reboot acceptance.
+not a production NFS change; the later reboot acceptance verified persistence.
 
 APT activated native NFS/RPC. Checked exports, guest/container inventories and
 host NFS client mounts were empty before preparation. Native configuration and
@@ -94,9 +94,92 @@ off. No SUSE lifecycle command was run during Debian preparation.
 
 Private guest evidence is `/home/musubram/nfs-host-preparation.9cissX1J`.
 Original/staged runtime XML and the guest sysctl input remain outside Git under
-the worktree's `.test-artifacts/nfs-host-debian13`. Deployment, functional,
-lifecycle, migration and security acceptance are not yet complete. Azure Linux
-3.0 has not been provisioned.
+the worktree's `.test-artifacts/nfs-host-debian13`. Azure Linux 3.0 has not been
+provisioned.
+
+#### Debian Deployment and Initial Acceptance
+
+Actual interactive deployment passed 11/11 health checks and all six dual-stack
+service checks. The user entered passwords directly in the terminal. Deployment
+removed the inherited domain-tagged provisioning public key, as required by the
+existing host credential helper. A pre-deployment whole-file hash therefore
+correctly differed; exact key-set comparison confirmed only the expected removal
+and the dedicated management key addition. No unrelated authorization was lost.
+All three inherited hooks remained disabled/inactive. Lifecycle comparisons use
+the verified post-deployment baseline, not the obsolete provisioning-key hash.
+
+The known Alma ISO was transferred, verified and mounted with normal distro
+setup. The unchanged running engine read the complete installer with SHA-256
+`539f423b5456aa36877b255b1fd2486d86fff9bfafc34ecb83282b72a93b70a2`.
+Actual namespace DHCPv4/DHCPv6, RA and full NFSv3/IPv4, NFSv4.1/IPv4 and
+NFSv4.1/IPv6 reads passed. Same-descriptor direct reads resumed after both graceful
+engine restart and PID1 SIGKILL. SIGKILL exited 137 and retained the firewall;
+the ownership-recovery log was empty, so this run did not exercise orphan-worker
+cleanup. No inner guest was created.
+
+Full CLI stop/start retained the engine and remounted the ISO. Two rebuilds
+replaced engine/root identity and removed each superseded managed instance.
+The retained engine is
+`e0eaa3b452b3465091b5504d2715be18b41fd8e8a2afd5b5e57d7f74aa80e852`, using
+`/var/lib/tux2lab/engine-rootfs/engine.PWxYz5dP/rootfs` and the unchanged image.
+Management, configuration and persistent network comparisons passed.
+
+The first real host reboot started that engine automatically, and the guest RA
+setting persisted. However, the previous shutdown hit the 120-second unit timeout
+inside synchronous `systemctl stop libvirtd`. D-Bus had stopped just before the
+unprivileged system-state query, which did not select the shutdown deferral path.
+The stop helper now queries system state with privileged `systemctl`, allowing
+systemd's private connection during public-bus teardown. The existing regression
+now models an unavailable unprivileged bus and requires the privileged query for
+all tested states. Focused/full rootless tests and warning-level ShellCheck pass;
+the real reboot retry subsequently passed as recorded below. The original failed
+reboot remains failure evidence, not a passing lifecycle gate.
+
+Private Debian evidence directories under `/home/musubram` are
+`nfs-debian-deployment.QrpiOLsZ`, `nfs-debian-network.xlu0Wxwe`,
+`nfs-debian-restart.nvl4ed3g`, `nfs-debian-crash.tM0Zs9Du` and
+`nfs-debian-lifecycle.uHQIUPOf`. The lifecycle directory preserves the failed
+shutdown, D-Bus ordering and corrected-source rootless logs.
+
+#### Debian Completion
+
+The corrected reboot entered the explicit libvirt deferral branch, completed ISO
+and host cleanup, and reported unit deactivation success at `11:48:06` on October
+6. There was no stopping timeout. Boot
+`5cc532f8-a5a2-4492-b8e8-4367d67f79d1` automatically started the same engine/root;
+system state was running and `tux2lab.service` was enabled, active/exited and
+successful. The RA setting and original gateway survived, all credential hooks
+remained disabled, and real postboot DHCP/RA and three full NFS reads passed.
+
+Using released source `0d0c7dc` and the exact 2.1.1 image, the maintained migration
+acceptance passed real handover, explicit rollback, injected failure after real
+candidate readiness, automatic rollback and original-engine restoration. All
+five states passed all three complete installer reads. Native unit states, host
+exports, lockd settings and released-engine identity were checked on rollback.
+The released baseline still needed its known 30-second SIGKILL stop fallback;
+this is not a new candidate shutdown failure. Final candidate start was
+`2026-10-06 12:03:54.695143548 +0000 UTC`, with the engine/root above retained.
+Migration evidence is `/home/musubram/nfs-migration-validation.5tYlVGuG`.
+
+Explicit `rw` namespace-client mounts received `EROFS` for NFSv3/IPv4 and
+NFSv4.1/IPv4/IPv6. Export discovery advertised only `/tux2lab-data`; the NFSv4 root
+contained only `tux2lab-data`. Parent-side management IPv4/IPv6 SSH positive
+controls succeeded while TCP `111,2049,20048,32803` and UDP RPC NULL probes on
+`111,20048,32769` received no service response.
+
+AppArmor remained enabled and active with kernel flag `Y`, 112 loaded profiles
+and 13 enforcing profiles; the final boot had no kernel AppArmor denial. The
+privileged engine has an empty AppArmor profile, so this proves default-policy
+compatibility, not engine confinement. No firewall or mandatory-access policy
+was disabled. Final checks found the original healthy candidate only, no client
+namespaces or inner guests, a dummy-only bridge, no active migration checkpoint,
+and unchanged management, lab configuration and persistent network identity.
+
+The bounded Debian 13 stage is complete with these explicit prerequisites and
+limits. No other Debian release, writable NFS, v3/IPv6, independent client-host
+reboot, full-stop ISO-handle continuity or nested PXE installation is certified.
+The shutdown-query correction was tested on Debian and in rootless regressions;
+the already completed, powered-off Alma/Ubuntu/Leap hosts were not rerun.
 
 ## Maintained Code
 
@@ -433,8 +516,8 @@ The remaining work follows this sequence:
   Do not create guests inside it. Other SUSE versions and SLES remain unverified.
 3. **Validate Debian 13, then Azure Linux 3.0.** Explicitly selected by the user
   after Leap completion. Use one dedicated host at a time and the same complete
-  bounded acceptance. Debian preparation has passed with the recorded RA and
-  native-owner prerequisites; deployment and acceptance remain. Azure Linux 3.0
+  bounded acceptance. Debian's bounded stage is complete, including its shutdown
+  correction, migration/rollback and final policy checks. Azure Linux 3.0
   is not yet provisioned. No guests inside either host, no Debian 11/12 or Azure
   Linux 4 expansion, and no parent-handover authorization are implied.
 4. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
@@ -1200,7 +1283,7 @@ Release and follow-up host matrix (not verified support claims):
 | Debian-based | Ubuntu 24.04 LTS | Bounded representative stage complete: setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, recorded-owner recovery, migration/rollback and default-policy checks; limitations below |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
-| Debian-based | Debian 13 | Explicitly added gate: actual host setup and rootless suite passed; deployment and bounded acceptance pending |
+| Debian-based | Debian 13 | Bounded stage complete: setup/deployment, ISO, DHCP/RA, reads, engine recovery, rebuilds, corrected reboot, migration/rollback and default-policy checks; prerequisites and limitations above |
 | Debian-based | Debian 11/12 and additional Ubuntu releases | Follow-up validation; unverified |
 | Microsoft | Azure Linux 3.0 | Explicitly added gate: dedicated host not yet provisioned; bounded acceptance pending |
 | Fedora | Fedora | Follow-up validation; unverified |
