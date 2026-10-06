@@ -113,6 +113,11 @@ restore_current_engine() {
             podman rm tux2lab-engine || return 1
         fi
         while IFS=$'\t' read -r unit active enabled; do
+            if [[ "$active" == inactive && "$unit" == *.socket ]]; then
+                systemctl stop "$unit" || return 1
+            fi
+        done < "$EVIDENCE/original-units"
+        while IFS=$'\t' read -r unit active enabled; do
             if [[ "$active" == inactive ]]; then
                 systemctl stop "$unit" || {
                     [[ "$(systemctl show "$unit" -p MainPID --value)" == 0 ]] || return 1
@@ -217,6 +222,7 @@ run_acceptance() (
         source "$released_source/shared-functions/host-nfs.sh"
         run_tux2lab_container tux2lab-engine "$released_image" "$engine_fqdn" /tux2lab-data "$ipv4" "$bridge"
         podman inspect tux2lab-engine --format '{{.Id}}' > "$EVIDENCE/baseline-id"
+        systemctl start rpcbind.service
         start_host_nfs "$ipv4" "$ipv6"
     )
     cp -p /etc/nfs.conf "$EVIDENCE/baseline-nfs.conf"

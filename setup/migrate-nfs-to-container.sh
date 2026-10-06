@@ -97,6 +97,11 @@ restore_host_nfs() {
     sudo sysctl -w "fs.nfs.nlm_tcpport=$(cat "$NFS_MIGRATION_DIR/lockd-tcp")" \
         "fs.nfs.nlm_udpport=$(cat "$NFS_MIGRATION_DIR/lockd-udp")" >/dev/null || return 1
     while IFS=$'\t' read -r unit active enabled; do
+        if [[ "$unit" == rpcbind.service && "$active" == active ]]; then
+            sudo systemctl start "$unit" || return 1
+        fi
+    done < "$NFS_MIGRATION_DIR/units"
+    while IFS=$'\t' read -r unit active enabled; do
         if [[ "$active" == active ]]; then
             sudo systemctl start "$unit" || status=1
         fi

@@ -42,6 +42,12 @@ representative hosts, tested sequentially before parent handover. This does not
 include Debian 11/12, Azure Linux 4, or every supported guest distribution/version.
 Neither host may run an inner VM. Parent maintenance remains separately approved.
 
+Both additional bounded stages are now complete with the prerequisites and
+limitations below. Shared fixes cover privileged shutdown detection and native
+RPC restoration ordering. The final affected migration checks passed on both
+Debian and Azure. The candidate image and original data layout are unchanged;
+live parent handover/PXE and final release gates remain outstanding.
+
 ### Debian 13 Preparation
 
 The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
@@ -178,7 +184,7 @@ and unchanged management, lab configuration and persistent network identity.
 The bounded Debian 13 stage is complete with these explicit prerequisites and
 limits. No other Debian release, writable NFS, v3/IPv6, independent client-host
 reboot, full-stop ISO-handle continuity or nested PXE installation is certified.
-The shutdown-query correction was tested on Debian and in rootless regressions;
+The shutdown-query correction was tested on Debian, Azure and in rootless regressions;
 the already completed, powered-off Alma/Ubuntu/Leap hosts were not rerun.
 
 ### Azure Linux 3.0 Preparation
@@ -233,8 +239,109 @@ The unchanged candidate image `ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c82478
 and direct-layout labels were verified, and the maintained rootless suite passed.
 Private preparation evidence is `/home/musubram/nfs-host-preparation.Mes3mEh7`;
 original/staged XML remains in untracked `.test-artifacts/nfs-host-azure3`.
-Actual deployment, functional/lifecycle, migration/rollback and final policy
-acceptance remain. No Azure Linux 4 or enforcing-SELinux claim is implied.
+No Azure Linux 4 or enforcing-SELinux claim is implied.
+
+#### Azure Deployment and Initial Acceptance
+
+Actual interactive deployment passed 11/11 health checks and all six dual-stack
+service checks, with passwords entered directly by the user. Exact public-key
+set comparison confirmed removal of the inherited provisioning key and retention
+of independent management access. All three inherited hooks stayed off. The
+post-deployment baseline includes authorized keys, SELinux configuration, both
+systemd-networkd files, lab environment and NFS configuration. Persistent libvirt
+network identity remained unchanged.
+
+The known ISO was transferred and verified, then hot-mounted through normal
+`tux2lab distro setup almalinux -v 9`. The same running engine read the full
+installer with the expected SHA-256. Real namespace DHCPv4/DHCPv6, RA and full
+NFSv3/IPv4 and NFSv4.1/IPv4/IPv6 reads passed. Same-open-descriptor direct reads
+resumed after graceful restart and SIGKILL; exit 137 and retained firewall were
+verified. The ownership-recovery log was empty, so this crash did not require
+orphan-worker cleanup.
+
+Full CLI stop/start retained the engine and remounted the ISO. Two rebuilds
+replaced engine/root identity and removed the old managed instances. The retained
+engine is `335175cbf19338e036c0bcfd080b4f746cf7f34d689b38b8b5d73246af372911`,
+using `/var/lib/tux2lab/engine-rootfs/engine.SinEyM07/rootfs` and the unchanged
+candidate image. Configuration and network comparisons passed. The normal
+automatic-start unit is enabled/active, persistent journal is available, and
+unit verification passed. Actual reboot, migration/rollback and final policy
+acceptance subsequently passed as recorded below.
+
+Private evidence under `/home/musubram` is `nfs-azure-deployment.YGIUbfdJ`,
+`nfs-azure-network.Z4hPoSEo`, `nfs-azure-restart.xRVsRZ58`,
+`nfs-azure-crash.9o9ofwId` and `nfs-azure-lifecycle.jbV8oUj4`.
+
+#### Azure Completion and Native RPC Findings
+
+The real reboot completed the explicit libvirt deferral, ISO cleanup and unit
+deactivation successfully at `12:56:15` on October 6. New boot
+`5f49aeaf-ea8e-4407-9002-31aad6991eae` automatically started the same engine/root.
+System state was running; the lab unit and native iptables service remained
+enabled/active. Credential hooks stayed off and baseline hashes matched. Full
+postboot DHCP/RA and all three NFS installer reads passed.
+
+The first migration run could not establish the native released baseline:
+`mountd` and `statd` timed out, and native NFS had a dependency failure despite
+the released helper's DONE message. The acceptance check rejected that state.
+Restoration then encountered rpcbind socket reactivation while stopping its
+service. The original candidate was retained and subsequently restored by
+stopping the socket after checking its saved inactive state. Evidence remains
+at `/home/musubram/nfs-migration-validation.ocJKdvKG`.
+
+Bounded RPC-only diagnostics separated warm service startup from cold socket
+activation. A request after explicit rpcbind startup answered. With only the
+socket active, the first Unix RPC request stalled and needed timeout SIGKILL
+(exit 137), while a subsequent request answered. Both diagnostics restored the
+same candidate. No native unit file, firewall rule or RPC binary was changed to
+make the baseline pass.
+
+The harness now explicitly starts rpcbind before the released native NFS helper.
+Production rollback starts rpcbind first only when the snapshot recorded it
+active, before other native services; startup failure retains the checkpoint
+and aborts restoration. Acceptance restoration stops originally inactive sockets
+before their services. Existing rootless fixtures now cover RPC-before-NFS
+ordering, RPC-start failure, socket reactivation and failed socket shutdown.
+The full suite passed on the parent and Azure, with syntax, warning-level
+ShellCheck and editor checks clean.
+
+A fresh real migration cycle passed released-baseline setup, handover, explicit
+rollback, injected failure after candidate readiness, automatic rollback and
+original candidate restoration. All five states passed all three complete
+installer reads. Evidence is `/home/musubram/nfs-migration-validation.UEECq79G`.
+The released engine needed its known SIGKILL stop fallback. Azure emitted
+transient daemon-reload warnings during masking; final native units were inactive
+with `NeedDaemonReload=no`. Both locks were free, no migration checkpoint remained,
+and originally absent `/etc/nfs.conf` and `/etc/exports.d` were absent again.
+Final candidate start was `2026-10-06 13:15:10.03649854 +0000 UTC`.
+
+Explicit rw mounts received EROFS over all three tested transports. Export
+discovery and the NFSv4 root expose only the original data tree. External IPv4
+and IPv6 SSH controls succeeded while TCP `111,2049,20048,32803` and UDP RPC NULL
+probes on `111,20048,32769` received no service response. Native iptables stayed
+enabled/active, all six default chain policies stayed DROP, and the normal
+lab-bridge allowances were present. SELinux stayed permissive, unchanged from
+the golden host. There is no enforcing-SELinux or live firewall-reload claim.
+Final checks found one healthy original candidate, no namespaces or inner guests,
+a dummy-only bridge, and unchanged management/configuration/network baselines.
+
+The bounded Azure Linux 3.0 stage is complete with the explicit prerequisites and
+limits above. The shared native rollback correction also passed a fresh complete
+Debian migration cycle, including all 15 reads and both rollback paths, plus the
+updated rootless suite. Evidence is
+`/home/musubram/nfs-migration-validation.FkWm1UGx`; the same Debian engine/root
+was restored with final start `2026-10-06 13:23:06.787476435 +0000 UTC` before
+shutdown. Configuration hashes matched and both migration locks were released.
+Four final source/test hashes matched the worktree on both hosts.
+
+Debian had separately become powered off before this shared-code rerun. It was
+started only for the affected check, then gracefully returned to its observed
+off state and confirmed fully off. Final retained states are Azure on, with
+Alma, Ubuntu, Leap and Debian off. The earlier Alma/Ubuntu/Leap hosts were not
+restarted. The live parent remains clean released main `0d0c7dc`, with its original
+2.1.1 engine start, sole host export, eight NFS threads, zero lockd port settings
+and all seven Kubernetes guests running. No parent handover, merge or publication
+was performed.
 
 ## Maintained Code
 
@@ -553,27 +660,29 @@ earlier expectation of completing the wider host matrix before publication.
 Other host families and additional distro/version combinations move to
 follow-up work, with their unverified status documented.
 
-The remaining work follows this sequence:
+The agreed sequence records completed host stages and the remaining live-host
+and release work:
 
-1. **Finish Alma, then validate Ubuntu 24.04 LTS.** Complete the remaining
-  Alma checks below. Then provision the Ubuntu test host through the existing
-  tux2lab tool and run real host setup and lab deployment. Verify deployed
+1. **Alma and Ubuntu 24.04 LTS (complete).** Dedicated hosts were provisioned
+  through the existing tux2lab tool and ran real host setup and lab deployment.
+  The bounded checks cover deployed
   services, NFS/ISO behavior, lifecycle and recovery, migration/rollback from
   a released baseline, and applicable security policies. Reuse the shared
   implementation; do not create deeper-nested guests. Alma provides
   representative RHEL-family evidence, not certification of every listed
   distro/version. Check material known differences without making an
   exhaustive Red Hat matrix a release gate.
-2. **Validate openSUSE Leap 16.0.** Added with user approval on October 6 after
+2. **openSUSE Leap 16.0 (complete).** Added with user approval on October 6 after
   Alma and Ubuntu completion. Use one dedicated test host and the same bounded
   setup/deployment, original-layout NFS/ISO, lifecycle/recovery,
   released-baseline migration/rollback and applicable security-policy checks.
   Do not create guests inside it. Other SUSE versions and SLES remain unverified.
-3. **Validate Debian 13, then Azure Linux 3.0.** Explicitly selected by the user
+3. **Debian 13 and Azure Linux 3.0 (complete).** Explicitly selected by the user
   after Leap completion. Use one dedicated host at a time and the same complete
   bounded acceptance. Debian's bounded stage is complete, including its shutdown
-  correction, migration/rollback and final policy checks. Azure Linux 3.0
-  setup and rootless checks have passed; deployment and acceptance remain.
+  correction, migration/rollback and final policy checks. Azure Linux 3.0's
+  bounded stage is also complete, including its native RPC ordering correction.
+  The affected Debian migration regression also passed that shared correction.
   No guests inside either host, no Debian 11/12 or Azure
   Linux 4 expansion, and no parent-handover authorization are implied.
 4. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
@@ -1335,13 +1444,13 @@ Release and follow-up host matrix (not verified support claims):
 
 | Family | Test-host targets | Status |
 | --- | --- | --- |
-| Enterprise RPM | AlmaLinux 9.8 | Release gate: setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below |
+| Enterprise RPM | AlmaLinux 9.8 | Bounded representative stage complete: setup/deployment, NFS/ISO, lifecycle/recovery, migration/rollback and scoped security checks; historical results and limits below |
 | Debian-based | Ubuntu 24.04 LTS | Bounded representative stage complete: setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, recorded-owner recovery, migration/rollback and default-policy checks; limitations below |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian 13 | Bounded stage complete: setup/deployment, ISO, DHCP/RA, reads, engine recovery, rebuilds, corrected reboot, migration/rollback and default-policy checks; prerequisites and limitations above |
 | Debian-based | Debian 11/12 and additional Ubuntu releases | Follow-up validation; unverified |
-| Microsoft | Azure Linux 3.0 | Host setup and rootless suite passed with explicit stable-repository/runtime prerequisites; deployment and bounded acceptance pending |
+| Microsoft | Azure Linux 3.0 | Bounded stage complete: setup/deployment, ISO, DHCP/RA, reads, recovery, rebuilds/reboot, corrected native migration/rollback and default-policy checks; explicit prerequisites and limits above |
 | Fedora | Fedora | Follow-up validation; unverified |
 | SUSE | openSUSE Leap 16.0 | Bounded representative stage complete: actual setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, engine recovery, migration/rollback and default-policy checks; limitations below |
 | SUSE | Other Leap releases and SLES | Follow-up validation; unverified |

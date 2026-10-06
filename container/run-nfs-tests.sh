@@ -731,26 +731,36 @@ printf 'PASS: shutdown requires privileged, valid kernel thread inspection\n'
 )
 printf 'PASS: failed NFS shutdown blocks host rollback\n'
 
+for rpc_case in ready start-error; do
 (
     source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
-    NFS_MIGRATION_DIR="$test_dir/host-rollback"
+    NFS_MIGRATION_DIR="$test_dir/host-rollback-$rpc_case"
+    rollback_log="$test_dir/host-rollback-$rpc_case.log"
+    rpcbind_ready=false
     mkdir -p "$NFS_MIGRATION_DIR"
     touch "$NFS_MIGRATION_DIR/snapshot-complete"
     printf 'original\n' > "$NFS_MIGRATION_DIR/engine-id"
-    printf 'rpcbind.service\tactive\tenabled\n' > "$NFS_MIGRATION_DIR/units"
+    printf 'nfs-server.service\tactive\tenabled\n' > "$NFS_MIGRATION_DIR/units"
+    printf 'rpcbind.service\tactive\tenabled\n' >> "$NFS_MIGRATION_DIR/units"
     printf 'nfs-idmapd.service\tinactive\tstatic\n' >> "$NFS_MIGRATION_DIR/units"
     printf 'rpcbind.service\nnfs-kernel-server.service\n' > "$NFS_MIGRATION_DIR/masked"
     printf '/tux2lab-data 192.0.2.0/24(ro)\n' > "$NFS_MIGRATION_DIR/exports"
     printf '0\n' > "$NFS_MIGRATION_DIR/lockd-tcp"
     printf '0\n' > "$NFS_MIGRATION_DIR/lockd-udp"
     printf 'true\n' > "$NFS_MIGRATION_DIR/engine-running"
-    stop_engine_nfs() { printf 'stop\n' >> "$test_dir/host-rollback.log"; }
+    stop_engine_nfs() { printf 'stop\n' >> "$rollback_log"; }
     remove_engine_container() { sudo podman rm "$1"; }
     verify_container_nfs_stopped() { :; }
     sudo() {
-        printf '%s\n' "$*" >> "$test_dir/host-rollback.log"
+        printf '%s\n' "$*" >> "$rollback_log"
         case "$*" in
             'podman inspect tux2lab-engine-host-nfs-backup --format {{.Id}}') printf 'original\n' ;;
+            'systemctl start rpcbind.service')
+                [[ "$rpc_case" != start-error ]] || return 1
+                rpcbind_ready=true ;;
+            'systemctl start nfs-server.service') [[ "$rpcbind_ready" == true ]] || exit 99 ;;
+            'systemctl show nfs-server.service -p UnitFileState --value') printf 'enabled\n' ;;
+            'systemctl show nfs-server.service -p ActiveState --value') printf 'active\n' ;;
             'systemctl show rpcbind.service -p UnitFileState --value') printf 'enabled\n' ;;
             'systemctl show rpcbind.service -p ActiveState --value') printf 'active\n' ;;
             'systemctl show nfs-idmapd.service -p UnitFileState --value') printf 'static\n' ;;
@@ -759,16 +769,25 @@ printf 'PASS: failed NFS shutdown blocks host rollback\n'
         esac
         return 0
     }
-    restore_host_nfs >/dev/null
+    rollback_status=0
+    restore_host_nfs >/dev/null || rollback_status=$?
+    if [[ "$rpc_case" == start-error ]]; then
+        [[ "$rollback_status" == 1 && -f "$NFS_MIGRATION_DIR/snapshot-complete" ]]
+        ! grep -qx 'systemctl start nfs-server.service' "$rollback_log"
+        ! grep -qx 'podman start tux2lab-engine' "$rollback_log"
+        exit 0
+    fi
+    [[ "$rollback_status" == 0 ]]
     [[ ! -e "$NFS_MIGRATION_DIR" ]]
-    grep -qx 'podman rename tux2lab-engine-host-nfs-backup tux2lab-engine' "$test_dir/host-rollback.log"
-    grep -qx 'systemctl unmask rpcbind.service' "$test_dir/host-rollback.log"
-    grep -qx 'systemctl unmask nfs-kernel-server.service' "$test_dir/host-rollback.log"
-    grep -qx 'systemctl show rpcbind.service -p ActiveState --value' "$test_dir/host-rollback.log"
-    grep -qx 'systemctl stop nfs-idmapd.service' "$test_dir/host-rollback.log"
-    grep -qx 'podman start tux2lab-engine' "$test_dir/host-rollback.log"
+    grep -qx 'podman rename tux2lab-engine-host-nfs-backup tux2lab-engine' "$rollback_log"
+    grep -qx 'systemctl unmask rpcbind.service' "$rollback_log"
+    grep -qx 'systemctl unmask nfs-kernel-server.service' "$rollback_log"
+    grep -qx 'systemctl show rpcbind.service -p ActiveState --value' "$rollback_log"
+    grep -qx 'systemctl stop nfs-idmapd.service' "$rollback_log"
+    grep -qx 'podman start tux2lab-engine' "$rollback_log"
 )
-printf 'PASS: host rollback restores engine, units, lockd settings and exports\n'
+done
+printf 'PASS: host rollback starts recorded RPC before NFS and preserves failed restoration evidence\n'
 
 (
     source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
@@ -1120,8 +1139,39 @@ for config_case in matching changed symlink absent; do
         symlink) [[ ! -e "$EVIDENCE/reached-config-restore" && -L "$fixture/etc/nfs.conf" ]] ;;
     esac
 done
+printf 'rpcbind.service\tinactive\tdisabled\nrpcbind.socket\tinactive\tdisabled\n' > "$EVIDENCE/original-units"
+systemctl() {
+    case "$*" in
+        'stop rpcbind.socket')
+            [[ "$socket_case" != stop-error ]] || return 1
+            socket_active=false ;;
+        'stop rpcbind.service')
+            "$socket_active" || service_active=false ;;
+        'show rpcbind.socket -p ActiveState --value')
+            if "$socket_active"; then printf 'active\n'; else printf 'inactive\n'; fi ;;
+        'show rpcbind.service -p ActiveState --value')
+            if "$service_active"; then printf 'active\n'; else printf 'inactive\n'; fi ;;
+        *) exit 99 ;;
+    esac
+}
+for socket_case in stopped stop-error; do
+    socket_active=true
+    service_active=true
+    rm -f "$EVIDENCE/reached-config-restore"
+    guard_status=0
+    restore_current_engine || guard_status=$?
+    [[ "$guard_status" == 1 ]]
+    if [[ "$socket_case" == stopped ]]; then
+        [[ -e "$EVIDENCE/reached-config-restore" ]]
+        [[ "$socket_active" == false && "$service_active" == false ]]
+    else
+        [[ ! -e "$EVIDENCE/reached-config-restore" ]]
+        [[ "$socket_active" == true && "$service_active" == true ]]
+    fi
+done
 NFSCONFRESTORE
 printf 'PASS: absent NFS config restoration removes only the unchanged test-created file\n'
+printf 'PASS: restoration stops inactive sockets before services and refuses failed socket shutdown\n'
 
 bash -s -- "$PROJECT_ROOT" <<'FIREWALLGUARD'
 set -euo pipefail
