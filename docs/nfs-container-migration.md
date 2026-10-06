@@ -21,7 +21,8 @@ startup and controlled runtime SELinux enforcing tests also pass. Alma is left
 permissive, not configured for enforcing boot. Shared setup/start now select the
 bridge zone according to firewalld state, with Alma transition/reload/restart
 acceptance complete. The bounded Alma checks are complete with the limitations
-below; Ubuntu 24.04 is the next representative host.
+below. Ubuntu 24.04 host setup and explicit native-owner preparation are complete;
+actual deployment and its acceptance checks remain pending.
 
 ## Maintained Code
 
@@ -1090,7 +1091,7 @@ Release and follow-up host matrix (not verified support claims):
 | Family | Test-host targets | Status |
 | --- | --- | --- |
 | Enterprise RPM | AlmaLinux 9.8 | Release gate: setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below |
-| Debian-based | Ubuntu 24.04 LTS | Release gate: next representative host after Alma; validation pending |
+| Debian-based | Ubuntu 24.04 LTS | Release gate: dedicated host setup/preparation completed October 6; deployment and acceptance pending |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
@@ -1103,6 +1104,75 @@ acceptance. Record exact versions and environments when executing a test.
 Representative coverage supports an expectation of compatibility, never a
 claim that an untested distro/version passed. Follow-up rows are not additional
 pre-publication gates unless a material finding changes the agreed scope.
+
+### Ubuntu 24.04 Host Preparation (October 6, 2026)
+
+The user resumed Ubuntu validation after the bounded Alma stage. Alma remains
+powered off with its disks and evidence retained. The released parent engine and
+seven existing Kubernetes guests remain running. Only the new dedicated Ubuntu
+VM was added through the parent's normal released tux2lab golden-image workflow:
+
+```bash
+tux2lab vm install --via-golden -H nfs-host-ubuntu24 -d ubuntu-lts -v 24.04 \
+    --dual-stack --cpu 2 --memory 4 --root-disk-size 60
+```
+
+- Guest: `nfs-host-ubuntu24.musubram.internal`, Ubuntu 24.04.4 LTS, kernel
+  `6.8.0-100-generic`, 2 vCPUs, 4 GiB RAM, 60 GiB disk and XFS root.
+- VM UUID: `b070b941-a56b-4d77-bd17-15e82063bba7`; management MAC
+  `52:54:00:a1:43:1a`, IPv4 `10.28.28.15`, IPv6 `fd28:2808:2020:3000::f`.
+- After first-boot completion, the VM was shut down gracefully through tux2lab.
+  Only CPU `mode='host-model' check='partial'` changed to
+  `mode='host-passthrough' check='none'`; complete parsed-XML comparison preserved
+  every other field. Restart used tux2lab. Guest `svm`, opening `/dev/kvm` and
+  KVM API version 12 passed without creating any inner VM.
+- Dedicated management key: `~/.ssh/tux2lab-nfs-host-ubuntu24_ed25519`, outside
+  served data; public fingerprint
+  `SHA256:UkuolQ8udu7LlqEjXmn95X+9AgDlORGCIqtU+EwE3yA`. The inherited sync timer,
+  sync service and golden-boot service were backed up and disabled/stopped only
+  inside Ubuntu. Independent key-only SSH and all three disabled/inactive states
+  survived the CPU power cycle. No private key or password is stored in Git.
+- Source: archive of `bb6f29e404ebb3d5ea382f7210a3e1500eb40aa2` in guest
+  `/tux2lab`. Only its custom network input differs: `labbr0` uses
+  `10.10.24.1/22` and `fd60:6060:2026:2::1/64`, NAT, libvirt DNS/DHCP disabled,
+  no physical interface and only the normal dummy bridge member. The subnets
+  do not overlap the parent or Alma lab networks.
+
+Actual `bash /tux2lab/setup/setup-host.sh --yes` completed successfully. The new
+persistent network UUID is `51f3ad8a-fd4a-4b9b-b9cb-d828f3e480d0`, bridge MAC
+`52:54:00:16:a4:25`; source XML SHA256 is
+`4999eb391b99894959979cfcdcea1525f93b097e3a3d9a782b6dda04f26fb48b`.
+Setup installed Podman `4.9.3+ds1-1ubuntu0.2`, libvirt
+`10.0.0-2ubuntu8.19`, QEMU `1:8.2.2+ds-0ubuntu1.18`, NFS server/client packages
+`1:2.6.4-3ubuntu5.1` and rpcbind `1.2.6-7ubuntu2`. AppArmor remains enabled;
+Podman reports AppArmor/seccomp enabled and overlay image storage. The candidate
+still uses the managed native rootfs launcher, not overlay as its export root.
+Firewalld is absent/inactive, and the actual conditional helper created a
+zone-free network successfully. UFW was not found during the initial check.
+
+Fresh-host preparation was necessary, not an out-of-the-box deployment pass:
+rpcbind was already active, and package installation also started/enabled native
+NFS. The real preflight rejected `nfs-server.service` before preparation. After
+confirming no configured/active exports, NFS mounts/clients, guests, engine or lab
+configuration, the native configuration and unit/lockd states were saved. Only
+inside Ubuntu, native NFS was disabled/stopped, mountd/idmapd/statd stopped and
+rpcbind service/socket stopped/masked. The real preflight and no-listener/thread
+check then passed. All packages remain installed; no AppArmor policy was disabled.
+
+The existing local candidate image was streamed from the parent's image store,
+not rebuilt or published: `localhost/tux2lab-engine:nfs-direct-layout`, ID
+`ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6`. Its original-layout
+labels were verified. Guest preparation logs/backups are in
+`/home/musubram/nfs-host-preparation.UEc2QR5m/`, including `setup-host.log`, sync/SSH
+baselines, native unit snapshots, `native-nfs-config.original.tar`, lockd state
+and the expected preflight rejection. Domain XML backups are local test artifacts;
+the source/runbook records the reproducible changes, not VM disks or secrets.
+
+Next is actual `tux2lab deploy` with the explicit candidate-image override and
+credentials entered directly by the user. No engine has been deployed at this
+checkpoint. Service/protocol/ISO checks, lifecycle/recovery, released-baseline
+migration/rollback and Ubuntu security-policy acceptance remain outstanding.
+Keep the no-inner-VM constraint and separate parent handover/PXE approval.
 
 ### AlmaLinux Remaining Work (Updated October 5, 2026)
 
