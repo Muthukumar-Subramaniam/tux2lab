@@ -30,6 +30,12 @@ released-baseline migration and both rollback paths now pass. AppArmor stayed
 enabled, read-only and RPC confinement checks pass, and the bounded Ubuntu stage
 is complete with the limitations recorded below. No parent handover is implied.
 
+On October 6 the user added one openSUSE Leap 16.0 representative host before
+the parent handover. Its actual host setup and deployment prerequisites pass;
+interactive deployment and functional/lifecycle/migration/security acceptance
+are still pending. This is an explicit bounded scope extension, not SUSE-family
+certification or an exhaustive distribution matrix.
+
 ## Maintained Code
 
 | Owner | Responsibility |
@@ -339,8 +345,9 @@ The implementation now preserves the original `/tux2lab-data` layout, including
 export discovery. The compatibility finding and integration results below
 supersede the earlier `/export` design. Existing tests do not replace the
 remaining actual lab setup, deployment or integrated PXE acceptance checks.
-The release scope is bounded to AlmaLinux, Ubuntu 24.04 LTS and the current
-CBL-Mariner KVM host, followed by release preparation. This supersedes the
+The release scope is bounded to AlmaLinux, Ubuntu 24.04 LTS, the explicitly
+added openSUSE Leap 16.0 host, and the current CBL-Mariner KVM host, followed by
+release preparation. This supersedes the
 earlier expectation of completing the wider host matrix before publication.
 Other host families and additional distro/version combinations move to
 follow-up work, with their unverified status documented.
@@ -356,7 +363,12 @@ The remaining work follows this sequence:
   representative RHEL-family evidence, not certification of every listed
   distro/version. Check material known differences without making an
   exhaustive Red Hat matrix a release gate.
-2. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
+2. **Validate openSUSE Leap 16.0.** Added with user approval on October 6 after
+  Alma and Ubuntu completion. Use one dedicated test host and the same bounded
+  setup/deployment, original-layout NFS/ISO, lifecycle/recovery,
+  released-baseline migration/rollback and applicable security-policy checks.
+  Do not create guests inside it. Other SUSE versions and SLES remain unverified.
+3. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
   window on the current CBL-Mariner host, test actual NFS handover, normal
   tux2lab VM creation and unchanged 2 GiB AlmaLinux/Ubuntu NFS-backed PXE
   installations through installed-disk boot. Verify all deployed services, ISO
@@ -364,7 +376,7 @@ The remaining work follows this sequence:
   firewall behavior, recovery and rollback. Schedule host reboot and disruptive
   fault injection explicitly within that window. Historical standalone-server
   experiments and sibling-VM protocol tests do not replace this workflow.
-3. **Release preparation.** Resolve findings and rerun affected checks, record
+4. **Release preparation.** Resolve findings and rerun affected checks, record
   results and unsupported/untested configurations, and finalize cleanup and
   documentation. Complete the host executable/upcall dependency audit before
   any separately approved host NFS package removal. Keep development images
@@ -372,6 +384,10 @@ The remaining work follows this sequence:
   the normal release workflow. Publication and merge to main require approval.
 
 ### Effort and Scope Boundaries
+
+The following estimates are the original plan, before completed Alma/Ubuntu work
+and the October 6 Leap extension. They are not a current remaining-work total;
+no new completion date or Leap estimate has been committed.
 
 | Remaining Stage | Rough Active Work |
 | --- | --- |
@@ -1098,8 +1114,8 @@ health passed 11/11 and 6/6, and custom network XML remained byte-identical.
 
 ## Cross-Distribution Host Verification
 
-Use AlmaLinux and Ubuntu 24.04 LTS as dedicated representative test hosts before
-release, followed by acceptance on the existing CBL-Mariner KVM host. Each test
+Use AlmaLinux, Ubuntu 24.04 LTS and openSUSE Leap 16.0 as dedicated representative
+test hosts before release, followed by acceptance on the existing CBL-Mariner KVM host. Each test
 VM runs its own kernel, systemd, Podman and actual tux2lab installation.
 The required outcome is a successfully set up and deployed lab, not merely a
 manually started container or a collection of passing component tests.
@@ -1117,13 +1133,91 @@ Release and follow-up host matrix (not verified support claims):
 | Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
 | Microsoft | Azure Linux 3.0 | Follow-up validation; unverified |
 | Fedora | Fedora | Follow-up validation; unverified |
-| SUSE | openSUSE Leap | Follow-up validation; unverified |
+| SUSE | openSUSE Leap 16.0 | Added October 6: actual setup and deployment prerequisites pass; deployed acceptance pending |
+| SUSE | Other Leap releases and SLES | Follow-up validation; unverified |
 
 Existing Mariner results remain the baseline, not a substitute for its release
 acceptance. Record exact versions and environments when executing a test.
 Representative coverage supports an expectation of compatibility, never a
 claim that an untested distro/version passed. Follow-up rows are not additional
 pre-publication gates unless a material finding changes the agreed scope.
+
+### openSUSE Leap 16.0 Host Preparation (October 6, 2026)
+
+The user approved adding the available Leap 16.0 image before the separately
+approved live Mariner handover. Provisioned through the released parent CLI:
+
+```bash
+tux2lab vm install --via-golden -H nfs-host-suse16 \
+  -d opensuse-leap -v 16.0 --dual-stack --cpu 2 --memory 4 --root-disk-size 60
+```
+
+- Host: `nfs-host-suse16.musubram.internal`, openSUSE Leap 16.0, kernel
+  `6.12.0-160000.37-default`, XFS root `/dev/vda2`, 2 vCPU, 4 GiB RAM, 60 GiB disk.
+  VM UUID `995707a7-521f-467b-ae96-7f3568ff46a1`, MAC `52:54:00:f3:6a:3c`.
+  Management addresses: `10.28.28.16` and `fd28:2808:2020:3000::10`.
+- Golden boot completed successfully. Backed up management authorization and
+  hook state, then disabled/stopped `tux2lab-sync.timer`, `tux2lab-sync.service`
+  and `tux2lab-golden-boot.service` only inside this test VM. Installed and
+  independently verified a dedicated Ed25519 management key outside served data,
+  with comment `tux2lab-nfs-validation-management-suse16`. Parent SSH config was
+  not changed. The key and private backup contents are not committed.
+- Gracefully shut down the VM, changed only CPU mode/check to
+  `host-passthrough`/`none`, compared XML structurally and defined it with
+  `virsh define --validate` only while fully off. Restart preserved dedicated
+  SSH and disabled hooks. Verified `svm`, `/dev/kvm` and KVM API version 12;
+  no nested guest was created. The inherited libosinfo metadata was left alone.
+- Staged source `cf535cf8f9158ba7cdf5783c9d8164654032590f` without changing the
+  parent checkout. The minimal guest lacked `tar`, so installed it with native
+  zypper before extracting the source; zypper also selected `tar-rmt`.
+- Guest-only network input keeps the existing `tux2lab`/`labbr0` NAT topology,
+  no libvirt DNS/DHCP, no physical bridge member and no forced firewall zone.
+  Separate inner networks are `10.10.28.0/22` (gateway `10.10.28.1`) and
+  `fd60:6060:2026:3::/64` (gateway `::1`). Subnets were checked against the parent,
+  Alma and Ubuntu networks. Generated network UUID is
+  `7e7178c3-88bb-42f5-98d9-d2a7ce537b22`, bridge MAC `52:54:00:d8:5a:d4`.
+- Actual `bash /tux2lab/setup/setup-host.sh --yes` passed unchanged, including
+  packages, libvirt, bridge/dummy interface, CLI and completion. This is a real
+  host setup pass, not yet a deployed-engine acceptance claim.
+- Installed Podman `5.4.2-160000.5.1`, libvirt `11.4.0-160000.6.1`, QEMU
+  `10.0.13-160000.1.1`, nfs-kernel-server `2.8.2-160000.4.1`, rpcbind
+  `1.2.9-160000.1.1`, libosinfo `1.12.0-160000.3.2`, AppArmor parser
+  `4.1.7-160000.2.1`. Zypper resolves `qemu-kvm` and `nfs-utils` to the QEMU and
+  NFS server providers; `rpm -q` on those virtual names alone is not an install
+  failure. The previously unverified `libosinfo` package resolves on this host.
+- Unlike the other prepared hosts, native NFS/RPC services and socket remained
+  inactive after setup, with server/rpcbind disabled and dependent units static.
+  Host preflight passed without manually stopping or masking native units.
+  No exports, NFS listeners, containers or running inner guests were present.
+- AppArmor service is active/enabled and its kernel parameter reports `Y`.
+  Firewalld is installed but inactive/disabled. No policy was disabled to pass
+  setup; actual workload under applicable policy is still pending.
+- Transferred the existing local image
+  `localhost/tux2lab-engine:nfs-direct-layout`, exact ID
+  `ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6`.
+  Both NFS layout labels and native preflight pass. No new image was built or
+  published, and host packages remain installed.
+
+Guest evidence is `/home/musubram/nfs-host-preparation.u9Dj8OfH/`, including
+original authorization/hook state, before/after native units, security baseline,
+setup log, private network definition and input hashes. Local original/staged
+domain XML and guest-only network input live under untracked `.test-artifacts/`.
+Do not commit these runtime artifacts, keys or VM disks.
+
+Next run the actual interactive deployment with the dedicated management key:
+
+```bash
+ssh -tt -F /dev/null -i "$HOME/.ssh/tux2lab-nfs-host-suse16_ed25519" \
+  -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes \
+  -o StrictHostKeyChecking=yes musubram@nfs-host-suse16.musubram.internal \
+  'TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab deploy'
+```
+
+The user enters the lab password directly in the terminal, never through chat
+or model tools. Then verify deployed services, original NFS layout/read-only
+behavior, real DHCP/RA, ISO propagation, lifecycle/recovery, migration/rollback
+and security limits. The parent continues to use released 2.1.1 and host NFS;
+its seven Kubernetes guests and Ubuntu remain running, and Alma remains off.
 
 ### Ubuntu 24.04 Host Preparation (October 6, 2026)
 
