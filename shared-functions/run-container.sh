@@ -13,10 +13,11 @@ run_tux2lab_container() {
     local data_dir="$4"
     local bridge_ip="$5"
     local bridge_if="$6"
-    local bridge_ipv6 rootfs image_id exists
+    local bridge_ipv6 rootfs image_id exists project_root
     bridge_ipv6=$(jq -r '.network.ipv6.address' "${data_dir}/lab-config/lab_environment.json")
 
-    source /tux2lab/shared-functions/container-nfs.sh
+    project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || return 1
+    source "$project_root/shared-functions/container-nfs.sh" || return 1
     image_id=$(sudo podman image inspect "$image" --format '{{.Id}}') || return 1
     container_nfs_image_check "$image_id" || return 1
     container_nfs_host_preflight || return 1
@@ -46,7 +47,7 @@ run_tux2lab_container() {
         -v "/dev:/dev:ro" \
         -v "${data_dir}:${data_dir}:ro,rslave" \
         -v "${data_dir}/nfs/state:/var/lib/nfs" \
-        -v "/tux2lab:/tux2lab:ro" \
+        -v "${project_root}:/tux2lab:ro" \
         -v "${data_dir}/kea/leases:/var/lib/kea" \
         -v "${data_dir}/logs:${data_dir}/logs" \
         -v "${data_dir}/nginx/stream.d:${data_dir}/nginx/stream.d" \
@@ -63,8 +64,9 @@ run_tux2lab_container() {
 }
 
 replace_tux2lab_container() {
-    local name="$1" image="$2" backup="${1}-rebuild-backup" exists
-    source /tux2lab/shared-functions/container-nfs.sh
+    local name="$1" image="$2" backup="${1}-rebuild-backup" exists project_root
+    project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || return 1
+    source "$project_root/shared-functions/container-nfs.sh" || return 1
     container_nfs_image_check "$image" || return 1
     container_nfs_host_preflight || return 1
     prepare_container_nfs "$4" || return 1

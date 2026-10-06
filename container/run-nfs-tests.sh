@@ -566,7 +566,7 @@ printf 'PASS: export rollback supports stopped managed/legacy roots and rejects 
 
 (
     source "$PROJECT_ROOT/shared-functions/run-container.sh"
-    source() { :; }
+    source() { [[ "$1" == "$PROJECT_ROOT/shared-functions/container-nfs.sh" ]] || exit 99; }
     jq() { printf '\n'; }
     container_nfs_image_check() { [[ "$1" == image-id ]]; }
     container_nfs_host_preflight() { :; }
@@ -584,13 +584,14 @@ printf 'PASS: export rollback supports stopped managed/legacy roots and rejects 
     run_tux2lab_container engine test-image lab /data 192.0.2.1 labbr0
     grep -qx '/dev:/dev:ro' "$test_dir/launch-arguments"
     grep -qx '/data:/data:ro,rslave' "$test_dir/launch-arguments"
+    grep -Fxq "$PROJECT_ROOT:/tux2lab:ro" "$test_dir/launch-arguments"
 )
-printf 'PASS: launcher binds host devices read-only and preserves the data layout\n'
+printf 'PASS: launcher uses its own checkout, binds host devices read-only and preserves the data layout\n'
 
 (
     source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
     source "$PROJECT_ROOT/shared-functions/run-container.sh"
-    source() { :; }
+    source() { [[ "$1" == "$PROJECT_ROOT/shared-functions/container-nfs.sh" ]] || exit 99; }
     container_nfs_image_check() { printf 'image\n' >> "$test_dir/replacement"; }
     container_nfs_host_preflight() { :; }
     prepare_container_nfs() { :; }
