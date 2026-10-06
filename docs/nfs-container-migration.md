@@ -48,6 +48,16 @@ RPC restoration ordering. The final affected migration checks passed on both
 Debian and Azure. The candidate image and original data layout are unchanged;
 live parent handover/PXE and final release gates remain outstanding.
 
+On October 6 the user approved a bounded live Mariner handover, 2 GiB AlmaLinux
+and Ubuntu PXE installation, and rollback to the released engine. The revised
+window keeps all eight existing guests running. Read-only disk and backing-chain
+inspection found only local ext4-backed QCOW2 disks; the user separately confirmed
+no in-guest NFS dependencies or other NFS clients. This is operator confirmation,
+not an automated audit of guest mounts or Kubernetes volumes. Brief shared-engine
+DNS/DHCP interruption is accepted. No host reboot, libvirt/bridge shutdown,
+destructive fault injection, package removal, released-checkout edits or release
+publication is authorized by this window. Live results remain pending.
+
 ### Debian 13 Preparation
 
 The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
@@ -587,15 +597,25 @@ Do not execute this section until an integrated acceptance window is authorized.
 For full end-to-end acceptance, the target is the current CBL-Mariner KVM host.
 Dedicated test-host VMs also exercise this procedure against their own released
 lab baseline, without changing the parent's NFS owner. On either target, require
-no unrelated NFS exports or clients. Shut down
-guests and finish installer sessions first. Stop any external NFS clients too;
+no unrelated NFS exports or clients. By default, shut down guests and finish
+installer sessions first. Stop any external NFS clients too;
 the preflight cannot discover every UDP client. Do not run other lab lifecycle
 commands concurrently. The migration lock serializes migration commands only.
 
 ```bash
-sudo bash setup/migrate-nfs-to-container.sh --check localhost/tux2lab-engine:nfs-migration
-sudo bash setup/migrate-nfs-to-container.sh --apply localhost/tux2lab-engine:nfs-migration
+sudo bash setup/migrate-nfs-to-container.sh --check localhost/tux2lab-engine:nfs-direct-layout
+sudo bash setup/migrate-nfs-to-container.sh --apply localhost/tux2lab-engine:nfs-direct-layout
 ```
+
+For an explicitly approved window with independent running guests, append
+`--allow-running-guests` to both commands. This acknowledges verified independent
+VM disk storage, operator-confirmed absence of guest NFS dependencies, and
+accepted DNS/DHCP and other engine-service interruption. It does not inspect
+guest mounts, guarantee uninterrupted service, or waive any other preflight
+check. Guest inventory failures still refuse migration. Keep existing guests,
+libvirt, the bridge and their backing filesystems running throughout this mode;
+do not substitute full lab stop/start or rebuild commands. Quiesce any newly
+created NFS/PXE clients before rollback.
 
 The command keeps the original container as `tux2lab-engine-host-nfs-backup`,
 records host unit states, exports and lockd settings under
@@ -611,7 +631,7 @@ are rejected for new launches.
 For subsequent rebuilds, select the development image explicitly:
 
 ```bash
-TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-migration tux2lab rebuild
+TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab rebuild
 ```
 
 Keep the backup container and migration checkpoint through acceptance. Destroy

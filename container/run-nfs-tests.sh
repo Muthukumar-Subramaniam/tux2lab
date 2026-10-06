@@ -710,6 +710,60 @@ for thread_case in active stopped unreadable invalid missing inspection-error; d
 done
 printf 'PASS: shutdown requires privileged, valid kernel thread inspection\n'
 
+for preflight_case in empty occupied allowed query-error client-mount unrelated-export failed-unit; do
+    (
+        source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
+        NFS_DATA="$test_dir/preflight-data"
+        NFS_MIGRATION_DIR="$test_dir/unused-preflight-checkpoint"
+        mkdir -p "$NFS_DATA/lab-config"
+        touch "$NFS_DATA/lab-config/lab_environment.json"
+        container_nfs_image_check() { :; }
+        container_nfs_exists() { printf 'false\n'; }
+        container_nfs_require_no_client_mounts() { [[ "$preflight_case" != client-mount ]]; }
+        sudo() {
+            case "$*" in
+                'podman inspect tux2lab-engine --format '*) printf 'legacy\n' ;;
+                'virsh list --name')
+                    [[ "$preflight_case" != query-error ]] || return 1
+                    if [[ "$preflight_case" != empty ]]; then printf 'existing-guest\n'; fi ;;
+                'exportfs -s')
+                    if [[ "$preflight_case" == unrelated-export ]]; then
+                        printf '/unrelated 192.0.2.0/24(ro)\n'
+                    else
+                        printf '/tux2lab-data 192.0.2.0/24(ro)\n'
+                    fi ;;
+                'systemctl show '*'-p LoadState --value') printf 'loaded\n' ;;
+                'systemctl show '*'-p ActiveState --value')
+                    if [[ "$preflight_case" == failed-unit ]]; then printf 'failed\n'; else printf 'active\n'; fi ;;
+                *) printf 'Unexpected preflight command: %s\n' "$*" >&2; exit 99 ;;
+            esac
+        }
+        preflight_options=()
+        case "$preflight_case" in
+            empty|occupied) ;;
+            *) preflight_options=(--allow-running-guests) ;;
+        esac
+        if migration_preflight test-image "${preflight_options[@]}" > "$test_dir/preflight-$preflight_case.log" 2>&1; then
+            [[ "$preflight_case" == empty || "$preflight_case" == allowed ]]
+        else
+            [[ "$preflight_case" != empty && "$preflight_case" != allowed ]]
+        fi
+        if [[ "$preflight_case" == allowed ]]; then
+            grep -q 'existing-guest' "$test_dir/preflight-$preflight_case.log"
+            migration_preflight() { [[ "$*" == 'test-image --allow-running-guests' ]] || exit 99; return 1; }
+            apply_status=0
+            apply_nfs_migration test-image --allow-running-guests || apply_status=$?
+            [[ "$apply_status" == 1 ]]
+        fi
+    )
+done
+for migration_action in --check --apply --rollback; do
+    argument_status=0
+    bash "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh" "$migration_action" test-image --unknown-option || argument_status=$?
+    [[ "$argument_status" == 2 ]]
+done
+printf 'PASS: running guests require explicit opt-in without bypassing inventory, mount, export or unit guards\n'
+
 (
     source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
     NFS_MIGRATION_DIR="$test_dir/blocked-rollback"

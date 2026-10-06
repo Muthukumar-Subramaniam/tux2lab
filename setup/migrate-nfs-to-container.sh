@@ -13,7 +13,7 @@ NFS_DATA=/tux2lab-data
 NFS_UNITS=(nfs-server.service nfs-kernel-server.service nfs-mountd.service rpc-mountd.service rpc-statd.service nfs-idmapd.service nfsdcld.service rpcbind.socket rpcbind.service proc-fs-nfsd.mount)
 
 migration_preflight() {
-    local image="$1" guests exports label unit exists
+    local image="$1" allow_running_guests="${2:-}" guests exports label unit exists
     container_nfs_image_check "$image" || return 1
     [[ -f "$NFS_DATA/lab-config/lab_environment.json" ]] || return 1
     exists=$(container_nfs_exists "$NFS_BACKUP") || return 1
@@ -24,7 +24,13 @@ migration_preflight() {
     label=$(sudo podman inspect "$NFS_ENGINE" --format '{{index .Config.Labels "io.tux2lab.nfs"}}') || return 1
     [[ "$label" != container-v1 ]] || { printf 'The engine already uses container NFS.\n' >&2; return 1; }
     guests=$(sudo virsh list --name) || return 1
-    [[ -z "$guests" ]] || { printf 'Shut down running guests before migration.\n' >&2; return 1; }
+    if [[ -n "$guests" ]]; then
+        if [[ "$allow_running_guests" != --allow-running-guests ]]; then
+            printf 'Shut down running guests or explicitly acknowledge their independence with --allow-running-guests.\n' >&2
+            return 1
+        fi
+        printf 'Keeping running guests: operator confirms no NFS dependency and accepts engine-service interruption.\n%s\n' "$guests" >&2
+    fi
     exports=$(sudo exportfs -s) || return 1
     [[ -n "$exports" ]] || { printf 'No host exports found to migrate.\n' >&2; return 1; }
     if ! awk '$1 != "/tux2lab-data" {exit 1}' <<< "$exports"; then
@@ -126,8 +132,8 @@ restore_host_nfs() {
 }
 
 apply_nfs_migration() {
-    local image="$1" unit active enabled ipv4 ipv6 ipv4_network ipv6_network bridge hostname domain
-    migration_preflight "$image" || return 1
+    local image="$1" allow_running_guests="${2:-}" unit active enabled ipv4 ipv6 ipv4_network ipv6_network bridge hostname domain
+    migration_preflight "$image" "$allow_running_guests" || return 1
     ipv4=$(jq -er '.network.ipv4.address' "$NFS_DATA/lab-config/lab_environment.json") || return 1
     ipv6=$(jq -r '.network.ipv6.address // empty' "$NFS_DATA/lab-config/lab_environment.json") || return 1
     ipv4_network=$(jq -er '.network.ipv4 | .network + "/" + (.prefix|tostring)' "$NFS_DATA/lab-config/lab_environment.json") || return 1
@@ -181,9 +187,11 @@ migration_exit() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     case "${1:-}" in
         --help|-h)
-            printf 'Usage: sudo bash setup/migrate-nfs-to-container.sh --check IMAGE | --apply IMAGE | --rollback\n'
+            printf 'Usage: sudo bash setup/migrate-nfs-to-container.sh {--check|--apply} IMAGE [--allow-running-guests] | --rollback\n'
+            printf 'Use --allow-running-guests only after confirming guests have no NFS dependency and accepting engine-service interruption.\n'
             exit 0 ;;
-        --check|--apply) [[ $# == 2 ]] || exit 2 ;;
+        --check|--apply)
+            [[ $# == 2 || ( $# == 3 && "${3:-}" == --allow-running-guests ) ]] || exit 2 ;;
         --rollback) [[ $# == 1 ]] || exit 2 ;;
         *) printf 'Use --help for migration usage.\n' >&2; exit 2 ;;
     esac
@@ -193,8 +201,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     flock -n 9 || { printf 'Another NFS migration is running.\n' >&2; exit 1; }
     (
         case "$1" in
-            --check) migration_preflight "$2" ;;
-            --apply) apply_nfs_migration "$2" ;;
+            --check) migration_preflight "$2" "${3:-}" ;;
+            --apply) apply_nfs_migration "$2" "${3:-}" ;;
             --rollback) restore_host_nfs ;;
         esac
     ) 9>&-
