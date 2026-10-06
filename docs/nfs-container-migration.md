@@ -136,6 +136,16 @@ No parent reboot, full lab stop/start/rebuild, destructive fault injection,
 package removal, main merge or image publication occurred. Those unexecuted
 Mariner lifecycle checks and final release gates are not covered by this pass.
 
+The user subsequently excluded host reboot on this Azure development workstation
+because it might not return. Host firewall reload/restart, rule flushes, manual
+policy changes and Azure network-security changes are also excluded here. These
+are documented coverage limits, not pending maintenance approvals or mandatory
+tests on this workstation. Firewall validation here is limited to existing-rule
+inspection and non-mutating connectivity probes from already available, approved
+client paths. Candidate rule readiness and lab-side NFS access passed above;
+external-interface blocking remains unverified on Mariner. The released engine
+and host NFS remain restored; this scope clarification authorizes no new handover.
+
 ### Debian 13 Preparation
 
 The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
@@ -789,8 +799,12 @@ and release work:
   Kubernetes guests continuously running. The results and limits above apply.
   Broader live-host lifecycle coverage remains outside that completed window:
   hot-added ISO propagation, full lab start/stop/rebuild, repeated container
-  recreation, live firewall reload and destructive recovery. Host reboot and
-  disruptive tests require a new approved maintenance window. Historical standalone-server
+  recreation and destructive recovery. Any of those disruptive tests requires
+  separate approval. Host reboot and host firewall reload/restart or policy
+  changes are explicitly excluded on this Azure development workstation, with
+  their coverage limits retained. Do not treat them as pending release gates on
+  this host. Firewall inspection and non-mutating connectivity probes do not
+  authorize bridge, routing or Azure network-security changes. Historical standalone-server
   experiments and sibling-VM protocol tests do not replace this workflow.
 5. **Release preparation.** Resolve findings and rerun affected checks, record
   results and unsupported/untested configurations, and finalize cleanup and
