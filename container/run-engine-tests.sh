@@ -383,10 +383,11 @@ deadline = time.monotonic() + 45
 with socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, socket.NETLINK_ROUTE) as events:
     events.bind((0, 1))
     while True:
-        ports = json.loads(subprocess.check_output(["bridge", "-j", "link", "show", "dev", sys.argv[1]], text=True))
+        ports = json.loads(subprocess.check_output(["ip", "-d", "-j", "link", "show", "dev", sys.argv[1]], text=True))
         assert len(ports) == 1, "Test bridge port disappeared"
-        print("Bridge port state: " + ports[0]["state"], flush=True)
-        if ports[0]["state"] == "forwarding":
+        state = ports[0]["linkinfo"]["info_slave_data"]["state"]
+        print("Bridge port state: " + state, flush=True)
+        if state == "forwarding":
             break
         remaining = deadline - time.monotonic()
         assert remaining > 0 and select.select([events], [], [], remaining)[0], "Bridge port never reached forwarding"

@@ -1073,6 +1073,53 @@ restore_current_engine || guard_status=$?
 MIGRATIONGUARD
 printf 'PASS: migration acceptance restoration rejects an unknown saved engine before mutation\n'
 
+bash -s -- "$PROJECT_ROOT" "$test_dir" <<'NFSCONFRESTORE'
+set -euo pipefail
+PROJECT_ROOT="$1"
+fixture="$2/nfs-conf-restore"
+EVIDENCE="$fixture/evidence"
+SAVED_ENGINE=tux2lab-engine-acceptance-original
+mkdir -p "$fixture/etc/exports.d" "$EVIDENCE"
+builtin source <(sed -n '/^restore_current_engine() {/,/^}/p' "$PROJECT_ROOT/container/run-migration-tests.sh" |
+    sed "s|/etc/nfs.conf|$fixture/etc/nfs.conf|g; s|/etc/exports.d|$fixture/etc/exports.d|g; s|/var/lib/tux2lab/nfs-migration|$fixture/checkpoint|g")
+check_evidence() { :; }
+hostname() { printf 'migration-test.invalid\n'; }
+container_nfs_exists() {
+    if [[ "$1" == "$SAVED_ENGINE" ]]; then printf 'true\n'; else printf 'false\n'; fi
+}
+podman() {
+    [[ "$*" == "inspect $SAVED_ENGINE --format {{.Id}}" ]] || exit 99
+    printf 'original-id\n'
+}
+verify_container_nfs_stopped() { :; }
+tar() {
+    [[ ! -e "$fixture/etc/nfs.conf" && ! -L "$fixture/etc/nfs.conf" ]] || exit 99
+    touch "$EVIDENCE/reached-config-restore"
+    return 1
+}
+printf 'migration-test.invalid\n' > "$EVIDENCE/host"
+printf 'original-id\n' > "$EVIDENCE/original-id"
+printf 'baseline\n' > "$EVIDENCE/baseline-nfs.conf"
+touch "$EVIDENCE/original-units" "$EVIDENCE/nfs-conf-absent"
+for config_case in matching changed symlink absent; do
+    rm -f "$fixture/etc/nfs.conf" "$EVIDENCE/reached-config-restore"
+    case "$config_case" in
+        matching) cp "$EVIDENCE/baseline-nfs.conf" "$fixture/etc/nfs.conf" ;;
+        changed) printf 'changed\n' > "$fixture/etc/nfs.conf" ;;
+        symlink) ln -s "$EVIDENCE/baseline-nfs.conf" "$fixture/etc/nfs.conf" ;;
+    esac
+    guard_status=0
+    restore_current_engine || guard_status=$?
+    [[ "$guard_status" == 1 ]]
+    case "$config_case" in
+        matching|absent) [[ -e "$EVIDENCE/reached-config-restore" ]] ;;
+        changed) [[ ! -e "$EVIDENCE/reached-config-restore" && "$(cat "$fixture/etc/nfs.conf")" == changed ]] ;;
+        symlink) [[ ! -e "$EVIDENCE/reached-config-restore" && -L "$fixture/etc/nfs.conf" ]] ;;
+    esac
+done
+NFSCONFRESTORE
+printf 'PASS: absent NFS config restoration removes only the unchanged test-created file\n'
+
 bash -s -- "$PROJECT_ROOT" <<'FIREWALLGUARD'
 set -euo pipefail
 source <(sed -n '/^    recover_failure() {/,/^    }/p' "$1/container/run-engine-tests.sh")

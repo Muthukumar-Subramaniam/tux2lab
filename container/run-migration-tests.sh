@@ -127,6 +127,11 @@ restore_current_engine() {
         if [[ -f "$EVIDENCE/exports-dir-absent" && -e /etc/exports.d ]]; then
             rmdir /etc/exports.d || return 1
         fi
+        if [[ -f "$EVIDENCE/nfs-conf-absent" && ( -e /etc/nfs.conf || -L /etc/nfs.conf ) ]]; then
+            [[ -f /etc/nfs.conf && ! -L /etc/nfs.conf ]] || return 1
+            cmp -s "$EVIDENCE/baseline-nfs.conf" /etc/nfs.conf || return 1
+            rm /etc/nfs.conf || return 1
+        fi
         tar -xpf "$EVIDENCE/host-config.tar" -C / || return 1
         tar -xpf "$EVIDENCE/host-nfs-state.tar" -C /var/lib/nfs || return 1
         if [[ -d "$EVIDENCE/original-nfs" ]]; then
@@ -156,7 +161,7 @@ restore_current_engine() {
 run_acceptance() (
     local expected_host="$1" released_image="$2" candidate_image="$3" released_source="$EVIDENCE/released-source"
     local ipv4 ipv6 bridge engine_fqdn failure_status label clients
-    local -a host_config=(etc/nfs.conf etc/exports)
+    local -a host_config=(etc/exports)
     check_evidence
     check_test_host "$expected_host"
     [[ ! -e "$EVIDENCE/original-id" && ! -e /etc/exports.d/tux2lab.exports ]]
@@ -171,6 +176,11 @@ run_acceptance() (
     snapshot_units > "$EVIDENCE/original-units"
     sysctl -n fs.nfs.nlm_tcpport > "$EVIDENCE/original-lockd-tcp"
     sysctl -n fs.nfs.nlm_udpport > "$EVIDENCE/original-lockd-udp"
+    if [[ -e /etc/nfs.conf || -L /etc/nfs.conf ]]; then
+        host_config+=(etc/nfs.conf)
+    else
+        touch "$EVIDENCE/nfs-conf-absent"
+    fi
     if [[ -e /etc/exports.d || -L /etc/exports.d ]]; then
         host_config+=(etc/exports.d)
     else
@@ -209,6 +219,7 @@ run_acceptance() (
         podman inspect tux2lab-engine --format '{{.Id}}' > "$EVIDENCE/baseline-id"
         start_host_nfs "$ipv4" "$ipv6"
     )
+    cp -p /etc/nfs.conf "$EVIDENCE/baseline-nfs.conf"
     systemctl is-active --quiet nfs-server.service
     exportfs -s > "$EVIDENCE/baseline-exports"
     snapshot_units > "$EVIDENCE/baseline-units"

@@ -31,10 +31,11 @@ enabled, read-only and RPC confinement checks pass, and the bounded Ubuntu stage
 is complete with the limitations recorded below. No parent handover is implied.
 
 On October 6 the user added one openSUSE Leap 16.0 representative host before
-the parent handover. Its actual host setup and deployment prerequisites pass;
-interactive deployment and functional/lifecycle/migration/security acceptance
-are still pending. This is an explicit bounded scope extension, not SUSE-family
-certification or an exhaustive distribution matrix.
+the parent handover. Its bounded setup/deployment, functional, lifecycle/reboot,
+migration/rollback and default-policy checks are now complete. Only acceptance
+harness changes were needed; the production runtime and image are unchanged.
+This is an explicit bounded scope extension, not SUSE-family certification or
+an exhaustive distribution matrix. Detailed results and limits are below.
 
 ## Maintained Code
 
@@ -1133,7 +1134,7 @@ Release and follow-up host matrix (not verified support claims):
 | Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
 | Microsoft | Azure Linux 3.0 | Follow-up validation; unverified |
 | Fedora | Fedora | Follow-up validation; unverified |
-| SUSE | openSUSE Leap 16.0 | Added October 6: actual setup and deployment prerequisites pass; deployed acceptance pending |
+| SUSE | openSUSE Leap 16.0 | Bounded representative stage complete: actual setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, engine recovery, migration/rollback and default-policy checks; limitations below |
 | SUSE | Other Leap releases and SLES | Follow-up validation; unverified |
 
 Existing Mariner results remain the baseline, not a substitute for its release
@@ -1204,7 +1205,8 @@ setup log, private network definition and input hashes. Local original/staged
 domain XML and guest-only network input live under untracked `.test-artifacts/`.
 Do not commit these runtime artifacts, keys or VM disks.
 
-Next run the actual interactive deployment with the dedicated management key:
+After preparation, actual interactive deployment was run with the dedicated
+management key:
 
 ```bash
 ssh -tt -F /dev/null -i "$HOME/.ssh/tux2lab-nfs-host-suse16_ed25519" \
@@ -1213,13 +1215,123 @@ ssh -tt -F /dev/null -i "$HOME/.ssh/tux2lab-nfs-host-suse16_ed25519" \
   'TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab deploy'
 ```
 
-The user enters the lab password directly in the terminal, never through chat
-or model tools. Then verify deployed services, original NFS layout/read-only
-behavior, real DHCP/RA, ISO propagation, lifecycle/recovery, migration/rollback
-and security limits. The parent continues to use released 2.1.1 and host NFS;
+The user entered the lab password directly in the terminal, never through chat
+or model tools. Deployment completed successfully with health 11/11 and all six
+dual-stack service checks passing. The parent continues to use released 2.1.1 and host NFS;
 its seven Kubernetes guests remain running. At the final preparation check,
 Alma and Ubuntu are both off; no Ubuntu lifecycle command was run during this
 SUSE preparation. Leave those retained hosts in their observed states.
+
+#### Leap Deployment and Acceptance Completion (October 6, 2026)
+
+All workload ran on the dedicated Leap kernel/runtime. No further VM was
+created inside it, no host policy was disabled, and no NFS packages were removed.
+The existing direct-layout image remained unchanged throughout.
+
+Deployed behavior and recovery:
+
+- Dedicated key-only SSH survived deployment and reboot, with all three
+  inherited credential hooks still disabled/inactive. Host/container
+  `/tux2lab-data` remained real directories, not symlinks.
+- Copied the same known-checksum AlmaLinux 9 boot ISO used on the other hosts
+  and ran normal `tux2lab distro setup almalinux -v 9`. The new mount propagated
+  into the already-running engine with unchanged ID/root/PID/start time. The
+  complete installer checksum matched
+  `539f423b5456aa36877b255b1fd2486d86fff9bfafc34ecb83282b72a93b70a2`.
+  This is installer media served by SUSE, not a nested guest installation.
+- Actual DHCPv4/v6 leases, pool/options/PXE/DNS/domain checks and RA managed
+  flags/prefix/DNS passed. Full installer reads passed over NFSv3/IPv4 and
+  NFSv4.1/IPv4/IPv6 without restarting the engine.
+- The initial network harness could not execute `bridge`: Leap's non-root PATH
+  omits `/usr/sbin`, where it is installed. The maintained test now reads bridge
+  port forwarding state from the already-required `ip -d -j link` JSON.
+  Immediate rerun passed listening/learning/forwarding and all real clients.
+  Host PATH, privileges and production networking were not changed.
+- Graceful engine restart and PID1 SIGKILL both passed same-open-descriptor
+  NFSv4.1 recovery against `images/install.img`, including blocked uncached read
+  during outage, matching first-MiB checksum and restored server OPEN state.
+  SIGKILL exited 137 and retained firewall protection. The guarded recovery
+  helper returned without needing worker cleanup on this run; this is not a new
+  live-orphan-adoption test. Ubuntu's earlier recorded-owner tests remain the
+  actual evidence for that branch.
+- Full CLI stop/start verified exit 143, NFS/listener shutdown, ISO unmount and
+  remount, with the same engine/root. Two actual rebuilds each replaced the
+  engine/root, removed the previous managed instance after readiness, and
+  preserved network/configuration/SSH hashes. Full installer reads passed again.
+- Enabled the normal lab boot unit and persistent journal storage. Actual host
+  reboot passed previous-boot ISO cleanup, successful lab shutdown/unit
+  deactivation and automatic startup. Boot ID is
+  `9a7de568-8c13-49d0-9d35-17ca9571e866`; system state is running. Engine/root and
+  network/configuration/SSH identity were retained, and full DHCP/RA/NFS reads
+  passed again after boot. No independent client was carried across host reboot.
+- Unit validation succeeded but reported distribution-provided Plymouth
+  warnings for deprecated `KillMode=none` and a non-absolute condition containing
+  an unexpanded variable. No Plymouth files were changed. These warnings did
+  not prevent the observed clean shutdown/startup.
+
+Migration and rollback:
+
+- Used exact released source `0d0c7dc01395a484a98f2ef3a72f6aea0b465bf9` and the
+  local released 2.1.1 image, retaining the rebuilt candidate as the original
+  restoration target. The parent checkout/runtime was not switched.
+- Leap initially has `/usr/etc/nfs.conf`, not `/etc/nfs.conf`. Before mutation,
+  the acceptance harness was extended to preserve that absence. It records the
+  baseline-created local file and removes it during original restoration only
+  if it is still a regular, non-symlinked, byte-identical file. Changed contents
+  or a symlink block cleanup; focused regressions cover both refusal cases,
+  matching-file cleanup and already-absent state.
+- The actual cycle passed released host-NFS baseline, migration apply, explicit
+  rollback, injected rejection after the real candidate became ready, automatic
+  rollback and final original-engine restoration. All five service states passed
+  full installer hashes over the three accepted protocol/address combinations,
+  15 complete reads. Both rollback paths restored released engine identity,
+  exports, native unit states and lockd settings.
+- Final restoration retained the original candidate/root, restored native
+  service/configuration state, removed the temporary local `/etc/nfs.conf`, and
+  left both migration/acceptance locks available. No active migration checkpoint
+  or temporary baseline engine remains. Host packages stay installed.
+
+Policy and layout:
+
+- AppArmor stayed active/enabled with kernel parameter `Y`, 155 loaded profiles
+  and 75 enforcing profiles at final inspection. There were no
+  `apparmor="DENIED"` records in the test boot. The privileged engine's AppArmor
+  profile is empty; this is host-policy compatibility, not strong confinement.
+- Firewalld remains installed but inactive/disabled, so no enabled-firewall
+  reload/restart claim is made. The NFS nftables guard is present. External
+  management IPv4/IPv6 TCP probes to 111/2049/20048/32803 and UDP NULL RPC probes
+  to 111/20048/32769 were inaccessible while SSH positive controls succeeded.
+- Server EROFS was verified using `rw` client mounts over NFSv3/IPv4 and
+  NFSv4.1/IPv4/IPv6. Only `/tux2lab-data` was advertised, and only `tux2lab-data`
+  appeared at the NFSv4 root. The existing data/export layout is unchanged.
+
+Private guest evidence:
+
+- `/home/musubram/nfs-suse-deployment.OyUzTlz1/`: original engine, deployment
+  health, network/configuration hashes and normal ISO setup.
+- `/home/musubram/nfs-suse-network.26xL9qg7/`: initial PATH-related harness failure.
+- `/home/musubram/nfs-suse-network.JkFxcY22/`: corrected real DHCP/RA/NFS checks.
+- `/home/musubram/nfs-suse-restart.Jm144WJg/` and
+  `/home/musubram/nfs-suse-crash.uSQveLLV/`: same-descriptor engine recovery.
+- `/home/musubram/nfs-suse-lifecycle.gDcPw34G/`: stop/start, both rebuilds,
+  successful reboot journal and postboot network/full-read results.
+- `/home/musubram/nfs-migration-validation.jnDnGquK/`: released source and private
+  backups, actual apply/rollback/failure logs, all five read states, original
+  restoration, final AppArmor/read-only/network/health evidence.
+
+Final running engine is
+`864bc315196c41019af0e8ed02402a2e5ee1a15236c496f847890b2ca1f94601`, using
+`/var/lib/tux2lab/engine-rootfs/engine.rQhsxhdw/rootfs`. This replaces the initial
+`b2ddd456...` engine through the two successful rebuilds. The lab boot unit stays
+enabled. Production source and image needed no SUSE-specific changes; only the
+acceptance harness and its safety tests were adjusted. Rootless regressions and
+warning-level ShellCheck pass for the touched scripts.
+
+The bounded Leap 16.0 stage is complete. This does not certify SLES/other Leap
+versions, package-free hosts, confined containers, writable NFS locking, NFSv3
+over IPv6, live ISO handles across full filesystem teardown, independent-client
+host-reboot recovery or nested provisioning. The separately approved current
+Mariner handover/real PXE/rollback and final release gates remain next.
 
 ### Ubuntu 24.04 Host Preparation (October 6, 2026)
 
