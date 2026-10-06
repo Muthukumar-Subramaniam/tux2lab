@@ -21,8 +21,11 @@ startup and controlled runtime SELinux enforcing tests also pass. Alma is left
 permissive, not configured for enforcing boot. Shared setup/start now select the
 bridge zone according to firewalld state, with Alma transition/reload/restart
 acceptance complete. The bounded Alma checks are complete with the limitations
-below. Ubuntu 24.04 host setup and explicit native-owner preparation are complete;
-actual deployment and its acceptance checks remain pending.
+below. Ubuntu 24.04 setup/deployment, live ISO propagation, actual DHCP/RA and
+full NFS reads pass with explicit native-owner preparation. Graceful active-client
+recovery passes, but PID1 SIGKILL reproducibly leaves kernel NFS listeners and
+blocks normal restart. Ubuntu has been manually recovered; its acceptance is
+incomplete and the crash-recovery finding remains open.
 
 ## Maintained Code
 
@@ -312,6 +315,9 @@ and leave kernel listeners. Do not force-delete the engine or unmount ISOs to
 hide that state. Inspect the retained engine, logs, kernel threads and listeners;
 recover ownership in a dedicated maintenance window before retrying. Automated
 recovery from this failure class is not established by the mountd-child test.
+The October 6 Ubuntu tests below reproduce this failure with native NFS tracking
+and control mounts both active and inactive. Alma's successful SIGKILL recovery
+does not establish the same behavior on Ubuntu.
 
 ## Remaining Acceptance Plan
 
@@ -1091,7 +1097,7 @@ Release and follow-up host matrix (not verified support claims):
 | Family | Test-host targets | Status |
 | --- | --- | --- |
 | Enterprise RPM | AlmaLinux 9.8 | Release gate: setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below |
-| Debian-based | Ubuntu 24.04 LTS | Release gate: dedicated host setup/preparation completed October 6; deployment and acceptance pending |
+| Debian-based | Ubuntu 24.04 LTS | Release gate: setup/deployment, live ISO, DHCP/RA, full NFS reads and graceful active-client recovery pass; SIGKILL recovery blocked October 6 |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
@@ -1168,11 +1174,115 @@ baselines, native unit snapshots, `native-nfs-config.original.tar`, lockd state
 and the expected preflight rejection. Domain XML backups are local test artifacts;
 the source/runbook records the reproducible changes, not VM disks or secrets.
 
-Next is actual `tux2lab deploy` with the explicit candidate-image override and
-credentials entered directly by the user. No engine has been deployed at this
-checkpoint. Service/protocol/ISO checks, lifecycle/recovery, released-baseline
-migration/rollback and Ubuntu security-policy acceptance remain outstanding.
-Keep the no-inner-VM constraint and separate parent handover/PXE approval.
+Preparation checkpoint `61194359ae70b08e7d5a0fdad3db58129139e44e` preceded actual
+deployment. The following results supersede its pending-deployment status.
+
+#### Deployment and Protocol Acceptance (October 6, 2026)
+
+Actual deployment used the prepared source and candidate image:
+
+```bash
+TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab deploy
+```
+
+The user entered credentials directly in the interactive terminal. Deployment
+completed with 11/11 deep health checks and 6/6 dual-stack service checks. A fresh
+dedicated-key SSH connection still worked afterward, and the three inherited
+credential-sync hooks remained inactive/disabled.
+
+- Engine ID: `c0f76408142481009bcc70741451bb8cba718576db6a3c80789f67b508593f29`.
+- Managed XFS root: `/var/lib/tux2lab/engine-rootfs/engine.6qyvzpbG/rootfs`.
+- Initial start: `2026-10-06 03:44:41.195105759 +0000 UTC`; eight NFS threads.
+- Host/container `/tux2lab-data` are real directories, not symlinks. Discovery
+  advertises only `/tux2lab-data`; exports retain `ro`, `fsid=1`, `crossmnt`,
+  `*.musubram.internal`, `10.10.24.0/22` and `fd60:6060:2026:2::/64`.
+- The existing AlmaLinux 9 boot ISO and `almalinux-9-CHECKSUM` were transferred
+  as a known-checksum installer workload, not as a claim of Alma guest boot on
+  Ubuntu. ISO SHA256:
+  `445f99e24399bbe98aab86111d60751c142eda049d2444fd76da5eb03472e4ab`.
+  Normal `tux2lab distro setup almalinux -v 9` verified and mounted the ISO on
+  `/tux2lab-data/os-repos/almalinux/9`. The original running engine immediately
+  read the full installer with SHA256
+  `539f423b5456aa36877b255b1fd2486d86fff9bfafc34ecb83282b72a93b70a2`, without
+  changing its ID, PID, start time or root. A first transfer attempt used a
+  nonexistent checksum sidecar name; the correct file and ISO were then verified.
+- Existing `--deployed-network` tests passed real DHCPv4/v6 leases, DNS/domain
+  and PXE options, managed RA flags/prefix/DNS/domain, and full installer reads
+  over NFSv3/IPv4 and NFSv4/IPv4/IPv6. These are process-only namespace clients;
+  no inner VM was created. NFSv3/IPv6 was not part of this reader's coverage.
+- Existing `--deployed-restart`, run as the sudo-capable non-root user, passed
+  graceful outage/recovery with the same open NFSv4.1 descriptor, matching
+  O_DIRECT reads and recovered server-side OPEN state. The engine/root were
+  retained. The first-MiB checksum was
+  `91b2819e63ca51ad9b2c4c1718ad7e1ffb70328be6db1cccbef9e445e3973705`.
+- AppArmor remained enabled. The privileged engine reports an empty AppArmor
+  profile, so this is not proof of container AppArmor confinement. No
+  `apparmor="DENIED"` record appeared in the captured kernel-log interval from
+  `2026-10-06 03:44:00 UTC` through post-recovery verification. Firewalld remains
+  absent/inactive; no enabled-firewall reload acceptance is claimed on Ubuntu.
+
+#### Reproducible SIGKILL Blocker and Recovery (October 6, 2026)
+
+The unchanged `--deployed-crash` harness killed engine PID1, verified exit 137
+and unchanged `inet tux2lab_nfs` protection, then failed its no-listener check.
+Container rpcbind/mountd exited, but eight kernel `nfsd` threads and IPv4/IPv6
+port 2049 listeners remained. Automatic recovery called normal `tux2lab start`;
+the engine refused the occupied ports and exited 1. This is a runtime acceptance
+failure, not a passing crash test or a reason to weaken its assertion.
+
+The first investigation found native `nfsdcld.service` and
+`proc-fs-nfsd.mount` still active despite the initial preflight pass. Both were
+stopped only inside Ubuntu, after checking the exact stopped engine, no inner
+guests and no remaining NFS clients. Stopping the daemon left eight threads;
+unmounting the native control filesystem still did not remove the listeners.
+Thus removing these leftover native components alone is not a recovery fix.
+
+After explicit manual recovery, the same SIGKILL test was repeated with both
+native components already inactive. It failed identically. Their presence is
+not required to reproduce the blocker. Exact kernel/runtime causation and a
+guarded automatic recovery implementation remain unresolved; no production
+runtime or test assertion was changed to obtain a pass.
+
+Both manual recoveries were restricted to the exact stopped Ubuntu engine above,
+with host native-owner preflight, no inner guests or NFS client mounts, and the
+unchanged recorded NFS nftables ruleset checked first. A private mount namespace
+mounted the NFS control filesystem, verified no server-side clients and exactly
+eight orphaned threads, then ran bounded `rpc.nfsd 0`. Zero threads and absent
+RPC listeners were verified before unmounting that private control filesystem.
+Normal `tux2lab start` then restored the same engine/root. This used the retained
+host NFS utility and is manual test-host recovery, not implemented automatic
+container recovery or a generic instruction to stop another host's NFS server.
+No ISO, export layout or firewall protection was removed to hide the failure.
+
+Final recovery start: `2026-10-06 03:55:14.712551652 +0000 UTC`, PID `28270`.
+Health returned to 11/11 and 6/6; subsequent actual DHCP/RA transactions and full
+NFS reads passed again. Temporary client namespaces/bridge peers were removed;
+the normal dummy bridge member remained. Native tracking/control units are left
+inactive/static, AppArmor remains enabled, and all host packages are retained.
+
+Private evidence directories on Ubuntu, deliberately outside Git/served data:
+
+- `/home/musubram/nfs-ubuntu-deployment.Iz5P2FVD/`: original engine identity and
+  normal distro setup log.
+- `/home/musubram/nfs-ubuntu-network.5V6WaCl1/`: initial DHCP/RA and NFS reads.
+- `/home/musubram/nfs-ubuntu-restart.5wm8DG1o/`: graceful active-client recovery.
+- `/home/musubram/nfs-ubuntu-crash.k7huHE5o/`: first failed SIGKILL, retained
+  listeners/firewall, startup failure and native-control investigation.
+- `/home/musubram/nfs-ubuntu-crash-clean.iXAoeI8V/`: identical clean-state
+  failure, guarded manual recovery, restored engine identity and unit states.
+- `/home/musubram/nfs-ubuntu-recovered-network.Hb0xlqce/`: post-recovery full
+  client acceptance and kernel-log interval.
+
+To reproduce, use the existing `--deployed-crash EXPECTED_HOST RELATIVE_FILE
+EVIDENCE_DIR` mode as the non-root sudo-capable user on this dedicated host,
+with `os-repos/almalinux/9/images/install.img` and a new evidence directory.
+Expect the current candidate to leave the engine down with kernel listeners;
+arrange guarded manual recovery before running it. Do not run it on the parent.
+
+Ubuntu acceptance remains incomplete. Resolve the abrupt-exit recovery finding
+before proceeding with remaining lifecycle/rebuild/reboot, released-baseline
+migration/rollback and applicable security-policy gates. Preserve the
+no-inner-VM constraint and separate parent handover/PXE approval.
 
 ### AlmaLinux Remaining Work (Updated October 5, 2026)
 
