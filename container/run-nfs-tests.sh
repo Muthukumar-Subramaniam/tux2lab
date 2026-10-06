@@ -1041,6 +1041,48 @@ for shutdown_state in running degraded stopping unknown query-error; do
 done
 printf 'PASS: privileged shutdown detection survives a missing public bus; normal CLI stop remains synchronous\n'
 
+for query_stage in confirmation initial wait remaining; do
+    (
+        source() { :; }
+        export CONTAINER_NAME=tux2lab-engine
+        query_log="$test_dir/stop-query-$query_stage"
+        : > "$query_log"
+        print_cyan() { :; }
+        print_info() { :; }
+        print_yellow() { :; }
+        print_task() { :; }
+        print_error() { :; }
+        print_task_done() { :; }
+        print_task_fail() { exit 99; }
+        stop_engine_nfs() { exit 99; }
+        remove_lablink0() { exit 99; }
+        shutdown_vm() { [[ "$1" == running-guest ]] || exit 99; }
+        sleep() { export elapsed=120; }
+        case "$query_stage" in
+            confirmation|initial) failure_at=1 ;;
+            wait) failure_at=2 ;;
+            remaining) failure_at=3 ;;
+        esac
+        sudo() {
+            case "$*" in
+                'podman container exists tux2lab-engine') return 1 ;;
+                'virsh list --state-running --name')
+                    printf 'query\n' >> "$query_log"
+                    [[ "$(wc -l < "$query_log")" != "$failure_at" ]] || return 1
+                    printf 'running-guest\n' ;;
+                *) exit 99 ;;
+            esac
+        }
+        stop_options=(--yes)
+        [[ "$query_stage" != confirmation ]] || stop_options=()
+        stop_status=0
+        (builtin source "$PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/stop.sh" "${stop_options[@]}") \
+            <<< 'CANCEL' >/dev/null 2>&1 || stop_status=$?
+        [[ "$stop_status" == 1 && "$(wc -l < "$query_log")" == "$failure_at" ]]
+    )
+done
+printf 'PASS: failed VM inspection blocks confirmation and shutdown before infrastructure teardown\n'
+
 for data_mount_case in directory mounted bind-error private-error share-error inspect-error empty-target verify-error private symlink; do
     (
         source "$PROJECT_ROOT/shared-functions/container-nfs.sh"

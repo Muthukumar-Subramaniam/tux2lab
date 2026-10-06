@@ -53,7 +53,10 @@ if [[ "${skip_confirm}" != "true" ]]; then
     print_yellow "This will shut down all running VMs and stop all tux2lab services."
 
     # Show running VMs if any
-    running_vms_list=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+    running_vms_list=$(sudo virsh list --state-running --name) || {
+        print_error "Cannot inspect running VMs; refusing lab shutdown."
+        exit 1
+    }
     if [[ -n "$running_vms_list" ]]; then
         vm_list=""
         while IFS= read -r vm; do
@@ -79,7 +82,10 @@ source /tux2lab/shared-functions/container-nfs.sh
 if sudo podman container exists "${CONTAINER_NAME}"; then
     require_container_nfs_engine "${CONTAINER_NAME}"
 fi
-running_vms=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+running_vms=$(sudo virsh list --state-running --name) || {
+    print_error "Cannot inspect running VMs; refusing lab shutdown."
+    exit 1
+}
 if [[ -n "$running_vms" ]]; then
     print_info "Sending graceful shutdown to all running VMs..."
     while IFS= read -r vm_name; do
@@ -91,7 +97,10 @@ if [[ -n "$running_vms" ]]; then
     print_task "Waiting up to ${vm_shutdown_timeout}s for VMs to shut down..."
     elapsed=0
     while [[ $elapsed -lt $vm_shutdown_timeout ]]; do
-        still_running=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+        still_running=$(sudo virsh list --state-running --name) || {
+            print_error "Cannot verify VM shutdown; lab infrastructure has been retained."
+            exit 1
+        }
         if [[ -z "$still_running" ]]; then
             break
         fi
@@ -100,7 +109,10 @@ if [[ -n "$running_vms" ]]; then
     done
 
     # Force stop any VMs still running
-    remaining=$(sudo virsh list --state-running --name 2>/dev/null | grep -v "^$" || true)
+    remaining=$(sudo virsh list --state-running --name) || {
+        print_error "Cannot verify remaining VMs; lab infrastructure has been retained."
+        exit 1
+    }
     if [[ -n "$remaining" ]]; then
         print_task_fail
         print_warning "Some VMs did not shut down gracefully. Force stopping..."

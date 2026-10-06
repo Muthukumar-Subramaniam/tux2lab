@@ -146,6 +146,34 @@ client paths. Candidate rule readiness and lab-side NFS access passed above;
 external-interface blocking remains unverified on Mariner. The released engine
 and host NFS remain restored; this scope clarification authorizes no new handover.
 
+### Approved Lab Maintenance Follow-up
+
+The user subsequently approved normal lab maintenance after the stop/start side
+effects were explained. The follow-up covers a temporary read-only ISO hot-mount,
+normal candidate lab stop/start, and two candidate rebuilds, followed by rollback
+and restoration of the original running guest set. Ordinary lab-scoped bridge,
+DNS, firewall-rule and service operations performed by those commands are in
+scope. Host reboot, firewall-service reload/restart, rule flushes, unrelated
+policy/routing changes, Azure network-security changes and publication remain
+excluded. Deliberate crash injection is not part of this follow-up.
+
+Before use, `stop` now refuses failed VM-list queries during confirmation,
+initial shutdown, waiting and final inspection. Rootless failure-injection tests
+pass and verify that infrastructure teardown does not follow an inspection error.
+The full command still has its documented 120-second forced-stop fallback; any
+occurrence must be recorded rather than reported as graceful shutdown.
+
+The released checkout remains unchanged. Candidate lifecycle commands can use a
+private mount namespace with a non-recursively private root and the worktree
+bind-mounted at `/tux2lab`. The separate `/tux2lab-data` shared mount must retain
+its propagation so ISO mount/unmount operations are real host operations, not
+isolated substitutes. A read-only probe verified source equality, shared data
+propagation and the unchanged global checkout/mounts. Git is not usable through
+this mapped worktree because its metadata points into the hidden released tree;
+compare source hashes in the private view and run Git outside it. Execute the
+normal lifecycle scripts as the lab administrator, not root, with the explicit
+local candidate image. Execution results are pending.
+
 ### Debian 13 Preparation
 
 The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
