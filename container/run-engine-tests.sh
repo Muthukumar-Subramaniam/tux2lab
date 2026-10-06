@@ -890,7 +890,7 @@ import sys
 import time
 
 project, server, relative_file, evidence_path, shutdown_mode = sys.argv[1:]
-assert shutdown_mode in ("stop", "kill")
+assert shutdown_mode in ("stop", "kill", "kill-stop")
 evidence = Path(evidence_path)
 engine = "tux2lab-engine"
 client = None
@@ -957,7 +957,7 @@ with (evidence / "client.stderr").open("wb") as client_errors:
         firewall = command(["sudo", "-n", "nft", "-j", "-s", "list", "table", "inet", "tux2lab_nfs"],
                            log="firewall-before.json")
         restart_needed = True
-        if shutdown_mode == "kill":
+        if shutdown_mode in ("kill", "kill-stop"):
             command(["sudo", "-n", "podman", "kill", "--signal", "KILL", engine], log="stop.log")
             assert command(["sudo", "-n", "podman", "wait", engine], timeout=30).strip() == "137"
             assert inspect_engine()["State"]["ExitCode"] == 137
@@ -965,9 +965,13 @@ with (evidence / "client.stderr").open("wb") as client_errors:
                                log="firewall-after.json")
             assert json.loads(retained) == json.loads(firewall), "Crash changed NFS firewall protection"
             print("PASS: PID1 SIGKILL exits 137 and retains NFS firewall protection", flush=True)
-            command(["sudo", "-n", "timeout", "--kill-after=5", "90", "unshare", "--mount",
-                     "--propagation", "private", "python3", project + "/shared-functions/nfs-recovery.py",
-                     "recover", engine], timeout=100, log="ownership-recovery.log")
+            if shutdown_mode == "kill-stop":
+                command(["/usr/local/bin/tux2lab", "stop", "--yes"], timeout=150,
+                        log="ownership-recovery.log")
+            else:
+                command(["sudo", "-n", "timeout", "--kill-after=5", "90", "unshare", "--mount",
+                         "--propagation", "private", "python3", project + "/shared-functions/nfs-recovery.py",
+                         "recover", engine], timeout=100, log="ownership-recovery.log")
             retained = command(["sudo", "-n", "nft", "-j", "-s", "list", "table", "inet", "tux2lab_nfs"])
             assert json.loads(retained) == json.loads(firewall), "Recovery removed NFS firewall protection"
             print("PASS: ownership-checked kernel recovery retains NFS firewall protection", flush=True)
@@ -1025,6 +1029,9 @@ case "${1:-}" in
     --deployed-crash)
         [[ $# == 4 ]] || exit 2
         run_deployed_restart_test "$2" "$3" "$4" kill ;;
+    --deployed-crash-stop)
+        [[ $# == 4 ]] || exit 2
+        run_deployed_restart_test "$2" "$3" "$4" kill-stop ;;
     --deployed-crash-start)
         [[ $# == 3 ]] || exit 2
         run_deployed_cli_recovery_test "$2" "$3" ;;
@@ -1063,5 +1070,5 @@ case "${1:-}" in
     --failure)
         [[ $# == 2 ]] || exit 2
         run_engine_tests "$2" '' true ;;
-    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-crash-start EXPECTED_HOST EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp|--deployed-network EXPECTED_HOST EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-firewall EXPECTED_HOST EVIDENCE_DIR start|reload|restart|restore\n       sudo bash container/run-engine-tests.sh --restore-deployed-firewall EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
+    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash|--deployed-crash-stop EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-crash-start EXPECTED_HOST EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp|--deployed-network EXPECTED_HOST EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-firewall EXPECTED_HOST EVIDENCE_DIR start|reload|restart|restore\n       sudo bash container/run-engine-tests.sh --restore-deployed-firewall EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
 esac

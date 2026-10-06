@@ -170,6 +170,9 @@ stop_engine_nfs() {
     if [[ "$exists" == true ]]; then
         require_container_nfs_engine "$name" || return 1
         sudo podman stop --time 30 "$name" || return 1
+        if ! verify_container_nfs_stopped; then
+            recover_engine_nfs "$name" || return 1
+        fi
     fi
     verify_container_nfs_stopped
 }

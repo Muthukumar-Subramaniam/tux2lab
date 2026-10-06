@@ -101,9 +101,10 @@ def native_preflight():
     command(["bash", "-c", 'source "$1"; container_nfs_host_preflight', "nfs-recovery", helper])
 
 
-def require_stopped(metadata):
+def require_stopped(metadata, allow_created=False):
     state = metadata["State"]
-    if (state["Running"] is not False or state["Status"] != "exited"
+    allowed = ("exited", "created") if allow_created else ("exited",)
+    if (state["Running"] is not False or state["Status"] not in allowed
             or state["Pid"] != 0 or state.get("Restarting", False)):
         raise ValueError("Engine is not fully stopped; refusing recovery")
 
@@ -165,10 +166,11 @@ def control_mount():
 def recover_owner(name):
     metadata = inspect_engine(name)
     root = engine_root(metadata)
-    require_stopped(metadata)
+    require_stopped(metadata, allow_created=True)
     if not kernel_threads():
         require_no_listeners()
         return
+    require_stopped(metadata)
     record = root.parent / "nfs-owner.json"
     private_path(record)
     recorded = json.loads(record.read_text())

@@ -48,11 +48,15 @@ snapshot_host_nfs() {
     mkdir -p "$(dirname "$NFS_MIGRATION_DIR")" || return 1
     mkdir -m 700 "$NFS_MIGRATION_DIR" || return 1
     : > "$NFS_MIGRATION_DIR/units" || return 1
+    : > "$NFS_MIGRATION_DIR/aliases" || return 1
     : > "$NFS_MIGRATION_DIR/masked" || return 1
     for unit in "${NFS_UNITS[@]}"; do
         load_state=$(systemctl show "$unit" -p LoadState --value) || return 1
         [[ "$load_state" == loaded ]] || continue
         canonical=$(systemctl show "$unit" -p Id --value) || return 1
+        if [[ "$unit" != "$canonical" ]]; then
+            printf '%s\n' "$unit" >> "$NFS_MIGRATION_DIR/aliases" || return 1
+        fi
         [[ -z "${seen[$canonical]:-}" ]] || continue
         seen[$canonical]=yes
         active=$(systemctl show "$canonical" -p ActiveState --value) || return 1
@@ -141,6 +145,10 @@ apply_nfs_migration() {
         printf '%s\n' "$unit" >> "$NFS_MIGRATION_DIR/masked" || return 1
         systemctl mask "$unit" || return 1
     done < "$NFS_MIGRATION_DIR/units"
+    while IFS= read -r unit; do
+        printf '%s\n' "$unit" >> "$NFS_MIGRATION_DIR/masked" || return 1
+        systemctl mask "$unit" || return 1
+    done < "$NFS_MIGRATION_DIR/aliases"
     while IFS=$'\t' read -r unit active enabled; do
         if ! systemctl stop "$unit"; then
             [[ "$(systemctl show "$unit" -p ActiveState --value)" != active ]] || return 1
@@ -178,9 +186,11 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     mkdir -p /run/lock
     exec 9>/run/lock/tux2lab-nfs-migration.lock
     flock -n 9 || { printf 'Another NFS migration is running.\n' >&2; exit 1; }
-    case "$1" in
-        --check) migration_preflight "$2" ;;
-        --apply) apply_nfs_migration "$2" ;;
-        --rollback) restore_host_nfs ;;
-    esac
+    (
+        case "$1" in
+            --check) migration_preflight "$2" ;;
+            --apply) apply_nfs_migration "$2" ;;
+            --rollback) restore_host_nfs ;;
+        esac
+    ) 9>&-
 fi

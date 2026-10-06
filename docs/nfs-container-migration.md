@@ -13,8 +13,8 @@ to main. This is not yet a release-ready replacement for host NFS.
 The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
 the Alma test host. October 5 adds actual deployed DHCPv4/DHCPv6 and RA acceptance
 and a host dependency inventory, followed by released-baseline migration and
-rollback acceptance on Alma. Ubuntu and current-host acceptance, security-policy
-gates remain. Scoped kernel-helper tracing is complete with host packages
+rollback acceptance on Alma. Current-host handover/PXE and final release gates
+remain. Scoped kernel-helper tracing is complete with host packages
 retained. The libvirt bridge-zone conflict is corrected on Alma with firewalld
 enabled; reload/restart and real client reads pass. Permissive relabel/automatic
 startup and controlled runtime SELinux enforcing tests also pass. Alma is left
@@ -25,8 +25,10 @@ below. Ubuntu 24.04 setup/deployment, live ISO propagation, actual DHCP/RA and
 full NFS reads pass with explicit native-owner preparation. Graceful active-client
 recovery passes. PID1 SIGKILL leaves kernel NFS listeners on Ubuntu, but the
 ownership-checked startup recovery below now passes, including missing-evidence
-refusal and active-client reclaim. Remaining Ubuntu lifecycle, migration/rollback
-and applicable security-policy acceptance are still incomplete.
+refusal and active-client reclaim. Ubuntu stop/start, rebuilds, verified reboot,
+released-baseline migration and both rollback paths now pass. AppArmor stayed
+enabled, read-only and RPC confinement checks pass, and the bounded Ubuntu stage
+is complete with the limitations recorded below. No parent handover is implied.
 
 ## Maintained Code
 
@@ -1109,7 +1111,7 @@ Release and follow-up host matrix (not verified support claims):
 | Family | Test-host targets | Status |
 | --- | --- | --- |
 | Enterprise RPM | AlmaLinux 9.8 | Release gate: setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below |
-| Debian-based | Ubuntu 24.04 LTS | Release gate: setup/deployment, live ISO, DHCP/RA, full NFS reads and graceful/ownership-checked SIGKILL recovery pass; remaining lifecycle and migration/security gates pending |
+| Debian-based | Ubuntu 24.04 LTS | Bounded representative stage complete: setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, recorded-owner recovery, migration/rollback and default-policy checks; limitations below |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
@@ -1372,7 +1374,119 @@ or missing-record adoption, and no support for concurrent manual changes to
 host NFS ownership. Root administrators remain trusted; these checks are not
 a security boundary against privileged tampering. The new recovery path has
 actual Ubuntu evidence, not a new Alma/Mariner runtime acceptance claim.
-Remaining Ubuntu gates and separately approved parent handover/PXE are unchanged.
+At that checkpoint, remaining Ubuntu gates and separately approved parent
+handover/PXE were unchanged. The continuation below supersedes that status.
+
+#### Ubuntu Lifecycle and Migration Completion (October 6, 2026)
+
+The user authorized continuing the remaining Ubuntu checks. Only the dedicated
+Ubuntu host and migration worktree were changed. No deeper guest, host package
+removal, image rebuild/publication, parent handover or main merge occurred.
+
+Lifecycle results:
+
+- Actual `tux2lab stop --yes` and `tux2lab start` passed, including verified NFS
+  shutdown, ISO unmount/remount and preservation of configuration/network data.
+- Two actual `tux2lab rebuild --yes` runs using the existing direct-layout image
+  passed. Each replaced the engine/root and removed the superseded managed
+  instance only after readiness. Full installer reads passed afterward.
+- `tux2lab enable` installed/enabled the normal boot unit. The first reboot
+  started automatically, but shutdown failed because systemd stopped the Podman
+  scopes before lab cleanup, leaving NFS listeners. A runtime-only exact-scope
+  `After=` probe then blocked in `podman stop` until the 120-second service
+  timeout. That failed probe was not promoted; its `/run` drop-in is gone.
+- The interrupted shutdown left Podman reporting `created`, PID zero, on the
+  next boot. Recovery now permits this clean state only when kernel workers and
+  reserved listeners are absent. Live-worker recovery still requires `exited`
+  and the full private ownership proof. Normal service startup restored the
+  existing engine without deleting or recreating it.
+- `stop_engine_nfs` now attempts the same ownership-checked recovery if ordinary
+  stop leaves residual NFS state, then requires final stopped verification.
+  Unknown ownership still blocks filesystem teardown. Rootless regressions
+  cover clean, recovered, refused and absent-owner paths. The successful actual
+  reboot below did not need the fallback, so it is not a claim that every
+  shutdown race has been reproduced with the new branch executing.
+- The subsequent actual reboot passed previous-boot lab shutdown, ISO cleanup,
+  unit deactivation and automatic startup. Full DHCPv4/v6, RA and NFSv3/IPv4 plus
+  NFSv4.1/IPv4/IPv6 installer reads passed afterward. Final boot ID:
+  `2f33d342-a776-47c0-9999-3f9adcc4f0a1`. SSH authorization, custom persistent
+  network and lab configuration hashes were unchanged.
+
+The new `--deployed-crash-stop HOST RELATIVE_FILE EVIDENCE` mode reuses the active
+NFSv4 descriptor harness but invokes full CLI stop after SIGKILL. A file on the
+persistent XFS data filesystem recovered matching direct reads and server OPEN
+state after startup. The ISO-submount file returned EIO after full CLI stop
+unmounted/remounted that filesystem. These runs left no residual workers by stop
+verification, so neither proves live execution of the fallback branch. The
+earlier engine-only graceful/SIGKILL ISO-handle recovery remains a separate pass.
+Drain clients before full lab stop; continuity across deliberate ISO teardown is
+not an accepted guarantee.
+
+Actual released-baseline migration:
+
+- Staged released source `0d0c7dc01395a484a98f2ef3a72f6aea0b465bf9` and the exact
+  local 2.1.1 image, without replacing the guest checkout or parent runtime.
+  Retained the current candidate as the guarded restoration target.
+- Fresh Ubuntu lacked `/etc/exports.d`. The initial harness backup stopped
+  before ownership mutation. It now records absence and removes only an empty
+  directory it created during restoration, refusing unexpected contents.
+- The first real handover failed because masking canonical `nfs-server.service`
+  left Ubuntu's `nfs-kernel-server.service` alias with an unusable load state.
+  Automatic rollback restored the baseline, then the original candidate.
+  Migration snapshots now retain alias names separately, mask them too, and
+  unmask them on rollback while recording canonical service state once.
+- A retry exposed an inherited acceptance-lock descriptor in `conmon`. Normal
+  engine stop/start released it. Supervising shells now retain acceptance and
+  migration locks while descriptor-closed children run the workload, including
+  EXIT-trap rollback. No lock file was deleted to bypass ownership.
+- The corrected cycle passed real apply, explicit rollback and fault injection
+  after the real candidate became ready, followed by automatic rollback and
+  original restoration. All five states passed full installer checksums over
+  NFSv3/IPv4 and NFSv4.1/IPv4/IPv6, 15 full reads in total. Both rollback paths
+  restored the released engine ID, exports, native unit states and lockd values.
+  Final restoration included Ubuntu's active `run-rpc_pipefs.mount` and
+  `nfs-blkmap.service`, original absent exports directory, and released locks.
+- Released 2.1.1 still needed Podman's SIGKILL fallback after its 30-second stop
+  timeout, as on Alma. This is recorded, not a new graceful-stop claim for that
+  old image. The maintained candidate passed readiness and restoration checks.
+
+Final policy checks: AppArmor remained active/enabled with no `apparmor="DENIED"`
+records in the final test boot. The privileged engine has an empty AppArmor
+profile; this is compatibility, not confinement. Firewalld and UFW remain
+absent/inactive, not enabled/reload acceptance. Actual management-interface
+IPv4/IPv6 probes could reach SSH but not TCP ports 111/2049/20048/32803 or UDP
+NULL RPC on 111/20048/32769. Server-side EROFS was verified from `rw` mounts on
+all three accepted protocol/address combinations. Only `/tux2lab-data` was
+advertised and only `tux2lab-data` appeared at the NFSv4 root.
+
+Private evidence on Ubuntu:
+
+- `/home/musubram/nfs-ubuntu-lifecycle.7Sw5f8yt/`: ordinary lifecycle, rebuilds,
+  failed ordering probe, clean-Created restoration, successful reboot and full
+  postboot network/protocol reads.
+- `/home/musubram/nfs-ubuntu-crash-stop.aDrSqnuD/`: full-stop ISO-handle EIO.
+- `/home/musubram/nfs-ubuntu-crash-stop-base.VY3Auo3L/`: persistent-file recovery.
+- `/home/musubram/nfs-migration-validation.Z9cL5xYb/`: pre-mutation backup failure.
+- `/home/musubram/nfs-migration-validation.YI9DDNmQ/`: alias failure and guarded
+  original-engine restoration.
+- `/home/musubram/nfs-migration-validation.cdop2Zgm/`: final complete migration,
+  both rollbacks, original restoration, policy/read-only checks and health.
+
+Final engine ID is
+`960e098711e554c50e04cead2b982a3af0694985cb791c4269ea5a8be6a9f759`, using
+`/var/lib/tux2lab/engine-rootfs/engine.1DVdbSXc/rootfs`. This replaces the earlier
+`c0f764...` identity through the successful rebuilds. The image is unchanged,
+the lab boot unit stays enabled, and all three inherited credential-sync hooks
+remain disabled/inactive. Alma stays off. Rootless regressions, warning-level
+ShellCheck and editor checks pass; code, tests and this runbook are the portable
+checkpoint, not private evidence/disks/credentials.
+
+The bounded Ubuntu stage is complete. Remaining work is separately approved
+current-Mariner handover, real PXE/rollback, then final review/image/release
+gates. No independent-client host-reboot recovery, nested guest provisioning,
+package-free operation, strong container confinement, writable NFS locking or
+additional distribution/version acceptance is claimed. The latest recovery
+changes have not been rerun on the powered-off Alma host.
 
 ### AlmaLinux Remaining Work (Updated October 5, 2026)
 

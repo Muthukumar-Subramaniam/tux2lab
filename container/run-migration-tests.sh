@@ -7,7 +7,8 @@ source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
 TEST_UNITS=(nfs-server.service nfs-mountd.service nfs-idmapd.service nfsdcld.service
     rpc-statd.service rpcbind.service rpcbind.socket proc-fs-nfsd.mount
     auth-rpcgss-module.service rpc-statd-notify.service rpc_pipefs.target
-    var-lib-nfs-rpc_pipefs.mount nfs-client.target gssproxy.service)
+    var-lib-nfs-rpc_pipefs.mount run-rpc_pipefs.mount nfs-blkmap.service
+    nfs-client.target gssproxy.service)
 SAVED_ENGINE=tux2lab-engine-acceptance-original
 
 snapshot_units() {
@@ -123,6 +124,9 @@ restore_current_engine() {
         done < "$EVIDENCE/original-units"
         verify_container_nfs_stopped || return 1
         rm -f /etc/exports.d/tux2lab.exports || return 1
+        if [[ -f "$EVIDENCE/exports-dir-absent" && -e /etc/exports.d ]]; then
+            rmdir /etc/exports.d || return 1
+        fi
         tar -xpf "$EVIDENCE/host-config.tar" -C / || return 1
         tar -xpf "$EVIDENCE/host-nfs-state.tar" -C /var/lib/nfs || return 1
         if [[ -d "$EVIDENCE/original-nfs" ]]; then
@@ -152,6 +156,7 @@ restore_current_engine() {
 run_acceptance() (
     local expected_host="$1" released_image="$2" candidate_image="$3" released_source="$EVIDENCE/released-source"
     local ipv4 ipv6 bridge engine_fqdn failure_status label clients
+    local -a host_config=(etc/nfs.conf etc/exports)
     check_evidence
     check_test_host "$expected_host"
     [[ ! -e "$EVIDENCE/original-id" && ! -e /etc/exports.d/tux2lab.exports ]]
@@ -161,14 +166,17 @@ run_acceptance() (
     container_nfs_image_check "$candidate_image"
     clients=$(podman exec tux2lab-engine find /proc/fs/nfsd/clients -mindepth 1 -maxdepth 1 -type d)
     [[ -z "$clients" ]]
-    exec 8>/run/lock/tux2lab-nfs-acceptance.lock
-    flock -n 8
     hostname -f > "$EVIDENCE/host"
     podman inspect tux2lab-engine --format '{{.Id}}' > "$EVIDENCE/original-id"
     snapshot_units > "$EVIDENCE/original-units"
     sysctl -n fs.nfs.nlm_tcpport > "$EVIDENCE/original-lockd-tcp"
     sysctl -n fs.nfs.nlm_udpport > "$EVIDENCE/original-lockd-udp"
-    tar -cpf "$EVIDENCE/host-config.tar" -C / etc/nfs.conf etc/exports etc/exports.d
+    if [[ -e /etc/exports.d || -L /etc/exports.d ]]; then
+        host_config+=(etc/exports.d)
+    else
+        touch "$EVIDENCE/exports-dir-absent"
+    fi
+    tar -cpf "$EVIDENCE/host-config.tar" -C / "${host_config[@]}"
     tar --one-file-system --exclude=./rpc_pipefs -cpf "$EVIDENCE/host-nfs-state.tar" -C /var/lib/nfs .
     chmod 600 "$EVIDENCE/host-config.tar" "$EVIDENCE/host-nfs-state.tar"
     restore_on_exit() {
@@ -228,7 +236,7 @@ run_tux2lab_container() {
     printf 'INJECTED: reject handover after the real candidate becomes ready\n' >&2
     return 1
 }
-apply_nfs_migration "$2"
+(apply_nfs_migration "$2") 9>&-
 FAILURE
     cat "$EVIDENCE/injected-failure.log"
     [[ "$failure_status" == 1 ]]
@@ -248,7 +256,10 @@ case "${1:-}" in
     --run)
         [[ $# == 5 ]] || exit 2
         EVIDENCE="$3"
-        run_acceptance "$2" "$4" "$5" ;;
+        (
+            flock -n 8 || { printf 'Another acceptance run holds the lock.\n' >&2; exit 1; }
+            run_acceptance "$2" "$4" "$5" 8>&-
+        ) 8>/run/lock/tux2lab-nfs-acceptance.lock ;;
     --restore)
         [[ $# == 3 && "$(hostname -f)" == "$2" ]] || exit 2
         EVIDENCE="$3"

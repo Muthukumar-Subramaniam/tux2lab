@@ -85,6 +85,32 @@ for field, value in (("Running", True), ("Status", "stopping"), ("Pid", 123), ("
         pass
     else:
         raise AssertionError("Live/transitional engine accepted")
+created = copy.deepcopy(stopped)
+created["State"]["Status"] = "created"
+recovery.require_stopped(created, allow_created=True)
+try:
+    recovery.require_stopped(created)
+except ValueError:
+    pass
+else:
+    raise AssertionError("Created engine accepted for orphan adoption")
+with patch.object(recovery, "inspect_engine", return_value=created), \
+        patch.object(recovery, "engine_root", return_value=Path("/private/rootfs")), \
+        patch.object(recovery, "kernel_threads", return_value=[]), \
+        patch.object(recovery, "require_no_listeners") as listeners:
+    recovery.recover_owner("engine")
+    listeners.assert_called_once_with()
+with patch.object(recovery, "inspect_engine", return_value=created), \
+        patch.object(recovery, "engine_root", return_value=Path("/private/rootfs")), \
+        patch.object(recovery, "kernel_threads", return_value=[{"pid": 42, "start": 100}]), \
+        patch.object(recovery, "control_mount") as control:
+    try:
+        recovery.recover_owner("engine")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Created engine adopted live workers")
+    control.assert_not_called()
 print("PASS: recovery requires matching boot, engine, kernel worker generations and firewall")
 RECOVERYTEST
 }
@@ -605,6 +631,30 @@ printf 'PASS: replacement failure restores previous engine\n'
 )
 printf 'PASS: residual kernel listener blocks cleanup\n'
 
+for recovery_case in clean residual rejected absent; do
+    (
+        source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+        container_nfs_exists() {
+            if [[ "$recovery_case" == absent ]]; then printf 'false\n'; else printf 'true\n'; fi
+        }
+        require_container_nfs_engine() { :; }
+        sudo() { [[ "$*" == 'podman stop --time 30 engine' ]]; }
+        verify_container_nfs_stopped() {
+            [[ "$recovery_case" == clean || -e "$test_dir/recovered-$recovery_case" ]]
+        }
+        recover_engine_nfs() {
+            [[ "$recovery_case" == residual ]] || return 1
+            touch "$test_dir/recovered-$recovery_case"
+        }
+        if stop_engine_nfs engine; then
+            [[ "$recovery_case" == clean || "$recovery_case" == residual ]]
+        else
+            [[ "$recovery_case" == rejected || "$recovery_case" == absent ]]
+        fi
+    )
+done
+printf 'PASS: stop recovers only verified residual state and retains failed/unknown ownership\n'
+
 test_nfs_recovery_identity
 
 bash -s "$PROJECT_ROOT" "$test_dir" <<'RECOVERYGUARDS'
@@ -689,7 +739,7 @@ printf 'PASS: failed NFS shutdown blocks host rollback\n'
     printf 'original\n' > "$NFS_MIGRATION_DIR/engine-id"
     printf 'rpcbind.service\tactive\tenabled\n' > "$NFS_MIGRATION_DIR/units"
     printf 'nfs-idmapd.service\tinactive\tstatic\n' >> "$NFS_MIGRATION_DIR/units"
-    printf 'rpcbind.service\n' > "$NFS_MIGRATION_DIR/masked"
+    printf 'rpcbind.service\nnfs-kernel-server.service\n' > "$NFS_MIGRATION_DIR/masked"
     printf '/tux2lab-data 192.0.2.0/24(ro)\n' > "$NFS_MIGRATION_DIR/exports"
     printf '0\n' > "$NFS_MIGRATION_DIR/lockd-tcp"
     printf '0\n' > "$NFS_MIGRATION_DIR/lockd-udp"
@@ -713,6 +763,7 @@ printf 'PASS: failed NFS shutdown blocks host rollback\n'
     [[ ! -e "$NFS_MIGRATION_DIR" ]]
     grep -qx 'podman rename tux2lab-engine-host-nfs-backup tux2lab-engine' "$test_dir/host-rollback.log"
     grep -qx 'systemctl unmask rpcbind.service' "$test_dir/host-rollback.log"
+    grep -qx 'systemctl unmask nfs-kernel-server.service' "$test_dir/host-rollback.log"
     grep -qx 'systemctl show rpcbind.service -p ActiveState --value' "$test_dir/host-rollback.log"
     grep -qx 'systemctl stop nfs-idmapd.service' "$test_dir/host-rollback.log"
     grep -qx 'podman start tux2lab-engine' "$test_dir/host-rollback.log"
@@ -750,6 +801,30 @@ printf 'PASS: missing original engine blocks host rollback\n'
     [[ ! -e "$NFS_MIGRATION_DIR/snapshot-complete" ]]
 )
 printf 'PASS: failed snapshot cannot authorize host mutation\n'
+
+bash -s -- "$PROJECT_ROOT" "$test_dir" <<'ALIASTEST'
+    set -euo pipefail
+    source "$1/setup/migrate-nfs-to-container.sh"
+    NFS_MIGRATION_DIR="$2/alias-snapshot"
+    NFS_UNITS=(nfs-server.service nfs-kernel-server.service)
+    systemctl() {
+        case "$*" in
+            *'-p LoadState --value') printf 'loaded\n' ;;
+            *'-p Id --value') printf 'nfs-server.service\n' ;;
+            *'-p ActiveState --value') printf 'active\n' ;;
+            *'-p UnitFileState --value') printf 'enabled\n' ;;
+            *) return 1 ;;
+        esac
+    }
+    exportfs() { printf '/tux2lab-data 192.0.2.0/24(ro)\n'; }
+    sysctl() { printf '0\n'; }
+    podman() { printf 'original\n'; }
+    snapshot_host_nfs
+    [[ "$(cat "$NFS_MIGRATION_DIR/units")" == $'nfs-server.service\tactive\tenabled' ]]
+    [[ "$(cat "$NFS_MIGRATION_DIR/aliases")" == nfs-kernel-server.service ]]
+    [[ -e "$NFS_MIGRATION_DIR/snapshot-complete" ]]
+ALIASTEST
+printf 'PASS: snapshot retains aliases while recording canonical service state once\n'
 
 for lookup_status in 0 1 125; do
     (
