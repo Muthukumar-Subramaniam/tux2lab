@@ -37,6 +37,67 @@ harness changes were needed; the production runtime and image are unchanged.
 This is an explicit bounded scope extension, not SUSE-family certification or
 an exhaustive distribution matrix. Detailed results and limits are below.
 
+The user subsequently selected Debian 13 and Azure Linux 3.0 as two additional
+representative hosts, tested sequentially before parent handover. This does not
+include Debian 11/12, Azure Linux 4, or every supported guest distribution/version.
+Neither host may run an inner VM. Parent maintenance remains separately approved.
+
+### Debian 13 Preparation
+
+The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
+kernel `6.12.107+deb13-amd64`, and XFS on `/dev/vda3`. It has two vCPUs, 4 GiB RAM
+and a 60 GiB disk. Its UUID is `5480a558-d339-4ee9-9817-9949effd1a13`, management
+addresses are `10.28.28.17` and `fd28:2808:2020:3000::11`, and its MAC is
+`52:54:00:80:2a:18`. Only CPU exposure was changed to host-passthrough while fully
+powered off; structural XML comparison and KVM API version 12 checks passed.
+Golden boot completed, all three inherited credential hooks were disabled and
+stopped, and a dedicated key was independently verified before host setup.
+
+Source checkpoint `c7c37689b424ea27d8a31a1b46c81430b22b40f2` was staged at the
+guest's `/tux2lab`. The guest-only network uses `10.10.32.1/22` and
+`fd60:6060:2026:4::1/64`, NAT, no libvirt DNS/DHCP and only the dummy bridge member.
+Its persistent UUID is `24bde9d0-7f96-44d6-bb7d-ef0a1dcfc681`.
+
+Initial setup installed the required packages but libvirt refused bridge startup:
+the ifupdown-managed `eth0` has a static IPv6 address, an RA-learned default route,
+and `accept_ra=1`. Enabling forwarding would flush that route. After saving the
+interface configuration, route and sysctl baseline, the test guest alone received
+`/etc/sysctl.d/90-tux2lab-validation-management-ra.conf` containing:
+
+```ini
+net.ipv6.conf.eth0.accept_ra = 2
+```
+
+Applying that file with
+`sudo sysctl -p /etc/sysctl.d/90-tux2lab-validation-management-ra.conf` and rerunning
+the actual setup succeeded.
+An exact gateway/interface comparison confirmed the management route survived
+forwarding and bridge startup. This is an explicit test-host network prerequisite,
+not a production NFS change; persistence still requires the reboot acceptance.
+
+APT activated native NFS/RPC. Checked exports, guest/container inventories and
+host NFS client mounts were empty before preparation. Native configuration and
+unit state were saved, the native server was disabled and its dependencies
+stopped, and rpcbind service/socket were masked. Container preflight and stopped
+listener checks passed; packages remain installed. AppArmor remains active and
+enabled with its kernel flag `Y`; firewalld is inactive. Installed versions include
+Podman `5.4.2+ds1-2+b2`, libvirt `11.3.0-3+deb13u3`, QEMU
+`10.0.13+ds-0+deb13u1`, nfs-kernel-server `1:2.8.3-1`, rpcbind `1.2.7-1` and
+AppArmor `4.1.0-1`.
+
+The unchanged candidate image
+`ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6` was transferred
+and its direct-layout labels verified. The maintained rootless suite passed on
+Debian. The parent released engine and exports remain unchanged; its seven
+Kubernetes guests and Debian are running, while Alma, Ubuntu and now SUSE are
+off. No SUSE lifecycle command was run during Debian preparation.
+
+Private guest evidence is `/home/musubram/nfs-host-preparation.9cissX1J`.
+Original/staged runtime XML and the guest sysctl input remain outside Git under
+the worktree's `.test-artifacts/nfs-host-debian13`. Deployment, functional,
+lifecycle, migration and security acceptance are not yet complete. Azure Linux
+3.0 has not been provisioned.
+
 ## Maintained Code
 
 | Owner | Responsibility |
@@ -347,7 +408,8 @@ export discovery. The compatibility finding and integration results below
 supersede the earlier `/export` design. Existing tests do not replace the
 remaining actual lab setup, deployment or integrated PXE acceptance checks.
 The release scope is bounded to AlmaLinux, Ubuntu 24.04 LTS, the explicitly
-added openSUSE Leap 16.0 host, and the current CBL-Mariner KVM host, followed by
+added openSUSE Leap 16.0, Debian 13 and Azure Linux 3.0 hosts, and the current
+CBL-Mariner KVM host, followed by
 release preparation. This supersedes the
 earlier expectation of completing the wider host matrix before publication.
 Other host families and additional distro/version combinations move to
@@ -369,7 +431,13 @@ The remaining work follows this sequence:
   setup/deployment, original-layout NFS/ISO, lifecycle/recovery,
   released-baseline migration/rollback and applicable security-policy checks.
   Do not create guests inside it. Other SUSE versions and SLES remain unverified.
-3. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
+3. **Validate Debian 13, then Azure Linux 3.0.** Explicitly selected by the user
+  after Leap completion. Use one dedicated host at a time and the same complete
+  bounded acceptance. Debian preparation has passed with the recorded RA and
+  native-owner prerequisites; deployment and acceptance remain. Azure Linux 3.0
+  is not yet provisioned. No guests inside either host, no Debian 11/12 or Azure
+  Linux 4 expansion, and no parent-handover authorization are implied.
+4. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
   window on the current CBL-Mariner host, test actual NFS handover, normal
   tux2lab VM creation and unchanged 2 GiB AlmaLinux/Ubuntu NFS-backed PXE
   installations through installed-disk boot. Verify all deployed services, ISO
@@ -377,7 +445,7 @@ The remaining work follows this sequence:
   firewall behavior, recovery and rollback. Schedule host reboot and disruptive
   fault injection explicitly within that window. Historical standalone-server
   experiments and sibling-VM protocol tests do not replace this workflow.
-4. **Release preparation.** Resolve findings and rerun affected checks, record
+5. **Release preparation.** Resolve findings and rerun affected checks, record
   results and unsupported/untested configurations, and finalize cleanup and
   documentation. Complete the host executable/upcall dependency audit before
   any separately approved host NFS package removal. Keep development images
@@ -387,8 +455,8 @@ The remaining work follows this sequence:
 ### Effort and Scope Boundaries
 
 The following estimates are the original plan, before completed Alma/Ubuntu work
-and the October 6 Leap extension. They are not a current remaining-work total;
-no new completion date or Leap estimate has been committed.
+and the October 6 Leap, Debian and Azure extensions. They are not a current
+remaining-work total; no new completion date or extension estimate is committed.
 
 | Remaining Stage | Rough Active Work |
 | --- | --- |
@@ -1115,8 +1183,9 @@ health passed 11/11 and 6/6, and custom network XML remained byte-identical.
 
 ## Cross-Distribution Host Verification
 
-Use AlmaLinux, Ubuntu 24.04 LTS and openSUSE Leap 16.0 as dedicated representative
-test hosts before release, followed by acceptance on the existing CBL-Mariner KVM host. Each test
+Use AlmaLinux, Ubuntu 24.04 LTS, openSUSE Leap 16.0, Debian 13 and Azure Linux 3.0
+as dedicated representative test hosts before release, followed by acceptance
+on the existing CBL-Mariner KVM host. Each test
 VM runs its own kernel, systemd, Podman and actual tux2lab installation.
 The required outcome is a successfully set up and deployed lab, not merely a
 manually started container or a collection of passing component tests.
@@ -1131,8 +1200,9 @@ Release and follow-up host matrix (not verified support claims):
 | Debian-based | Ubuntu 24.04 LTS | Bounded representative stage complete: setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, recorded-owner recovery, migration/rollback and default-policy checks; limitations below |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
-| Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
-| Microsoft | Azure Linux 3.0 | Follow-up validation; unverified |
+| Debian-based | Debian 13 | Explicitly added gate: actual host setup and rootless suite passed; deployment and bounded acceptance pending |
+| Debian-based | Debian 11/12 and additional Ubuntu releases | Follow-up validation; unverified |
+| Microsoft | Azure Linux 3.0 | Explicitly added gate: dedicated host not yet provisioned; bounded acceptance pending |
 | Fedora | Fedora | Follow-up validation; unverified |
 | SUSE | openSUSE Leap 16.0 | Bounded representative stage complete: actual setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, engine recovery, migration/rollback and default-policy checks; limitations below |
 | SUSE | Other Leap releases and SLES | Follow-up validation; unverified |
