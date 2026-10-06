@@ -7,14 +7,15 @@ Development implementation on `migration/nfs-host-to-container`, branched from
 scripts and results are backed up on origin in commit
 `a3cf462a6445780c0024ec741ce22c88b160eef1`.
 
-The live lab still uses its released engine and host NFS. Implementation and
-isolated tests do not authorize a live handover, host package removal or a merge
-to main. This is not yet a release-ready replacement for host NFS.
+The live lab is back on its released engine and host NFS after the bounded
+Mariner handover/PXE/rollback acceptance recorded below. Implementation and
+isolated tests do not authorize additional maintenance, host package removal or
+a merge to main. This is not yet a release-ready replacement for host NFS.
 The October 3 device-bind checkpoint fixes hot-added ISO filehandle identity on
 the Alma test host. October 5 adds actual deployed DHCPv4/DHCPv6 and RA acceptance
 and a host dependency inventory, followed by released-baseline migration and
-rollback acceptance on Alma. Current-host handover/PXE and final release gates
-remain. Scoped kernel-helper tracing is complete with host packages
+rollback acceptance on Alma. Current-host handover/PXE now passes within the
+bounded window below; final release gates remain. Scoped kernel-helper tracing is complete with host packages
 retained. The libvirt bridge-zone conflict is corrected on Alma with firewalld
 enabled; reload/restart and real client reads pass. Permissive relabel/automatic
 startup and controlled runtime SELinux enforcing tests also pass. Alma is left
@@ -46,7 +47,7 @@ Both additional bounded stages are now complete with the prerequisites and
 limitations below. Shared fixes cover privileged shutdown detection and native
 RPC restoration ordering. The final affected migration checks passed on both
 Debian and Azure. The candidate image and original data layout are unchanged;
-live parent handover/PXE and final release gates remain outstanding.
+the bounded live Mariner results follow, with final release gates outstanding.
 
 On October 6 the user approved a bounded live Mariner handover, 2 GiB AlmaLinux
 and Ubuntu PXE installation, and rollback to the released engine. The revised
@@ -56,7 +57,84 @@ no in-guest NFS dependencies or other NFS clients. This is operator confirmation
 not an automated audit of guest mounts or Kubernetes volumes. Brief shared-engine
 DNS/DHCP interruption is accepted. No host reboot, libvirt/bridge shutdown,
 destructive fault injection, package removal, released-checkout edits or release
-publication is authorized by this window. Live results remain pending.
+publication is authorized by this window. Azure separately became powered off
+before baseline capture; no shutdown command was issued for it. The actual
+window preserved all seven running Kubernetes guests and left Azure off.
+
+### Live Mariner Handover and PXE (October 6)
+
+The bounded window passed on CBL-Mariner `2.0.20260331`, kernel
+`5.15.202.1-1.cm2`, Podman `4.1.1`, with local ext4 storage. Private evidence is
+`/home/musubram/nfs-mariner-live.SGCw4IP4`. Source checkpoint `fcfccbb` added the
+explicit `--allow-running-guests` acknowledgement; default refusal and inventory,
+host-client-mount, export and native-service guards remain. Rootless regressions,
+syntax and warning-level ShellCheck passed. The user confirmed that the running
+guest operating systems and other clients had no NFS dependency; this was not an
+automated Kubernetes-volume audit.
+
+Before ownership mutation, launcher inspection found an absolute helper path
+into the released `/tux2lab` checkout. Checkpoint `c0f580f` resolves helper paths
+from the launcher and mounts that same checkout read-only inside the candidate.
+Launcher and replacement regressions passed. This allowed the parent checkout,
+CLI symlink and released source to remain unchanged. The first candidate health
+run then exposed the equivalent diagnostic helper path and reported 10/11, not
+a passing check. Health now resolves its own checkout too; the real retry passed
+11/11 deep checks and all six dual-stack service checks.
+
+The actual `--apply` used the unchanged direct-layout image
+`ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6`.
+The released engine needed its known 30-second SIGKILL stop fallback. The
+candidate reached readiness with engine
+`b7ca0f6c0abf6f359e00d5e8fb8d4ff71a578d46f49399bc28184ce2753e0432`, root
+`/var/lib/tux2lab/engine-rootfs/engine.T0C30kPc/rootfs`, and start
+`2026-10-06 14:08:14.524033674 +0000 UTC`. All seven original QEMU process IDs
+and start identities remained unchanged; live and persistent libvirt network
+XML matched the baseline. The network is named `tux2lab`; its bridge is `labbr0`.
+
+Full Alma installer SHA-256 reads passed over NFSv3/IPv4, NFSv4.1/IPv4 and
+NFSv4.1/IPv6. The sole advertised path remained `/tux2lab-data`, read-only, with
+domain, lab IPv4 and IPv6 client entries. Candidate firewall readiness passed;
+this window did not test live firewall reload or external-interface confinement.
+
+Normal released `tux2lab vm install --via-pxe` commands created two disposable
+dual-stack guests, each with 2 vCPUs, 2 GiB RAM and a 30 GiB disk:
+
+| Guest | UUID | Installed Result |
+| --- | --- | --- |
+| `nfs-pxe-alma9.musubram.internal` | `37cadf30-dfe0-452a-9f79-4676d641ea11` | AlmaLinux 9.8, kernel `5.14.0-687.54.1.el9_8.x86_64` |
+| `nfs-pxe-ubuntu24.musubram.internal` | `73d68d7c-16a7-4e9f-a896-a05d9bfc4952` | Ubuntu 24.04.4 LTS, kernel `6.8.0-100-generic` |
+
+Alma used `inst.stage2=nfs:nfsvers=4:SERVER:/tux2lab-data/os-repos/almalinux/9/`;
+Ubuntu used `netboot=nfs`, the original repository path and `nfsopts=nfsvers=4`.
+Generated boot configuration was not modified. HTTP kernel/initrd and installer
+configuration requests, Alma's active NFSv4.2 session, and Ubuntu serial
+partitioning/image-extraction progress were observed. Key-only SSH subsequently
+verified both installed releases, local XFS root `/dev/vda3`, disk-root kernel
+command lines, system state `running`, and no mounted NFS filesystems. This is
+actual NFS-backed PXE through installed-disk boot, not just successful VM creation.
+Alma's generated guest boot policy includes `selinux=0`; this does not certify
+an enforcing guest installation. The host policy was not changed.
+
+Only the two new guests were gracefully shut down, with UUID/resource guards
+and explicit final `shut off` verification. Supported `--rollback` restored the
+original engine `ae18fa7156731e2ebd9785bbd2a4879ea599ab34ea4e03cde9fa0158392e1bcf`,
+released image 2.1.1, and native NFS ownership. Its new start is
+`2026-10-06 14:28:56.128386862 +0000 UTC`. Native active/enable states, exact
+exports, zero lockd settings, native configuration hashes, lab environment and
+both network XML definitions matched the saved baseline. Released health passed
+11/11 and 6/6; all three full installer reads passed again. Eight native workers
+remained, the candidate root was removed, the checkpoint was archived and the
+migration lock was free. All seven original QEMU process identities were still
+unchanged. The original engine restarted; this is not an unchanged-start claim.
+
+Final retained state: seven Kubernetes guests running; all five representative
+host VMs and both new PXE guests off. New guest disks and provisioning records
+remain for inspection. The released `/tux2lab` tree is clean main `0d0c7dc`.
+Rollback retains migration-specific NFS state/configuration and the shared data
+mount preparation; it does not delete those artifacts or change the data layout.
+No parent reboot, full lab stop/start/rebuild, destructive fault injection,
+package removal, main merge or image publication occurred. Those unexecuted
+Mariner lifecycle checks and final release gates are not covered by this pass.
 
 ### Debian 13 Preparation
 
@@ -705,13 +783,14 @@ and release work:
   The affected Debian migration regression also passed that shared correction.
   No guests inside either host, no Debian 11/12 or Azure
   Linux 4 expansion, and no parent-handover authorization are implied.
-4. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
-  window on the current CBL-Mariner host, test actual NFS handover, normal
-  tux2lab VM creation and unchanged 2 GiB AlmaLinux/Ubuntu NFS-backed PXE
-  installations through installed-disk boot. Verify all deployed services, ISO
-  propagation, start/stop/rebuild, repeated container recreation, RPC ports and
-  firewall behavior, recovery and rollback. Schedule host reboot and disruptive
-  fault injection explicitly within that window. Historical standalone-server
+4. **Current KVM-host end-to-end acceptance (bounded window complete).** Actual
+  handover, deployed service checks, unchanged 2 GiB AlmaLinux/Ubuntu NFS-backed
+  PXE through installed-disk boot, and rollback passed with the seven existing
+  Kubernetes guests continuously running. The results and limits above apply.
+  Broader live-host lifecycle coverage remains outside that completed window:
+  hot-added ISO propagation, full lab start/stop/rebuild, repeated container
+  recreation, live firewall reload and destructive recovery. Host reboot and
+  disruptive tests require a new approved maintenance window. Historical standalone-server
   experiments and sibling-VM protocol tests do not replace this workflow.
 5. **Release preparation.** Resolve findings and rerun affected checks, record
   results and unsupported/untested configurations, and finalize cleanup and
@@ -1466,7 +1545,7 @@ Release and follow-up host matrix (not verified support claims):
 | --- | --- | --- |
 | Enterprise RPM | AlmaLinux 9.8 | Bounded representative stage complete: setup/deployment, NFS/ISO, lifecycle/recovery, migration/rollback and scoped security checks; historical results and limits below |
 | Debian-based | Ubuntu 24.04 LTS | Bounded representative stage complete: setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, recorded-owner recovery, migration/rollback and default-policy checks; limitations below |
-| Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
+| Microsoft | Current CBL-Mariner 2.0 KVM host | Bounded live-guest handover, 2 GiB Alma/Ubuntu NFS PXE through disk boot, service/protocol checks and rollback passed; broader live-host lifecycle and release gates remain |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian 13 | Bounded stage complete: setup/deployment, ISO, DHCP/RA, reads, engine recovery, rebuilds, corrected reboot, migration/rollback and default-policy checks; prerequisites and limitations above |
 | Debian-based | Debian 11/12 and additional Ubuntu releases | Follow-up validation; unverified |

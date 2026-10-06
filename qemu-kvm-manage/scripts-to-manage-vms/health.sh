@@ -9,8 +9,9 @@
 set -uo pipefail
 
 # Source color functions and environment defaults
-source /tux2lab/common-utils/color-functions.sh
-source /tux2lab/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh
+HEALTH_PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd) || exit 1
+source "$HEALTH_PROJECT_ROOT/common-utils/color-functions.sh"
+source "$HEALTH_PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/functions/defaults.sh"
 
 # ====== HELP ======
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -122,7 +123,7 @@ else
     fn_deep_fail "TFTP boot file missing (/tux2lab-data/tftpboot/ipxe.efi)"
 fi
 
-source /tux2lab/shared-functions/container-nfs.sh
+source "$HEALTH_PROJECT_ROOT/shared-functions/container-nfs.sh"
 if check_engine_nfs "${CONTAINER_NAME}"; then
     fn_deep_pass "Container NFS ready (/tux2lab-data)"
 else
@@ -130,7 +131,7 @@ else
 fi
 
 # --- Firewall: bridge rules in place ---
-source /tux2lab/shared-functions/bridge-firewall.sh
+source "$HEALTH_PROJECT_ROOT/shared-functions/bridge-firewall.sh"
 if check_bridge_firewall "${lab_infra_bridge_interface}"; then
     fn_deep_pass "Firewall allows traffic on ${lab_infra_bridge_interface}"
 else
