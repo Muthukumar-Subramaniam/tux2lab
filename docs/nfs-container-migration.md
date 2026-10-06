@@ -23,9 +23,10 @@ bridge zone according to firewalld state, with Alma transition/reload/restart
 acceptance complete. The bounded Alma checks are complete with the limitations
 below. Ubuntu 24.04 setup/deployment, live ISO propagation, actual DHCP/RA and
 full NFS reads pass with explicit native-owner preparation. Graceful active-client
-recovery passes, but PID1 SIGKILL reproducibly leaves kernel NFS listeners and
-blocks normal restart. Ubuntu has been manually recovered; its acceptance is
-incomplete and the crash-recovery finding remains open.
+recovery passes. PID1 SIGKILL leaves kernel NFS listeners on Ubuntu, but the
+ownership-checked startup recovery below now passes, including missing-evidence
+refusal and active-client reclaim. Remaining Ubuntu lifecycle, migration/rollback
+and applicable security-policy acceptance are still incomplete.
 
 ## Maintained Code
 
@@ -35,6 +36,7 @@ incomplete and the crash-recovery finding remains open.
 | [container/entrypoint.sh](../container/entrypoint.sh) | Engine-wide failure supervision and shutdown trap |
 | [shared-functions/nfs-config.sh](../shared-functions/nfs-config.sh) | Export, daemon and firewall configuration |
 | [shared-functions/container-nfs.sh](../shared-functions/container-nfs.sh) | Host preflight, shared data mount preparation, image compatibility, readiness and shutdown verification |
+| [shared-functions/nfs-recovery.py](../shared-functions/nfs-recovery.py) | Private healthy-owner snapshots and guarded pre-start cleanup of matching orphaned kernel workers |
 | [shared-functions/engine-rootfs.sh](../shared-functions/engine-rootfs.sh) | Exportable per-instance roots, image identity and guarded cleanup/rollback |
 | [shared-functions/bridge-firewall.sh](../shared-functions/bridge-firewall.sh) | Conditional libvirt bridge zone, identity-preserving network preparation and bridge firewall access |
 | [shared-functions/run-container.sh](../shared-functions/run-container.sh) | Mount layout, launch and replacement with retained previous engine |
@@ -121,6 +123,14 @@ Do not use those wrappers for deployment or mix them with the migration command.
   During host shutdown, the CLI leaves libvirt service/socket teardown to systemd
   rather than waiting on later stop jobs from inside its own `ExecStop`. Normal
   interactive stop still waits for those units synchronously.
+- Successful readiness records private ownership evidence beside the managed
+  root, outside exported data. Before restarting a stopped engine, the host-side
+  recovery helper can stop orphaned kernel workers only when the same boot,
+  network namespace, engine/root/start generation, worker PIDs/start counters and
+  stateless NFS firewall rules match. Native NFS/RPC ownership, unknown state,
+  missing evidence or changed workers refuse recovery. The helper preserves the
+  firewall and does not unmount ISOs, remove roots or change the client path.
+  This is recovery at the next normal startup, not immediate SIGKILL cleanup.
 
 Reserved ports: TCP `111,2049,20048,32803,32765`; UDP
 `111,2049,20048,32769,32765,32766`. Statd ports are reserved for future recovery
@@ -316,8 +326,10 @@ hide that state. Inspect the retained engine, logs, kernel threads and listeners
 recover ownership in a dedicated maintenance window before retrying. Automated
 recovery from this failure class is not established by the mountd-child test.
 The October 6 Ubuntu tests below reproduce this failure with native NFS tracking
-and control mounts both active and inactive. Alma's successful SIGKILL recovery
-does not establish the same behavior on Ubuntu.
+and control mounts both active and inactive. The subsequent ownership-checked
+startup recovery is tested on Ubuntu. A crashed engine without a matching private
+ownership snapshot still requires guarded manual recovery, never automatic
+adoption of whichever kernel server happens to be running.
 
 ## Remaining Acceptance Plan
 
@@ -1097,7 +1109,7 @@ Release and follow-up host matrix (not verified support claims):
 | Family | Test-host targets | Status |
 | --- | --- | --- |
 | Enterprise RPM | AlmaLinux 9.8 | Release gate: setup/deployment, lifecycle and same-host-client engine recovery passed with manual prerequisites; remaining Alma gates below |
-| Debian-based | Ubuntu 24.04 LTS | Release gate: setup/deployment, live ISO, DHCP/RA, full NFS reads and graceful active-client recovery pass; SIGKILL recovery blocked October 6 |
+| Debian-based | Ubuntu 24.04 LTS | Release gate: setup/deployment, live ISO, DHCP/RA, full NFS reads and graceful/ownership-checked SIGKILL recovery pass; remaining lifecycle and migration/security gates pending |
 | Microsoft | Current CBL-Mariner 2.0 KVM host | Release gate: approved end-to-end handover/PXE/rollback acceptance pending |
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian and additional Ubuntu releases | Follow-up validation; unverified |
@@ -1279,10 +1291,88 @@ with `os-repos/almalinux/9/images/install.img` and a new evidence directory.
 Expect the current candidate to leave the engine down with kernel listeners;
 arrange guarded manual recovery before running it. Do not run it on the parent.
 
-Ubuntu acceptance remains incomplete. Resolve the abrupt-exit recovery finding
-before proceeding with remaining lifecycle/rebuild/reboot, released-baseline
-migration/rollback and applicable security-policy gates. Preserve the
-no-inner-VM constraint and separate parent handover/PXE approval.
+At checkpoint `333d2962d3f4259b9496d60ef668e2a3783e55f0`, Ubuntu acceptance was
+blocked on abrupt-exit recovery. The following authorized fix supersedes that
+blocker; remaining lifecycle/rebuild/reboot, released-baseline migration/rollback
+and applicable security-policy gates remain open.
+
+#### Ownership-Checked Startup Recovery (October 6, 2026)
+
+The user authorized an ownership-checked fix. The implementation adds a
+standard-library Python host helper, not another daemon or a host NFS service.
+The local image remains
+`ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6`; no image was
+rebuilt or published. Only the migration worktree and Ubuntu source were changed.
+
+`wait_for_engine_nfs` now records `nfs-owner.json` beside the managed root after
+actual health succeeds. The instance and store are root-only directories, and
+the snapshot is root-owned mode 600, atomically replaced. It records the host
+boot ID/network namespace, full engine ID/root/start time, exact kernel `nfsd`
+worker PIDs/start counters, and stateless `inet tux2lab_nfs` JSON. Worker parsing
+requires host kernel-thread identity, including the kernel-thread flag and
+parent PID 2. A healthy existing engine can establish its initial snapshot with
+normal `tux2lab start`; no stopped/orphaned server is adopted to manufacture proof.
+
+Before `podman start`, recovery validates the managed root/marker and fully
+stopped engine, private snapshot, exact recorded ownership, inactive native
+NFS/RPC services, absence of host NFS client mounts and unexpected RPC listeners.
+The helper serializes its own record/recovery operations with a root-private
+lock. It enters a private mount namespace, exposes the NFS control filesystem,
+rechecks the engine/worker/firewall identities and exact thread count, and writes
+zero to the kernel `threads` control. Zero threads and absent reserved listeners
+must be verified before normal startup proceeds. No native `rpc.nfsd` executable
+is used by this automatic recovery, and firewall protection remains installed.
+Unknown ownership or any failed inspection stops the operation instead.
+
+Native `nfsdcld.service` is now included in host preflight and the migration unit
+snapshot/stop/mask/restore list. This does not assert that the earlier leftover
+tracking service caused the Ubuntu kernel behavior, nor does it replace actual
+Ubuntu released-baseline migration acceptance. Packages remain installed.
+
+Validation on the existing Ubuntu engine:
+
+- Root-only eight-worker snapshot creation passed through actual `tux2lab start`.
+  Attempted recovery of the running engine was refused without changing its
+  identity/PID or health.
+- `--deployed-crash` passed exit 137, unchanged firewall, ownership-checked kernel
+  cleanup, absent RPC listeners, a blocked direct read during the outage, and
+  matching NFSv4.1 reads/OPEN-state recovery on the same mounted descriptor.
+  The listener assertion now follows explicit guarded recovery; immediate
+  disappearance after SIGKILL is deliberately not claimed.
+- New `--deployed-crash-start EXPECTED_HOST EVIDENCE_DIR` passed the actual CLI
+  path. With the snapshot withheld after SIGKILL, startup failed before launching
+  the engine, leaving exit 137, listeners and firewall unchanged. Restoring the
+  original snapshot allowed normal startup to recover the same engine/root.
+  The harness preserves evidence and restores the snapshot/engine on failure.
+- Graceful same-descriptor recovery and full DHCPv4/v6, RA and NFSv3/IPv4 plus
+  NFSv4/IPv4/IPv6 installer reads passed again afterward. AppArmor stayed enabled,
+  health passed, and temporary namespace peers were cleaned up.
+- Rootless tests cover changed/missing ownership fields, PID reuse, native/RPC
+  conflicts, changed identity at the final check, unexpected thread counts,
+  failed shutdown, running/transitional engines and failed guest/client queries.
+  Bash syntax/editor/whitespace checks pass. ShellCheck 0.11.0 was downloaded to
+  a temporary directory and checked against its published SHA256; the engine
+  harness is warning-clean, and other touched shell files have no new
+  warning/error diagnostics compared with the committed baseline.
+
+Evidence on Ubuntu:
+
+- `/home/musubram/nfs-ubuntu-ownership.7IHcbKFb/`
+- `/home/musubram/nfs-ubuntu-owned-crash.4tzUHG87/`
+- `/home/musubram/nfs-ubuntu-crash-start.wfaTqNdL/`
+- `/home/musubram/nfs-ubuntu-owned-restart.yENE6LaY/`
+- `/home/musubram/nfs-ubuntu-owned-network.siZ6tzWZ/`
+
+The original engine/root were retained; final verified start was
+`2026-10-06 04:31:03.631818685 +0000 UTC`, PID `48276`. The native tracking/control
+units remain inactive, firewalld remains absent/inactive, and Alma remains off.
+
+Limits: no guarantee of immediate kernel cleanup after SIGKILL, no cold-boot
+or missing-record adoption, and no support for concurrent manual changes to
+host NFS ownership. Root administrators remain trusted; these checks are not
+a security boundary against privileged tampering. The new recovery path has
+actual Ubuntu evidence, not a new Alma/Mariner runtime acceptance claim.
+Remaining Ubuntu gates and separately approved parent handover/PXE are unchanged.
 
 ### AlmaLinux Remaining Work (Updated October 5, 2026)
 

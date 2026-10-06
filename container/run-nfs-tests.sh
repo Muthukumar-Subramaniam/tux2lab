@@ -4,6 +4,96 @@ set -euo pipefail
 PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 source "$PROJECT_ROOT/shared-functions/nfs-config.sh"
 
+test_nfs_recovery_identity() {
+    python3 - "$PROJECT_ROOT/shared-functions/nfs-recovery.py" <<'RECOVERYTEST'
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+spec = importlib.util.spec_from_file_location("nfs_recovery", sys.argv[1])
+recovery = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(recovery)
+fields = ["I", "2", "0", "0", "0", "-1", "2097216"] + ["0"] * 12 + ["110380"]
+worker = recovery.thread_identity("28350 (nfsd) " + " ".join(fields))
+assert worker == {"pid": 28350, "started": 110380}
+for invalid in ("1 (init) " + " ".join(fields),
+                "28350 (nfsd) I 2", "28350 (nfsd) " + " ".join(fields).replace("2097216", "0")):
+    try:
+        recovery.thread_identity(invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Invalid kernel worker accepted")
+owner = dict(version=1, boot="boot", netns="net:[1]", engine="engine", rootfs="root",
+             started="time", threads=[worker], firewall={"nftables": [{"table": "guard"}]})
+recovery.require_same_owner(owner, copy.deepcopy(owner))
+for field in owner:
+    changed = copy.deepcopy(owner)
+    changed[field] = None
+    for candidate in (changed, {key: value for key, value in owner.items() if key != field}):
+        try:
+            recovery.require_same_owner(owner, candidate)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Changed/missing " + field + " accepted")
+reused = copy.deepcopy(owner)
+reused["threads"][0]["started"] += 1
+try:
+    recovery.require_same_owner(owner, reused)
+except ValueError:
+    pass
+else:
+    raise AssertionError("Reused PID accepted")
+stopped = {"State": {"Running": False, "Status": "exited", "Pid": 0}}
+for failure in (None, "record", "identity", "native", "rpc", "race", "count", "shutdown"):
+    control = MagicMock()
+    control.read_text.side_effect = ["2" if failure == "count" else "1", "1" if failure == "shutdown" else "0"]
+    latest = copy.deepcopy(owner)
+    if failure in ("identity", "race"):
+        latest["threads"][0]["started"] += 1
+    states = [owner, latest] if failure == "race" else [latest, latest]
+    with patch.object(recovery, "inspect_engine", return_value=stopped), \
+            patch.object(recovery, "engine_root", return_value=Path("/private/rootfs")), \
+            patch.object(recovery, "kernel_threads", return_value=[worker]), \
+            patch.object(recovery, "private_path", side_effect=ValueError("untrusted") if failure == "record" else None), \
+            patch.object(Path, "read_text", return_value=json.dumps(owner)), \
+            patch.object(recovery, "ownership", side_effect=states), \
+            patch.object(recovery, "native_preflight", side_effect=ValueError("native") if failure == "native" else None), \
+            patch.object(recovery, "require_no_listeners", side_effect=ValueError("rpc") if failure == "rpc" else None), \
+            patch.object(recovery, "control_mount") as mount:
+        mount.return_value.__enter__.return_value = control
+        try:
+            recovery.recover_owner("engine")
+        except ValueError:
+            assert failure is not None, failure
+        else:
+            assert failure is None, failure
+        if failure in (None, "shutdown"):
+            control.write_text.assert_called_once_with("0\n")
+        else:
+            control.write_text.assert_not_called()
+for field, value in (("Running", True), ("Status", "stopping"), ("Pid", 123), ("Restarting", True)):
+    changed = copy.deepcopy(stopped)
+    changed["State"][field] = value
+    try:
+        recovery.require_stopped(changed)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Live/transitional engine accepted")
+print("PASS: recovery requires matching boot, engine, kernel worker generations and firewall")
+RECOVERYTEST
+}
+
+if [[ "${1:-}" == --recovery ]]; then
+    test_nfs_recovery_identity
+    exit 0
+fi
+
 if [[ "${1:-}" == --service ]]; then
     [[ $# == 2 ]] || exit 2
     source "$PROJECT_ROOT/shared-functions/engine-rootfs.sh"
@@ -514,6 +604,27 @@ printf 'PASS: replacement failure restores previous engine\n'
     fi
 )
 printf 'PASS: residual kernel listener blocks cleanup\n'
+
+test_nfs_recovery_identity
+
+bash -s "$PROJECT_ROOT" "$test_dir" <<'RECOVERYGUARDS'
+set -uo pipefail
+for recovery_query_case in guests clients; do
+    export recovery_query_case
+    sudo() {
+        case "$*" in
+            '-n virsh list --name') [[ "$recovery_query_case" != guests ]] ;;
+            'podman exec tux2lab-engine /bin/bash /usr/local/lib/tux2lab/nfs-service.sh check') return 0 ;;
+            '-n podman exec tux2lab-engine ls -A /proc/fs/nfsd/clients') return 1 ;;
+            *) return 99 ;;
+        esac
+    }
+    export -f sudo
+    bash "$1/container/run-engine-tests.sh" --deployed-crash-start "$(hostname -f)" "$2" >/dev/null 2>&1
+    [[ "$?" == 1 ]] || exit 1
+done
+RECOVERYGUARDS
+printf 'PASS: CLI crash acceptance rejects failed guest/client queries before mutation\n'
 
 for thread_case in active stopped unreadable invalid missing inspection-error; do
     (

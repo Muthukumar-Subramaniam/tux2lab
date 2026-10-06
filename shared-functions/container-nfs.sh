@@ -45,7 +45,7 @@ container_nfs_require_no_client_mounts() {
 container_nfs_host_preflight() {
     local unit load_state active_state main_pid
     for unit in nfs-server.service nfs-kernel-server.service nfs-mountd.service rpc-mountd.service \
-                rpcbind.service rpc-statd.service nfs-idmapd.service rpcbind.socket; do
+                rpcbind.service rpc-statd.service nfs-idmapd.service nfsdcld.service rpcbind.socket; do
         load_state=$(sudo systemctl show "$unit" -p LoadState --value) || return 1
         case "$load_state" in
             not-found) continue ;;
@@ -110,11 +110,22 @@ check_engine_nfs() {
     sudo podman exec "${1:-tux2lab-engine}" /bin/bash /usr/local/lib/tux2lab/nfs-service.sh check
 }
 
+record_engine_nfs_owner() {
+    sudo timeout --kill-after=5 90 python3 "$(dirname -- "${BASH_SOURCE[0]}")/nfs-recovery.py" record "${1:-tux2lab-engine}"
+}
+
+recover_engine_nfs() {
+    container_nfs_host_preflight || return 1
+    sudo timeout --kill-after=5 90 unshare --mount --propagation private \
+        python3 "$(dirname -- "${BASH_SOURCE[0]}")/nfs-recovery.py" recover "${1:-tux2lab-engine}"
+}
+
 wait_for_engine_nfs() {
     local name="${1:-tux2lab-engine}" attempt
     for ((attempt = 0; attempt < 30; attempt++)); do
         if check_engine_nfs "$name" >/dev/null 2>&1; then
-            return 0
+            record_engine_nfs_owner "$name"
+            return $?
         fi
         [[ "$(sudo podman inspect "$name" --format '{{.State.Running}}')" == true ]] || break
         sleep 1

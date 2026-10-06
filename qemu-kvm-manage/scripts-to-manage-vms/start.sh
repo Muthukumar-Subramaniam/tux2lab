@@ -92,6 +92,7 @@ else
     print_task "Starting tux2lab-engine container..."
     # Try starting existing stopped container first
     if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
+        recover_engine_nfs "${CONTAINER_NAME}"
         if sudo podman start "${CONTAINER_NAME}" &>/dev/null; then
             print_task_done
         else

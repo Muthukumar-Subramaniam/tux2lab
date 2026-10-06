@@ -808,6 +808,66 @@ finally:
 RECOVERYCLIENT
 )
 
+run_deployed_cli_recovery_test() (
+    local expected_host="$1" evidence="$2" identity root owner held listeners status guests clients
+    local owner_held=false restart_needed=false
+    [[ "$EUID" != 0 && "$(hostname -f)" == "$expected_host" && "$expected_host" != localhost ]] || return 1
+    [[ -d "$evidence" && "$(readlink -e "$evidence")" == "$evidence" && "$evidence" != /tux2lab-data* ]] || return 1
+    source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+    guests=$(sudo -n virsh list --name) || return 1
+    [[ -z "$guests" ]] || return 1
+    check_engine_nfs tux2lab-engine
+    clients=$(sudo -n podman exec tux2lab-engine ls -A /proc/fs/nfsd/clients) || return 1
+    [[ -z "$clients" ]] || return 1
+    record_engine_nfs_owner tux2lab-engine
+    identity=$(sudo -n podman inspect tux2lab-engine --format '{{.Id}} {{.Rootfs}}') || return 1
+    root=$(sudo -n podman inspect tux2lab-engine --format '{{.Rootfs}}') || return 1
+    owner="${root%/rootfs}/nfs-owner.json"
+    held="${root%/rootfs}/nfs-owner.validation-held"
+    sudo -n test ! -e "$held" && sudo -n test ! -L "$held" || return 1
+    cleanup_cli_recovery() {
+        status=$?
+        trap - EXIT
+        if "$owner_held"; then
+            if sudo -n test -e "$owner"; then
+                printf 'Unexpected replacement owner record; retained %s\n' "$held" >&2
+                status=1
+            else
+                sudo -n mv -- "$held" "$owner" || status=1
+            fi
+        fi
+        if "$restart_needed"; then /usr/local/bin/tux2lab start > "$evidence/failure-restart.log" 2>&1 || status=1; fi
+        exit "$status"
+    }
+    trap cleanup_cli_recovery EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    sudo -n nft -j -s list table inet tux2lab_nfs | tee "$evidence/firewall-before.json" >/dev/null
+    restart_needed=true
+    sudo -n podman kill --signal KILL tux2lab-engine | tee "$evidence/kill.log" >/dev/null
+    [[ "$(sudo -n podman wait tux2lab-engine)" == 137 ]]
+    listeners=$(sudo -n ss -H -lntu '( sport = :2049 or sport = :111 or sport = :20048 )')
+    if [[ -n "$listeners" ]]; then
+        sudo -n mv -- "$owner" "$held"
+        owner_held=true
+        if /usr/local/bin/tux2lab start > "$evidence/missing-owner.log" 2>&1; then
+            printf 'FAIL: startup accepted orphaned NFS without ownership evidence\n' >&2
+            return 1
+        fi
+        [[ "$(sudo -n podman inspect tux2lab-engine --format '{{.State.Running}} {{.State.ExitCode}}')" == 'false 137' ]]
+        [[ "$(sudo -n ss -H -lntu '( sport = :2049 or sport = :111 or sport = :20048 )')" == "$listeners" ]]
+        sudo -n nft -j -s list table inet tux2lab_nfs | cmp - "$evidence/firewall-before.json"
+        sudo -n mv -- "$held" "$owner"
+        owner_held=false
+        printf 'PASS: normal startup refuses missing ownership evidence without changing orphaned NFS\n'
+    fi
+    /usr/local/bin/tux2lab start > "$evidence/start-recovery.log" 2>&1
+    restart_needed=false
+    check_engine_nfs tux2lab-engine
+    [[ "$(sudo -n podman inspect tux2lab-engine --format '{{.Id}} {{.Rootfs}}')" == "$identity" ]]
+    printf 'PASS: normal startup recovers the recorded owner and preserves the engine/root\n'
+)
+
 run_deployed_restart_test() (
     local expected_host="$1" relative_file="$2" evidence="$3" shutdown_mode="${4:-stop}" bridge_ip
     if [[ "$EUID" == 0 ]]; then
@@ -879,6 +939,7 @@ assert original["Config"]["Labels"]["io.tux2lab.nfs.layout"] == "direct-v1"
 assert not command(["sudo", "-n", "virsh", "list", "--name"]).strip(), "Test host has running guests"
 assert not command(["sudo", "-n", "podman", "exec", engine, "ls", "-A",
                     "/proc/fs/nfsd/clients"]).strip(), "Existing NFSv4 clients must be drained first"
+command(["sudo", "-n", "python3", project + "/shared-functions/nfs-recovery.py", "record", engine])
 
 with (evidence / "client.stderr").open("wb") as client_errors:
     try:
@@ -904,6 +965,12 @@ with (evidence / "client.stderr").open("wb") as client_errors:
                                log="firewall-after.json")
             assert json.loads(retained) == json.loads(firewall), "Crash changed NFS firewall protection"
             print("PASS: PID1 SIGKILL exits 137 and retains NFS firewall protection", flush=True)
+            command(["sudo", "-n", "timeout", "--kill-after=5", "90", "unshare", "--mount",
+                     "--propagation", "private", "python3", project + "/shared-functions/nfs-recovery.py",
+                     "recover", engine], timeout=100, log="ownership-recovery.log")
+            retained = command(["sudo", "-n", "nft", "-j", "-s", "list", "table", "inet", "tux2lab_nfs"])
+            assert json.loads(retained) == json.loads(firewall), "Recovery removed NFS firewall protection"
+            print("PASS: ownership-checked kernel recovery retains NFS firewall protection", flush=True)
         else:
             command(["sudo", "-n", "podman", "stop", "--time", "30", engine], log="stop.log")
             assert inspect_engine()["State"]["ExitCode"] == 143
@@ -958,6 +1025,9 @@ case "${1:-}" in
     --deployed-crash)
         [[ $# == 4 ]] || exit 2
         run_deployed_restart_test "$2" "$3" "$4" kill ;;
+    --deployed-crash-start)
+        [[ $# == 3 ]] || exit 2
+        run_deployed_cli_recovery_test "$2" "$3" ;;
     --recovery-client)
         [[ $# == 3 ]] || exit 2
         run_recovery_client "$2" "$3" ;;
@@ -993,5 +1063,5 @@ case "${1:-}" in
     --failure)
         [[ $# == 2 ]] || exit 2
         run_engine_tests "$2" '' true ;;
-    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp|--deployed-network EXPECTED_HOST EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-firewall EXPECTED_HOST EVIDENCE_DIR start|reload|restart|restore\n       sudo bash container/run-engine-tests.sh --restore-deployed-firewall EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
+    *) printf 'Usage: bash container/run-engine-tests.sh --startup IMAGE | --run IMAGE ISO_MOUNT | --failure IMAGE\n       bash container/run-engine-tests.sh --deployed-restart|--deployed-crash EXPECTED_HOST RELATIVE_FILE EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-crash-start EXPECTED_HOST EVIDENCE_DIR\n       bash container/run-engine-tests.sh --deployed-dhcp|--deployed-network EXPECTED_HOST EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-firewall EXPECTED_HOST EVIDENCE_DIR start|reload|restart|restore\n       sudo bash container/run-engine-tests.sh --restore-deployed-firewall EVIDENCE_DIR\n       sudo bash container/run-engine-tests.sh --deployed-helpers EXPECTED_HOST EVIDENCE_DIR\n' >&2; exit 2 ;;
 esac

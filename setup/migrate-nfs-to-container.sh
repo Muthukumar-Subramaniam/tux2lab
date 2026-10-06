@@ -10,7 +10,7 @@ NFS_MIGRATION_DIR=/var/lib/tux2lab/nfs-migration
 NFS_ENGINE=tux2lab-engine
 NFS_BACKUP=tux2lab-engine-host-nfs-backup
 NFS_DATA=/tux2lab-data
-NFS_UNITS=(nfs-server.service nfs-kernel-server.service nfs-mountd.service rpc-mountd.service rpc-statd.service nfs-idmapd.service rpcbind.socket rpcbind.service proc-fs-nfsd.mount)
+NFS_UNITS=(nfs-server.service nfs-kernel-server.service nfs-mountd.service rpc-mountd.service rpc-statd.service nfs-idmapd.service nfsdcld.service rpcbind.socket rpcbind.service proc-fs-nfsd.mount)
 
 migration_preflight() {
     local image="$1" guests exports label unit exists
