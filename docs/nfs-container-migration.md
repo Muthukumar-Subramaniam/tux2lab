@@ -94,8 +94,8 @@ off. No SUSE lifecycle command was run during Debian preparation.
 
 Private guest evidence is `/home/musubram/nfs-host-preparation.9cissX1J`.
 Original/staged runtime XML and the guest sysctl input remain outside Git under
-the worktree's `.test-artifacts/nfs-host-debian13`. Azure Linux 3.0 has not been
-provisioned.
+the worktree's `.test-artifacts/nfs-host-debian13`. Azure Linux 3.0 preparation
+is recorded separately below.
 
 #### Debian Deployment and Initial Acceptance
 
@@ -180,6 +180,61 @@ limits. No other Debian release, writable NFS, v3/IPv6, independent client-host
 reboot, full-stop ISO-handle continuity or nested PXE installation is certified.
 The shutdown-query correction was tested on Debian and in rootless regressions;
 the already completed, powered-off Alma/Ubuntu/Leap hosts were not rerun.
+
+### Azure Linux 3.0 Preparation
+
+The dedicated `nfs-host-azure3.musubram.internal` guest reports Azure Linux
+`3.0.20260809`, kernel `6.6.150.1-1.azl3`, and ext4 on `/dev/vda2`. It has two
+vCPUs, 4 GiB RAM and a 60 GiB disk. Its UUID is
+`c60b5219-eac0-413c-849a-7a13c61907ef`, management addresses are `10.28.28.18` and
+`fd28:2808:2020:3000::12`, and its MAC is `52:54:00:e4:7d:22`. Golden boot
+completed, inherited hook states and authorized keys were backed up, and all
+three credential hooks were disabled/stopped before installing a dedicated
+management key. Independent key-only SSH passed. CPU exposure alone was changed
+to host-passthrough while fully off; XML equality and KVM API 12 checks passed.
+
+Source checkpoint `5c6e353c227ff1f7ef38efd1b9e2f7316fef8b4e` was staged on the
+guest. Its private NAT network uses `10.10.36.1/22` and
+`fd60:6060:2026:5::1/64`, without libvirt DNS/DHCP or a physical bridge member.
+The network UUID is `da715c7a-61d9-45f1-9955-f59bedf1643e` and bridge MAC is
+`52:54:00:19:85:0c`. Management `eth0` uses `accept_ra=0`, so no Debian-style
+RA adjustment was needed.
+
+Actual setup initially failed because the default repositories had no `libosinfo`
+or `podman`. The official base repository provided the stable
+`azurelinux-repos-extended` package, whose repository supplied both dependencies.
+After installing it, real host setup passed. The resulting Podman package had
+neither an OCI runtime nor its required netavark helper installed. Native `crun`
+and `netavark` packages resolved the explicit initialization errors. These are
+required manual prerequisites for this tested source checkpoint:
+
+```bash
+sudo dnf install -y azurelinux-repos-extended
+sudo dnf install -y crun netavark
+bash /tux2lab/setup/setup-host.sh --yes
+```
+
+Only stable Microsoft repositories were used, with signature verification kept
+enabled. No alternative runtime configuration or downloaded binary was used.
+Installed versions are Podman `5.6.1-10.azl3`, crun `1.24-6.azl3`, netavark
+`1.10.3-9.azl3`, libvirt `11.9.0-1.azl3`, QEMU `9.1.0-11.azl3`, nfs-utils
+`2.6.4-4.azl3`, rpcbind `1.2.9-1.azl3`, libosinfo `1.10.0-2.azl3` and
+azurelinux-repos-extended `3.0-5.azl3`.
+
+Native NFS/RPC stayed inactive; no manual service masking was required. Normal
+container preflight loaded the previously unloaded NFS modules, after which both
+lockd port settings were zero. Checked container/guest inventories were empty,
+and native-owner/listener preflight passed. SELinux remains in its original
+permissive mode. Firewalld and AppArmor services are absent. The native iptables
+service is active/enabled, with IPv4/IPv6 INPUT, FORWARD and OUTPUT policies still
+DROP; actual setup added its normal lab-bridge allowances. No policy was disabled.
+
+The unchanged candidate image `ef259c909b57cb4fd05695b27d928c1c1a1c1fd0e19c824789997f0303ac4eb6`
+and direct-layout labels were verified, and the maintained rootless suite passed.
+Private preparation evidence is `/home/musubram/nfs-host-preparation.Mes3mEh7`;
+original/staged XML remains in untracked `.test-artifacts/nfs-host-azure3`.
+Actual deployment, functional/lifecycle, migration/rollback and final policy
+acceptance remain. No Azure Linux 4 or enforcing-SELinux claim is implied.
 
 ## Maintained Code
 
@@ -518,7 +573,8 @@ The remaining work follows this sequence:
   after Leap completion. Use one dedicated host at a time and the same complete
   bounded acceptance. Debian's bounded stage is complete, including its shutdown
   correction, migration/rollback and final policy checks. Azure Linux 3.0
-  is not yet provisioned. No guests inside either host, no Debian 11/12 or Azure
+  setup and rootless checks have passed; deployment and acceptance remain.
+  No guests inside either host, no Debian 11/12 or Azure
   Linux 4 expansion, and no parent-handover authorization are implied.
 4. **Current KVM-host end-to-end acceptance.** In a separately approved maintenance
   window on the current CBL-Mariner host, test actual NFS handover, normal
@@ -1285,7 +1341,7 @@ Release and follow-up host matrix (not verified support claims):
 | Enterprise RPM | Rocky Linux, Oracle Linux, CentOS Stream, RHEL and additional Alma versions | Expected compatibility through the shared implementation; individually unverified, no exhaustive matrix gate |
 | Debian-based | Debian 13 | Bounded stage complete: setup/deployment, ISO, DHCP/RA, reads, engine recovery, rebuilds, corrected reboot, migration/rollback and default-policy checks; prerequisites and limitations above |
 | Debian-based | Debian 11/12 and additional Ubuntu releases | Follow-up validation; unverified |
-| Microsoft | Azure Linux 3.0 | Explicitly added gate: dedicated host not yet provisioned; bounded acceptance pending |
+| Microsoft | Azure Linux 3.0 | Host setup and rootless suite passed with explicit stable-repository/runtime prerequisites; deployment and bounded acceptance pending |
 | Fedora | Fedora | Follow-up validation; unverified |
 | SUSE | openSUSE Leap 16.0 | Bounded representative stage complete: actual setup/deployment, ISO, DHCP/RA, reads, lifecycle/reboot, engine recovery, migration/rollback and default-policy checks; limitations below |
 | SUSE | Other Leap releases and SLES | Follow-up validation; unverified |
