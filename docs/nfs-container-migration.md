@@ -256,25 +256,34 @@ warning-level ShellCheck now pass without those diagnostics. This cleanup does
 not change the live lab or generated configuration.
 
 Do not yet promise existing host-NFS users that `git pull` followed by
-`tux2lab rebuild` completes this upgrade. Two open gates were identified:
+`tux2lab rebuild` completes this upgrade. The first-upgrade handover remains an
+open gate: `rebuild.sh` calls `require_container_nfs_engine` before image
+selection and rejects the released host-NFS engine. It does not invoke the
+explicit migration helper. A normal-command upgrade needs an integrated,
+tested one-time handover, with image validation before disruption, explicit
+maintenance consent, retained rollback state and the existing ownership
+guards. Already migrated installations use the normal replacement path.
 
-1. `rebuild.sh` calls `require_container_nfs_engine` before image selection and
-  rejects the released host-NFS engine. It does not invoke the explicit
-  migration helper. A normal-command upgrade needs an integrated, tested
-  one-time handover, with image validation before disruption, explicit
-  maintenance consent, retained rollback state and the existing ownership
-  guards. Already migrated installations use the normal replacement path.
-2. `generate_kea_dhcp4` and `generate_kea_dhcp6` overwrite their configs without
-  preserving the reservations written by ksmanager. An isolated temporary
-  fixture with one reservation in each family confirmed both were removed by
-  regeneration. The completed live rebuild tests had zero reservations and
-  therefore did not cover this case. Preservation and rollback must be tested
-  with populated configs before claiming a safe existing-user rebuild.
+The initial review incorrectly classified DHCP reservation preservation as a
+release blocker. The user clarified that reservations are provisioning-time
+state, not the installed guests' address configuration. Code inspection confirms
+that `fn_update_kea_dhcp_reservations` reconstructs IPv4 and IPv6 reservations
+from `ksmanager-hub/mac-address-cache` and sends Kea runtime `config-set`
+commands when the control API is reachable. Installed-system templates use
+static addresses: NetworkManager `method=manual`, or netplan with DHCP disabled.
+Golden boot likewise replaces bootstrap DHCP with the assigned static network.
+
+The temporary fixture showed that regeneration drops reservations inserted into
+config files, but did not establish a permanent guest dependency or a requirement
+to preserve that runtime state. Reservation preservation is not required for
+this upgrade. Keep provisioning cache/records intact and perform maintenance
+when provisioning is not in progress; restarting the engine already interrupts
+the services used by an active installer.
 
 The explicit migration helper itself generates only NFS configuration; it does
-not regenerate Kea. These findings do not invalidate the bounded migration and
-rollback evidence above, but they prevent signing off the proposed two-command
-release upgrade. No automatic migration or reservation-preservation change has
+not regenerate Kea. The remaining handover gap prevents signing off the proposed
+two-command release upgrade; the bounded migration and rollback evidence above
+remains valid. No automatic migration or reservation-preservation change has
 been made as part of this review. The latest lifecycle fixes also still need
 their focused representative-host retest before release approval.
 
