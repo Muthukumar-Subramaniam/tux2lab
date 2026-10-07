@@ -4,6 +4,144 @@ set -euo pipefail
 PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 source "$PROJECT_ROOT/shared-functions/nfs-config.sh"
 
+test_iso_mounts() (
+    fixture=$(mktemp -d)
+    trap 'rm -rf -- "$fixture"' EXIT
+    builtin source <(sed -n '/^iso_is_mounted() {/,/^}/p; /^do_mount() {/,/^}/p; /^do_unmount() {/,/^}/p' \
+        "$PROJECT_ROOT/common-utils/tux2lab-iso-mounts.sh")
+    CONFIG_FILE="$fixture/iso-mounts.conf"
+    ISO_DIR="$fixture"
+    MOUNT_BASE="$fixture/repos"
+    mkdir -p "$MOUNT_BASE/test/1"
+    touch "$ISO_DIR/test.iso"
+    printf 'test.iso test 1\n' > "$CONFIG_FILE"
+    log() { :; }
+    for test_case in start:visible start:hidden start:stat-error start:parent-error \
+                     start:loop-error start:mount-error start:detach-error \
+                     stop:visible stop:hidden stop:stat-error stop:parent-error stop:unmount-error; do
+        (
+            action=${test_case%%:*}
+            scenario=${test_case#*:}
+            operations="$fixture/operations"
+            : > "$operations"
+            mountpoint() { return 0; }
+            stat() {
+                [[ $# == 4 && "$1" == -Lc && "$2" == %d && "$3" == -- ]] || return 99
+                case "$4" in
+                    "$MOUNT_BASE/test/1")
+                        [[ "$scenario" != stat-error ]] || return 1
+                        case "$scenario" in
+                            visible|unmount-error) printf '2\n' ;;
+                            *) printf '1\n' ;;
+                        esac ;;
+                    "$MOUNT_BASE/test/1/..")
+                        [[ "$scenario" != parent-error ]] || return 1
+                        printf '1\n' ;;
+                    *) return 99 ;;
+                esac
+            }
+            losetup() {
+                case "$*" in
+                    "--find --show --read-only $ISO_DIR/test.iso")
+                        printf 'allocate\n' >> "$operations"
+                        [[ "$scenario" != loop-error ]] || return 1
+                        printf '/dev/test-loop\n' ;;
+                    '--detach /dev/test-loop')
+                        printf 'detach\n' >> "$operations"
+                        [[ "$scenario" != detach-error ]] ;;
+                    *) return 99 ;;
+                esac
+            }
+            mount() {
+                [[ "$*" == "-o ro /dev/test-loop $MOUNT_BASE/test/1" ]] || return 99
+                printf 'mount\n' >> "$operations"
+                [[ "$scenario" != mount-error ]]
+            }
+            umount() {
+                [[ "$*" == "$MOUNT_BASE/test/1" ]] || return 99
+                printf 'unmount\n' >> "$operations"
+                [[ "$scenario" != unmount-error ]]
+            }
+            status=0
+            case "$action" in
+                start) do_mount || status=$? ;;
+                stop) do_unmount || status=$? ;;
+            esac
+            case "$scenario" in
+                visible|hidden) [[ "$status" == 0 ]] ;;
+                *) [[ "$status" == 1 ]] ;;
+            esac
+            case "$test_case" in
+                start:hidden|start:mount-error|start:detach-error)
+                    [[ "$(cat "$operations")" == $'allocate\nmount\ndetach' ]] ;;
+                start:loop-error) [[ "$(cat "$operations")" == allocate ]] ;;
+                stop:visible|stop:unmount-error) [[ "$(cat "$operations")" == unmount ]] ;;
+                *) [[ ! -s "$operations" ]] ;;
+            esac
+        )
+    done
+    printf 'PASS: ISO lifecycle ignores hidden mounts, owns fresh read-only loops and reports failures\n'
+)
+
+if [[ "${1:-}" == --iso-mounts ]]; then
+    test_iso_mounts
+    exit 0
+fi
+
+test_nfs_generation() (
+    fixture=$(mktemp -d)
+    trap 'rm -rf -- "$fixture"' EXIT
+    expected_exports=$(write_container_nfs_exports /tux2lab-data 192.0.2.0/24 2001:db8:1::/64 integration.test)
+    expected_conf=$(write_container_nfs_conf 192.0.2.1 2001:db8:1::1)
+    builtin source <(sed -n '/^generate_nfs_exports() {/,/^}/p' "$PROJECT_ROOT/setup/generate-service-configs.sh")
+    DATA_DIR="$fixture"
+    export DOMAIN=integration.test
+    export IPV4_NETWORK=192.0.2.0
+    export IPV4_PREFIX=24
+    export IPV6_PREFIX_BASE=2001:db8:1
+    export IPV6_PREFIX=64
+    export IPV4_ADDRESS=192.0.2.1
+    export IPV6_ADDRESS=2001:db8:1::1
+    source() { [[ "$1" == /tux2lab/shared-functions/nfs-config.sh ]]; }
+    print_task() { :; }
+    print_task_done() { printf 'done\n' >> "$fixture/writes"; }
+    write_container_nfs_exports() {
+        [[ "$*" == "$DATA_DIR 192.0.2.0/24 2001:db8:1::/64 integration.test" ]] || return 99
+        [[ "$scenario" != render-error ]] || return 1
+        printf '%s\n' "$expected_exports"
+    }
+    sudo() {
+        [[ $# == 2 && "$1" == tee && "$2" == "$DATA_DIR/nfs/"* ]] || return 99
+        printf '%s\n' "${2##*/}" >> "$fixture/writes"
+        command tee "$2"
+        [[ "$scenario" != "${2##*/}-error" ]]
+    }
+    for scenario in success container.exports-error container.conf-error render-error; do
+        : > "$fixture/writes"
+        status=0
+        generate_nfs_exports || status=$?
+        if [[ "$scenario" == success ]]; then
+            [[ "$status" == 0 ]]
+            [[ "$(cat "$fixture/writes")" == $'container.exports\ncontainer.conf\ndone' ]]
+            [[ "$(cat "$DATA_DIR/nfs/container.exports")" == "$expected_exports" ]]
+            [[ "$(cat "$DATA_DIR/nfs/container.conf")" == "$expected_conf" ]]
+        else
+            [[ "$status" == 1 ]]
+            if [[ "$scenario" == container.conf-error ]]; then
+                [[ "$(cat "$fixture/writes")" == $'container.exports\ncontainer.conf' ]]
+            else
+                [[ "$(cat "$fixture/writes")" == container.exports ]]
+            fi
+        fi
+    done
+    printf 'PASS: NFS config generation uses privileged writes and propagates render/write failures\n'
+)
+
+if [[ "${1:-}" == --nfs-generation ]]; then
+    test_nfs_generation
+    exit 0
+fi
+
 test_nfs_recovery_identity() {
     python3 - "$PROJECT_ROOT/shared-functions/nfs-recovery.py" <<'RECOVERYTEST'
 import copy
@@ -1082,6 +1220,9 @@ for query_stage in confirmation initial wait remaining; do
     )
 done
 printf 'PASS: failed VM inspection blocks confirmation and shutdown before infrastructure teardown\n'
+
+test_iso_mounts
+test_nfs_generation
 
 for data_mount_case in directory mounted bind-error private-error share-error inspect-error empty-target verify-error private symlink; do
     (

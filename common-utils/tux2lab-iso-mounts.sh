@@ -15,6 +15,14 @@ readonly MOUNT_BASE="/tux2lab-data/os-repos"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+iso_is_mounted() {
+    local mount_dir="$1" device parent_device
+    [[ -d "$mount_dir" ]] || return 1
+    device=$(stat -Lc %d -- "$mount_dir") || return 2
+    parent_device=$(stat -Lc %d -- "$mount_dir/..") || return 2
+    [[ "$device" != "$parent_device" ]]
+}
+
 do_mount() {
     if [[ ! -f "$CONFIG_FILE" ]]; then
         log "No config file at ${CONFIG_FILE} — nothing to mount."
@@ -36,19 +44,39 @@ do_mount() {
             continue
         fi
 
-        if mountpoint -q "$mount_dir" 2>/dev/null; then
+        if iso_is_mounted "$mount_dir"; then
             log "SKIP: Already mounted: ${mount_dir}"
             (( skipped++ ))
             continue
+        elif [[ $? != 1 ]]; then
+            log "FAILED: Could not inspect ${mount_dir}"
+            (( failed++ ))
+            continue
         fi
 
-        mkdir -p "$mount_dir"
+        if ! mkdir -p "$mount_dir"; then
+            log "FAILED: Could not create ${mount_dir}"
+            (( failed++ ))
+            continue
+        fi
 
-        if mount -o loop,ro "$iso_path" "$mount_dir" 2>/dev/null; then
+        local loop_device
+        if ! loop_device=$(losetup --find --show --read-only "$iso_path"); then
+            log "FAILED: Could not allocate a loop device for ${iso_path}"
+            (( failed++ ))
+            continue
+        fi
+
+        if mount -o ro "$loop_device" "$mount_dir" 2>/dev/null; then
             log "MOUNTED: ${iso_path} → ${mount_dir}"
             (( count++ ))
         else
             log "FAILED: Could not mount ${iso_path} → ${mount_dir}"
+            (( failed++ ))
+        fi
+
+        if ! losetup --detach "$loop_device"; then
+            log "FAILED: Could not enable cleanup for ${loop_device}"
             (( failed++ ))
         fi
     done < "$CONFIG_FILE"
@@ -66,24 +94,29 @@ do_unmount() {
         exit 0
     fi
 
-    local count=0
+    local count=0 failed=0
 
     while IFS=$'\t ' read -r iso_file distro version; do
         [[ -z "$iso_file" || "$iso_file" == \#* ]] && continue
 
         local mount_dir="${MOUNT_BASE}/${distro}/${version}"
 
-        if mountpoint -q "$mount_dir" 2>/dev/null; then
+        if iso_is_mounted "$mount_dir"; then
             if umount "$mount_dir" 2>/dev/null; then
                 log "UNMOUNTED: ${mount_dir}"
                 (( count++ ))
             else
                 log "WARN: Could not unmount ${mount_dir} (busy?)"
+                (( failed++ ))
             fi
+        elif [[ $? != 1 ]]; then
+            log "FAILED: Could not inspect ${mount_dir}"
+            (( failed++ ))
         fi
     done < "$CONFIG_FILE"
 
-    log "Unmount complete: ${count} unmounted."
+    log "Unmount complete: ${count} unmounted, ${failed} failed."
+    [[ $failed == 0 ]]
 }
 
 case "${1:-}" in

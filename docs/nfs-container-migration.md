@@ -172,7 +172,81 @@ propagation and the unchanged global checkout/mounts. Git is not usable through
 this mapped worktree because its metadata points into the hidden released tree;
 compare source hashes in the private view and run Git outside it. Execute the
 normal lifecycle scripts as the lab administrator, not root, with the explicit
-local candidate image. Execution results are pending.
+local candidate image.
+
+#### Completion (October 7, 2026)
+
+The user resumed the paused maintenance window. Fresh private evidence is in
+`/home/musubram/nfs-mariner-maintenance.LD2BZ2Oc`; it includes guest UUIDs,
+network definitions, config archives/hashes, service states and command logs.
+These private files are not Git artifacts. The unchanged local candidate image
+`ef259c909b57cb4fd05695b27d928c1c1fd0e19c824789997f0303ac4eb6`
+was used throughout; no image build, registry pull or publication was needed.
+
+- Handover passed with the seven saved Kubernetes guests running. The released
+  engine again required its known 30-second SIGKILL fallback; this was not a
+  candidate shutdown failure.
+- A newly allocated read-only loop mounted the verified Alma ISO at a temporary
+  repository path after candidate startup. Container access and full installer
+  SHA-256 reads over NFSv3/IPv4, NFSv4.1/IPv4 and NFSv4.1/IPv6 passed without
+  changing engine ID or start time. The exact temporary mount and loop were
+  cleaned after verified candidate shutdown.
+- Normal lab stop shut down all seven guests gracefully, without forced guest
+  termination. Candidate NFS workers/listeners, libvirt and the lab bridge/dummy
+  stopped. The corrected full stop/start unmounted and remounted all 20 visible
+  ISO filesystems, reused the candidate container, passed all three full NFS
+  reads, and passed health at 11/11 plus 6/6 dual-stack services.
+- Two normal-user rebuilds completed with the explicit local image. Each used a
+  new managed root, passed NFS readiness and all three full installer reads, and
+  removed the superseded root. The original migration backup was retained.
+  Protected config/credential and provisioning JSON hashes matched after each
+  rebuild. Final candidate health was 11/11 plus 6/6.
+
+Two defects were found and fixed during this window:
+
+1. After the data self-bind, older ISO entries hidden beneath it can remain in
+   the mount table. On this host `mountpoint` reported them as active even when
+   the resolved directory was on the data filesystem, and automatic loop reuse
+   refused remounting with "already mounted" before making a mount syscall.
+   The ISO helper now compares resolved device IDs against the parent, allocates
+   a fresh read-only loop for a new mount, and requests automatic loop cleanup
+   after the final mount reference is released. It also reports inspection,
+   mount and unmount failures. The corrected actual stop/start passed; final
+   inventory contained 20 ISO loops, all marked for automatic cleanup.
+2. Migration creates root-owned container NFS config files, but rebuild runs its
+   generator as the lab administrator. The first rebuild attempt stopped on a
+   permission error before engine replacement. The two container NFS writes now
+   use privileged `tee` with render/write failures propagated. Both subsequent
+   actual rebuilds passed; unrelated generated files retain their existing path.
+
+Focused rootless checks are `container/run-nfs-tests.sh --iso-mounts` and
+`container/run-nfs-tests.sh --nfs-generation`; both also run in the full rootless
+suite. They cover hidden/visible mount detection, owned loop cleanup, inspection
+and operation failures, privileged writes and render/write failure propagation.
+The suite and syntax checks passed. Helper/test ShellCheck checks are clean;
+the generator's six existing SC2034 warnings exactly match the committed
+baseline, with no new diagnostics. Editor checks reported no errors.
+
+Rollback restored the original released engine
+`ae18fa7156731e2ebd9785bbd2a4879ea599ab34ea4e03cde9fa0158392e1bcf`, now started
+at `2026-10-07T10:05:28.828861985Z`. Native unit states, original exports, eight
+workers and zero-valued lockd port settings were restored. The final candidate
+root was removed and the migration checkpoint archived. Released health and all
+three full installer reads passed. Exactly the seven saved Kubernetes guests
+were restarted with matching UUIDs; all previously off guests stayed off. This
+is guest power-state restoration, not Kubernetes workload-level certification.
+
+Live/persistent network XML, management default route and eth0 DNS matched the
+snapshot. Firewall rules and policies matched after excluding counters and
+generated timestamps. Host mappings were preserved, with engine lines reordered
+by the normal helper. DHCP configs matched structurally, including the observed
+zero-reservation baseline; provisioning JSON, protected credential/config hashes,
+load-balancer registry and boot-service state matched. The released parent tree
+remained clean main `0d0c7dc`; shared data preparation and migration-specific
+state/config remain by design. No workstation reboot, firewall-service reload,
+unrelated network change, deliberate crash, package removal, main merge or
+publication was performed. The earlier external-interface confinement limit
+and separate release gates remain unchanged.
 
 ### Debian 13 Preparation
 
