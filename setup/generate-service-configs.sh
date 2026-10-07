@@ -24,25 +24,19 @@ fi
 # READ VALUES FROM JSON
 # ============================================================================
 DOMAIN=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
-ENGINE_HOSTNAME=$(jq -r '.lab.engine_hostname' "${LAB_ENV_JSON}")
 ENGINE_FQDN=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
 BRIDGE_IF=$(jq -r '.network.bridge_interface' "${LAB_ENV_JSON}")
 IPV4_ADDRESS=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
 IPV4_NETWORK=$(jq -r '.network.ipv4.network' "${LAB_ENV_JSON}")
 IPV4_CIDR=$(jq -r '.network.ipv4.cidr' "${LAB_ENV_JSON}")
-IPV4_NETMASK=$(jq -r '.network.ipv4.netmask' "${LAB_ENV_JSON}")
 IPV4_PREFIX=$(jq -r '.network.ipv4.prefix' "${LAB_ENV_JSON}")
 IPV4_GATEWAY=$(jq -r '.network.ipv4.gateway' "${LAB_ENV_JSON}")
 IPV4_BROADCAST=$(jq -r '.network.ipv4.broadcast' "${LAB_ENV_JSON}")
-IPV4_FIRST24=$(jq -r '.network.ipv4.first24_subnet' "${LAB_ENV_JSON}")
-IPV4_LAST24=$(jq -r '.network.ipv4.last24_subnet' "${LAB_ENV_JSON}")
 DHCP_START=$(jq -r '.network.ipv4.dhcp_range_start' "${LAB_ENV_JSON}")
 DHCP_END=$(jq -r '.network.ipv4.dhcp_range_end' "${LAB_ENV_JSON}")
 IPV6_ADDRESS=$(jq -r '.network.ipv6.address' "${LAB_ENV_JSON}")
 IPV6_PREFIX=$(jq -r '.network.ipv6.prefix' "${LAB_ENV_JSON}")
 IPV6_PREFIX_BASE=$(jq -r '.network.ipv6.prefix_base' "${LAB_ENV_JSON}")
-IPV6_ULA_SUBNET=$(jq -r '.network.ipv6.ula_subnet' "${LAB_ENV_JSON}")
-UPSTREAM_DNS=$(jq -r '.network.upstream_dns[]' "${LAB_ENV_JSON}")
 
 # ============================================================================
 # GENERATE NGINX CONFIG

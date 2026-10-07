@@ -248,6 +248,36 @@ unrelated network change, deliberate crash, package removal, main merge or
 publication was performed. The earlier external-interface confinement limit
 and separate release gates remain unchanged.
 
+#### Upgrade-readiness Review (October 7, 2026)
+
+The generator's six unused JSON assignments were removed after confirming that
+they have no consumers. Its focused NFS-generation regression, syntax check and
+warning-level ShellCheck now pass without those diagnostics. This cleanup does
+not change the live lab or generated configuration.
+
+Do not yet promise existing host-NFS users that `git pull` followed by
+`tux2lab rebuild` completes this upgrade. Two open gates were identified:
+
+1. `rebuild.sh` calls `require_container_nfs_engine` before image selection and
+  rejects the released host-NFS engine. It does not invoke the explicit
+  migration helper. A normal-command upgrade needs an integrated, tested
+  one-time handover, with image validation before disruption, explicit
+  maintenance consent, retained rollback state and the existing ownership
+  guards. Already migrated installations use the normal replacement path.
+2. `generate_kea_dhcp4` and `generate_kea_dhcp6` overwrite their configs without
+  preserving the reservations written by ksmanager. An isolated temporary
+  fixture with one reservation in each family confirmed both were removed by
+  regeneration. The completed live rebuild tests had zero reservations and
+  therefore did not cover this case. Preservation and rollback must be tested
+  with populated configs before claiming a safe existing-user rebuild.
+
+The explicit migration helper itself generates only NFS configuration; it does
+not regenerate Kea. These findings do not invalidate the bounded migration and
+rollback evidence above, but they prevent signing off the proposed two-command
+release upgrade. No automatic migration or reservation-preservation change has
+been made as part of this review. The latest lifecycle fixes also still need
+their focused representative-host retest before release approval.
+
 ### Debian 13 Preparation
 
 The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
