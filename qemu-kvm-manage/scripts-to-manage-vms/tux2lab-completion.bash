@@ -558,7 +558,7 @@ _tux2lab_completions() {
 
     # ===== REBUILD COMMAND =====
     if [[ "${cmd}" == "rebuild" ]]; then
-        local all_opts="--pull-image -y --yes -h --help"
+        local all_opts="--pull-image --allow-running-guests -y --yes -h --help"
         local opts=""
         for opt in $all_opts; do
             local already_used=false

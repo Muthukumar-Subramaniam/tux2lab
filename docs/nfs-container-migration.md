@@ -255,14 +255,10 @@ they have no consumers. Its focused NFS-generation regression, syntax check and
 warning-level ShellCheck now pass without those diagnostics. This cleanup does
 not change the live lab or generated configuration.
 
-Do not yet promise existing host-NFS users that `git pull` followed by
-`tux2lab rebuild` completes this upgrade. The first-upgrade handover remains an
-open gate: `rebuild.sh` calls `require_container_nfs_engine` before image
-selection and rejects the released host-NFS engine. It does not invoke the
-explicit migration helper. A normal-command upgrade needs an integrated,
-tested one-time handover, with image validation before disruption, explicit
-maintenance consent, retained rollback state and the existing ownership
-guards. Already migrated installations use the normal replacement path.
+At this review checkpoint, `git pull` followed by `tux2lab rebuild` could not
+complete a host-NFS upgrade: rebuild rejected the old engine before image
+selection instead of invoking migration. The October 9 integration below
+addresses that code gap while retaining validation, consent and rollback guards.
 
 The initial review incorrectly classified DHCP reservation preservation as a
 release blocker. The user clarified that reservations are provisioning-time
@@ -281,11 +277,80 @@ when provisioning is not in progress; restarting the engine already interrupts
 the services used by an active installer.
 
 The explicit migration helper itself generates only NFS configuration; it does
-not regenerate Kea. The remaining handover gap prevents signing off the proposed
-two-command release upgrade; the bounded migration and rollback evidence above
-remains valid. No automatic migration or reservation-preservation change has
-been made as part of this review. The latest lifecycle fixes also still need
-their focused representative-host retest before release approval.
+not regenerate Kea. The bounded migration and rollback evidence above remains
+valid. No reservation-preservation change is needed or included. The latest
+lifecycle fixes still need their focused representative-host retest before
+release approval.
+
+#### Rebuild Upgrade Integration (October 9, 2026)
+
+`rebuild` now distinguishes a legacy engine with no NFS contract label from an
+already migrated `container-v1` engine. Container lookup errors, failed label
+inspection and unknown nonempty contracts refuse the operation. First upgrades
+select the project-version image from the primary registry, with the existing
+fallback registry if the pull fails, even when the old image has the same version
+tag. `TUX2LAB_ENGINE_IMAGE` selects an explicit local candidate without pulling.
+Both required image labels are checked before migration or normal rebuild
+infrastructure/config changes. Already migrated engines retain the ordinary
+rebuild path and version-based image selection.
+
+After publication of a compatible image and release approval, the normal entry
+point is:
+
+```bash
+git pull
+tux2lab rebuild
+```
+
+Interactive first upgrade explains the NFS ownership change and service outage.
+If guests are running, it separately asks the operator to confirm that they have
+no NFS dependency and accept the interruption. `--yes` accepts maintenance but
+does not imply that acknowledgement: with running guests it also requires
+`--allow-running-guests`. Declining either confirmation or reaching EOF stops
+before a pull or handover. No guest is automatically shut down. Finish active
+provisioning and NFS-dependent work first; independent installed guests use
+static networking and do not need DHCP reservation preservation.
+
+The first upgrade calls the maintained migration script's `--check` and
+`--apply`, forwarding only the explicit running-guest acknowledgement. The
+apply command repeats preflight under its migration lock. Unrelated exports,
+host NFS client mounts, an existing checkpoint/backup and failed guest inspection
+remain blockers. Migration failures return a failing rebuild status; the helper
+owns automatic rollback and retains evidence if recovery is incomplete. Do not
+run other lifecycle commands concurrently with migration.
+
+This first rebuild intentionally reuses the existing service configs and returns
+after successful handover. It does not run normal config generation or immediately
+replace the newly migrated engine. This keeps the original engine's rollback
+inputs intact. Later rebuilds regenerate configs normally. Keep
+`tux2lab-engine-host-nfs-backup` and `/var/lib/tux2lab/nfs-migration` until
+acceptance; native NFS packages and host configuration remain installed.
+Rollback uses the same helper, followed by restoring the previous source version:
+
+```bash
+sudo bash /tux2lab/setup/migrate-nfs-to-container.sh --rollback
+```
+
+The published `2.1.1` image is still incompatible; this integration does not bump
+the version, publish an image or authorize a live handover. Branch testing must
+use the explicit local image shown in Planned Handover below. New tests execute
+the real rebuild entry point with mocked external commands and cover successful
+migration, running-guest consent/refusal, cancelled/EOF prompts, both registries,
+bad images/layouts, inspection failures, failed preflight/apply, and normal
+already-migrated/missing-engine routing. Completion includes the new flag and
+does not offer it twice. Run the focused check with:
+
+```bash
+bash container/run-nfs-tests.sh --rebuild-upgrade
+```
+
+Focused and full rootless checks pass, as do syntax and editor checks. Rebuild,
+the migration helper and tests pass warning-level ShellCheck. The completion
+file's 76 existing SC2128/SC2178/SC2207 diagnostics exactly match its committed
+baseline; this one-option completion change introduces none. Live acceptance of
+the new `rebuild` entry point, representative-host retests of the latest lifecycle
+changes, and release gates remain outstanding. No runtime maintenance was
+performed for this integration.
 
 ### Debian 13 Preparation
 
@@ -843,8 +908,9 @@ accepted DNS/DHCP and other engine-service interruption. It does not inspect
 guest mounts, guarantee uninterrupted service, or waive any other preflight
 check. Guest inventory failures still refuse migration. Keep existing guests,
 libvirt, the bridge and their backing filesystems running throughout this mode;
-do not substitute full lab stop/start or rebuild commands. Quiesce any newly
-created NFS/PXE clients before rollback.
+do not substitute full lab stop/start or ordinary post-migration rebuilds for
+this bounded handover. The first-upgrade rebuild route above delegates to this
+same helper. Quiesce any newly created NFS/PXE clients before rollback.
 
 The command keeps the original container as `tux2lab-engine-host-nfs-backup`,
 records host unit states, exports and lockd settings under
@@ -880,9 +946,10 @@ sudo bash setup/migrate-nfs-to-container.sh --rollback
 Rollback first stops and verifies container NFS, restores the retained engine,
 unmasks only recorded units, restores lockd settings, starts originally active
 units, reloads exports and checks the recorded export set and unit enable states.
-Successful rollback archives its checkpoint with a timestamp. Return to `main`
-for legacy host-backed lifecycle commands afterward. Do not blindly overwrite
-host configuration changed since migration; reconcile those changes first.
+Successful rollback archives its checkpoint with a timestamp. Restore the
+previous source version for legacy host-backed lifecycle commands afterward;
+`main` may already contain the new release. Do not blindly overwrite host
+configuration changed since migration; reconcile those changes first.
 
 A SIGKILL of engine PID 1, host crash or failed kernel shutdown may bypass cleanup
 and leave kernel listeners. Do not force-delete the engine or unmount ISOs to

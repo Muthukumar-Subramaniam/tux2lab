@@ -142,6 +142,182 @@ if [[ "${1:-}" == --nfs-generation ]]; then
     exit 0
 fi
 
+test_rebuild_upgrade() (
+    fixture=$(mktemp -d)
+    trap 'rm -rf -- "$fixture"' EXIT
+    printf '{}\n' > "$fixture/environment.json"
+    export operations="$fixture/operations" PROJECT_ROOT
+    export LAB_ENV_JSON="$fixture/environment.json" CONTAINER_NAME=tux2lab-engine
+    export MAKE_IT_CYAN='' RESET_COLOR=''
+    print_info() { :; }
+    print_yellow() { :; }
+    print_success() { :; }
+    print_task() { :; }
+    print_task_done() { :; }
+    print_task_fail() { :; }
+    print_error() { printf '%s\n' "$*" >&2; }
+    source() {
+        case "$1" in
+            /tux2lab/common-utils/color-functions.sh|*/functions/defaults.sh) ;;
+            /tux2lab/shared-functions/container-nfs.sh)
+                builtin source "$PROJECT_ROOT/shared-functions/container-nfs.sh"
+                container_nfs_host_preflight() {
+                    printf 'native-preflight\n' >> "$operations"
+                    [[ "$scenario" != native-error ]]
+                } ;;
+            "$PROJECT_ROOT/shared-functions/engine-rootfs.sh") builtin source "$1" ;;
+            *) printf 'Unexpected rebuild import: %s\n' "$1" >&2; exit 99 ;;
+        esac
+    }
+    jq() {
+        [[ "$*" == '-r .version /tux2lab/project_version.json' ]] || return 99
+        printf '2.2.0\n'
+    }
+    sudo() {
+        case "$*" in
+            'podman container exists tux2lab-engine')
+                [[ "$scenario" != lookup-error ]] || return 125
+                [[ "$scenario" != missing-engine ]] ;;
+            'podman inspect tux2lab-engine --format '*io.tux2lab.image.name*)
+                printf 'current-image\n' >> "$operations"
+                [[ "$scenario" != current-image-error ]] || return 1
+                [[ "$scenario" != current-image-empty ]] || return 0
+                if [[ "$scenario" == migrated-pull ]]; then
+                    printf 'registry/test:2.1.1\n'
+                else
+                    printf 'registry/test:2.2.0\n'
+                fi ;;
+            'podman inspect tux2lab-engine --format '*)
+                [[ "$scenario" != inspect-error ]] || return 1
+                case "$scenario" in
+                    migrated-*|native-error|current-image-*) printf 'container-v1\n' ;;
+                    unknown-contract) printf 'unknown-v2\n' ;;
+                    *) printf '\n' ;;
+                esac ;;
+            'virsh list --name')
+                printf 'guests\n' >> "$operations"
+                [[ "$scenario" != guest-query-error ]] || return 1
+                case "$scenario" in
+                    guests-*) printf 'existing-guest\n' ;;
+                esac ;;
+            'podman image inspect '*io.tux2lab.nfs.layout*)
+                printf 'layout:%s\n' "$4" >> "$operations"
+                if [[ "$scenario" == bad-layout ]]; then printf 'obsolete\n'; else printf 'direct-v1\n'; fi ;;
+            'podman image inspect '*)
+                printf 'image:%s\n' "$4" >> "$operations"
+                [[ "$scenario" != image-query-error ]] || return 1
+                case "$scenario" in
+                    bad-image|migrated-bad-image) printf '\n' ;;
+                    *) printf 'container-v1\n' ;;
+                esac ;;
+            'podman pull '*)
+                printf 'pull:%s\n' "$3" >> "$operations"
+                [[ "$scenario" != pull-failure ]] || return 1
+                [[ "$scenario" != registry-fallback || "$3" == docker.io/* ]] ;;
+            'bash /tux2lab/setup/migrate-nfs-to-container.sh --check '*|'bash /tux2lab/setup/migrate-nfs-to-container.sh --apply '*)
+                [[ $# == 4 || ( $# == 5 && "$5" == --allow-running-guests ) ]] || exit 99
+                printf '%s:%s:%s\n' "${3#--}" "$4" "${5:-}" >> "$operations"
+                [[ "$scenario:$3" != check-error:--check && "$scenario:$3" != apply-error:--apply ]] ;;
+            'systemctl is-active --quiet libvirtd')
+                printf 'normal-rebuild\n' >> "$operations"
+                exit 0 ;;
+            *) printf 'Unexpected rebuild operation: %s\n' "$*" >&2; exit 99 ;;
+        esac
+    }
+    sleep() { :; }
+    export -f source sudo jq sleep print_info print_yellow print_success print_error print_task print_task_done print_task_fail
+    for scenario in legacy-override legacy-default registry-fallback pull-failure \
+                    lookup-error inspect-error unknown-contract guest-query-error \
+                    bad-image bad-layout image-query-error check-error apply-error \
+                    decline no-input guests-unconfirmed guests-opt-in guests-interactive \
+                    guests-decline guests-no-input guests-maintenance-decline \
+                    migrated-override migrated-local migrated-pull migrated-bad-image \
+                    missing-engine native-error current-image-error current-image-empty; do
+        export scenario
+        export TUX2LAB_ENGINE_IMAGE=localhost/test:nfs
+        image="$TUX2LAB_ENGINE_IMAGE"
+        prefix=$'guests\n'
+        options=(--yes)
+        answers=''
+        acknowledgement=''
+        expected_status=0
+        case "$scenario" in
+            legacy-default|registry-fallback|pull-failure|migrated-local|migrated-pull|missing-engine|current-image-*)
+                unset TUX2LAB_ENGINE_IMAGE
+                image=ghcr.io/muthukumar-subramaniam/tux2lab-engine:2.2.0 ;;
+        esac
+        case "$scenario" in
+            legacy-default|registry-fallback|pull-failure) prefix+="pull:$image"$'\n' ;;
+            migrated-*|native-error|current-image-*)
+                prefix=$'native-preflight\n'
+                case "$scenario" in
+                    migrated-local|migrated-pull|current-image-*) prefix+=$'current-image\n' ;;
+                esac
+                if [[ "$scenario" == migrated-pull ]]; then prefix+="pull:$image"$'\n'; fi
+                if [[ "$scenario" == migrated-local ]]; then image=registry/test:2.2.0; fi ;;
+            missing-engine) prefix=$'native-preflight\n'"pull:$image"$'\n' ;;
+        esac
+        if [[ "$scenario" == registry-fallback || "$scenario" == pull-failure ]]; then
+            image=docker.io/musubram/tux2lab-engine:2.2.0
+            prefix+="pull:$image"$'\n'
+        fi
+        case "$scenario" in
+            decline|guests-decline) options=(); answers=$'no\n' ;;
+            no-input|guests-no-input) options=() ;;
+            guests-interactive) options=(); answers=$'yes\nyes\n'; acknowledgement=--allow-running-guests ;;
+            guests-maintenance-decline) options=(); answers=$'yes\nno\n' ;;
+            guests-opt-in) options+=(--allow-running-guests); acknowledgement=--allow-running-guests ;;
+        esac
+        expected="${prefix}image:$image"$'\n'"layout:$image"$'\n'"check:$image:$acknowledgement"$'\n'"apply:$image:$acknowledgement"
+        case "$scenario" in
+            lookup-error|inspect-error|unknown-contract) expected=''; expected_status=1 ;;
+            guest-query-error|guests-unconfirmed|no-input|guests-no-input) expected=guests; expected_status=1 ;;
+            decline|guests-decline|guests-maintenance-decline) expected=guests ;;
+            pull-failure|native-error|current-image-*) expected="${prefix%$'\n'}"; expected_status=1 ;;
+            bad-image|image-query-error|migrated-bad-image) expected="${prefix}image:$image"; expected_status=1 ;;
+            bad-layout) expected="${prefix}image:$image"$'\n'"layout:$image"; expected_status=1 ;;
+            check-error) expected="${expected%$'\n'apply:*}"; expected_status=1 ;;
+            apply-error) expected_status=1 ;;
+            migrated-*|missing-engine) expected="${prefix}image:$image"$'\n'"layout:$image"$'\nnormal-rebuild' ;;
+        esac
+        : > "$operations"
+        status=0
+        printf '%s' "$answers" | command bash "$PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/rebuild.sh" "${options[@]}" \
+            > "$fixture/output" 2>&1 || status=$?
+        if [[ "$status" != "$expected_status" || "$(cat "$operations")" != "$expected" ]]; then
+            printf 'FAIL: rebuild case %s (status %s, expected %s)\n' "$scenario" "$status" "$expected_status" >&2
+            cat "$fixture/output" "$operations" >&2
+            printf 'Expected operations:\n%s\n' "$expected" >&2
+            exit 1
+        fi
+    done
+    (
+        builtin source "$PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/tux2lab-completion.bash"
+        source() {
+            [[ "$1" == /tux2lab/ksmanager/distro-versions.conf ]] || return 99
+            builtin source "$PROJECT_ROOT/ksmanager/distro-versions.conf"
+        }
+        ls() { return 0; }
+        COMP_WORDBREAKS=' '
+        COMP_LINE='tux2lab rebuild --allow'
+        COMP_WORDS=(tux2lab rebuild --allow)
+        COMP_CWORD=2
+        _tux2lab_completions
+        [[ "${COMPREPLY[*]}" == --allow-running-guests ]]
+        COMP_LINE='tux2lab rebuild --allow-running-guests --'
+        COMP_WORDS=(tux2lab rebuild --allow-running-guests --)
+        COMP_CWORD=3
+        _tux2lab_completions
+        [[ " ${COMPREPLY[*]} " != *' --allow-running-guests '* ]]
+    )
+    printf 'PASS: rebuild migration routing, consent, image selection and failure guards; migrated engines keep normal flow\n'
+)
+
+if [[ "${1:-}" == --rebuild-upgrade ]]; then
+    test_rebuild_upgrade
+    exit 0
+fi
+
 test_nfs_recovery_identity() {
     python3 - "$PROJECT_ROOT/shared-functions/nfs-recovery.py" <<'RECOVERYTEST'
 import copy
@@ -1223,6 +1399,7 @@ printf 'PASS: failed VM inspection blocks confirmation and shutdown before infra
 
 test_iso_mounts
 test_nfs_generation
+test_rebuild_upgrade
 
 for data_mount_case in directory mounted bind-error private-error share-error inspect-error empty-target verify-error private symlink; do
     (

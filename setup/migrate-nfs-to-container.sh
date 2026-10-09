@@ -128,7 +128,7 @@ restore_host_nfs() {
     fi
     [[ "$status" == 0 ]] || return 1
     mv "$NFS_MIGRATION_DIR" "${NFS_MIGRATION_DIR}-restored-$(date -u +%Y%m%dT%H%M%SZ)" || return 1
-    printf 'Host NFS and the previous engine restored. Use main for legacy lifecycle commands.\n'
+    printf 'Host NFS and the previous engine restored. Restore the previous source version before using legacy lifecycle commands.\n'
 }
 
 apply_nfs_migration() {

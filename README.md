@@ -69,7 +69,7 @@ blocks ancillary RPC traffic arriving outside the lab bridge and loopback.
 | **Image** | Local migration build; released `2.1.1` does not contain the new NFS service |
 | **Runtime** | Podman (rootful, `--network=host --privileged`) |
 | **Persistence** | All state in `/tux2lab-data/` (bind-mounted into container) |
-| **Lifecycle** | Start, stop, and rebuild engine-owned services after explicit NFS migration |
+| **Lifecycle** | First rebuild migrates host NFS with rollback; later rebuilds regenerate configs and replace the engine |
 | **Resources** | Minimal, shares host kernel, no VM overhead |
 
 ---
@@ -396,7 +396,7 @@ tux2lab enable                    Enable lab infrastructure auto-start on boot
 tux2lab disable                   Disable lab infrastructure auto-start on boot
 tux2lab health                    Check all lab service health
 tux2lab deploy                    Deploy the lab environment (one-time setup)
-tux2lab rebuild                   Regenerate configs and recreate container
+tux2lab rebuild                   Migrate host NFS on first upgrade; otherwise regenerate configs and recreate container
 tux2lab rebuild --pull-image      Also pull latest container image from registry
 tux2lab destroy                   Permanently destroy the entire lab environment
 tux2lab info                      Show lab deployment details
@@ -419,6 +419,39 @@ tux2lab version                   Show version information
 
 Use `tux2lab --help` or `tux2lab <command> --help` for detailed usage.
 Tab completion is available after installation.
+
+### Upgrading From Host NFS
+
+Once a compatible container-NFS release is published, the upgrade entry point is:
+
+```bash
+git pull
+tux2lab rebuild
+```
+
+The first rebuild selects and validates the new image, then uses the guarded
+NFS migration helper. It reuses existing service configs and retains the previous
+engine and native service checkpoint for rollback. Subsequent rebuilds use normal
+config regeneration and engine replacement. Do not run concurrent lifecycle
+commands, and finish provisioning and NFS-dependent work before maintenance.
+
+Running guests require explicit confirmation that their storage and guest OS do
+not depend on NFS and that engine-service interruption is acceptable. Interactive
+rebuild asks for this acknowledgement; unattended first migration requires both
+`--yes` and `--allow-running-guests` when guests are running. `--yes` alone does
+not bypass this guard. Native NFS packages are retained, not removed.
+
+This branch is still pre-release: the published `2.1.1` image is incompatible.
+For authorized development testing, select the local image explicitly:
+
+```bash
+TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab rebuild
+```
+
+The new rebuild route has rootless regression coverage; live end-to-end validation
+of that entry point and release approval remain outstanding. See the
+[migration runbook](docs/nfs-container-migration.md#rebuild-upgrade-integration-october-9-2026)
+for checks, retained rollback state and limitations.
 
 ---
 

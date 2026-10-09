@@ -17,22 +17,30 @@ if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
 
 DESCRIPTION:
     Regenerate service configurations, optionally pull latest container image,
-    and recreate the tux2lab-engine container. Running VMs are not affected.
+    and recreate the tux2lab-engine container. Guest VMs are not restarted.
     Use after pulling project updates (git pull) or changing lab configs.
+    The first host-NFS upgrade performs a guarded migration using existing
+    service configs and retains the old engine for rollback.
+    Do not rebuild during provisioning or while clients depend on lab NFS.
 
 OPTIONS:
-    --pull-image     Pull latest container image from registry
-    -y, --yes        Skip confirmation prompt
-    -h, --help       Show this help message"
+    --pull-image             Pull latest container image from registry
+    --allow-running-guests   First migration: confirm guests have no NFS
+                             dependency and accept service interruption
+    -y, --yes                Accept maintenance without confirmation prompts;
+                             does not imply --allow-running-guests
+    -h, --help               Show this help message"
     exit 0
 fi
 
 skip_confirm=false
 pull_image=false
+allow_running_guests=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -y|--yes) skip_confirm=true; shift ;;
         --pull-image) pull_image=true; shift ;;
+        --allow-running-guests) allow_running_guests=true; shift ;;
         *) print_error "Unknown argument: $1"; echo "Run 'tux2lab rebuild --help' for usage."; exit 1 ;;
     esac
 done
@@ -45,35 +53,140 @@ fi
 
 # ====== VERSION + INFO ======
 source /tux2lab/shared-functions/container-nfs.sh
-if sudo podman container exists "${CONTAINER_NAME}"; then
-    require_container_nfs_engine "${CONTAINER_NAME}"
+migrate_host_nfs=false
+engine_exists=$(container_nfs_exists "${CONTAINER_NAME}") || exit 1
+if [[ "$engine_exists" == true ]]; then
+    nfs_contract=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{if index .Config.Labels "io.tux2lab.nfs"}}{{index .Config.Labels "io.tux2lab.nfs"}}{{end}}') || exit 1
+    case "$nfs_contract" in
+        container-v1) ;;
+        '') migrate_host_nfs=true ;;
+        *) print_error "Unknown engine NFS contract; refusing rebuild."; exit 1 ;;
+    esac
 fi
-container_nfs_host_preflight
+if [[ "$migrate_host_nfs" != true ]]; then
+    container_nfs_host_preflight || exit 1
+fi
 local_version=$(jq -r '.version' /tux2lab/project_version.json)
 print_info "Rebuilding tux2lab v${local_version}..."
 
 # Auto-detect version mismatch: if running container's image tag doesn't match project version, pull
-if [[ "$pull_image" != "true" && -z "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
-    current_image=$(engine_image_name "${CONTAINER_NAME}" 2>/dev/null || echo "")
-    if [[ -n "$current_image" ]] && [[ "$current_image" != *":${local_version}" ]]; then
-        print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
+current_image=''
+if [[ -z "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
+    if [[ "$migrate_host_nfs" == true || "$engine_exists" == false ]]; then
         pull_image=true
+    elif [[ "$pull_image" != true ]]; then
+        current_image=$(engine_image_name "${CONTAINER_NAME}") || exit 1
+        [[ -n "$current_image" ]] || { print_error "Cannot determine the current engine image."; exit 1; }
+        if [[ "$current_image" != *":${local_version}" ]]; then
+            print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
+            pull_image=true
+        fi
     fi
 fi
 
 # ====== CONFIRM ======
+migration_options=()
+if [[ "$migrate_host_nfs" == true ]]; then
+    print_yellow "This first upgrade moves NFS into the engine, reuses service configs and retains the old engine for rollback."
+    print_yellow "Confirm no provisioning is in progress and no clients depend on lab NFS during maintenance."
+    running_guests=$(sudo virsh list --name) || { print_error "Cannot inspect running guests; refusing migration."; exit 1; }
+    if [[ -n "$running_guests" && "$allow_running_guests" != true ]]; then
+        if [[ "$skip_confirm" == true ]]; then
+            print_error "Running guests require --allow-running-guests after confirming no NFS dependency; --yes alone is insufficient."
+            exit 1
+        fi
+        print_yellow "Running guests:
+${running_guests}"
+        read -rp "Keep these guests running, confirming no NFS dependency and accepting service interruption? (yes/no): " confirm_guests
+        if [[ "$confirm_guests" != yes ]]; then
+            print_info "Aborted."
+            exit 0
+        fi
+        allow_running_guests=true
+    fi
+    if [[ "$allow_running_guests" == true ]]; then
+        migration_options=(--allow-running-guests)
+    fi
+fi
 if [[ "${skip_confirm}" != "true" ]]; then
-    if [[ "$pull_image" == "true" ]]; then
+    if [[ "$migrate_host_nfs" == true ]]; then
+        print_yellow "The migration image will be selected and validated before NFS ownership changes."
+    elif [[ "$pull_image" == "true" ]]; then
         print_yellow "This will regenerate service configs, pull the latest image, recreate the container, and restart NFS."
     else
         print_yellow "This will regenerate service configs, recreate the container from the local image, and restart NFS."
     fi
-    print_yellow "Running VMs will NOT be affected, but lab services (DNS, DHCP, NTP, NFS, HTTP, TFTP) will have a brief disruption."
+    print_yellow "Guest VMs will not be restarted. Lab services (DNS, DHCP, NTP, NFS, HTTP, TFTP) will be interrupted; no provisioning or NFS-dependent work may be active."
     read -rp "Continue? (yes/no): " confirm
     if [[ "${confirm}" != "yes" ]]; then
         print_info "Aborted."
         exit 0
     fi
+fi
+
+# ====== SELECT AND VALIDATE IMAGE BEFORE CHANGING THE LAB ======
+container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
+container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
+container_image=""
+
+if [[ -n "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
+    container_image="$TUX2LAB_ENGINE_IMAGE"
+elif [[ "$pull_image" != "true" ]]; then
+    container_image="$current_image"
+else
+    print_task "Pulling tux2lab-engine container image..."
+    pull_start=$SECONDS
+
+    sudo podman pull "${container_image_primary}" &>/dev/null &
+    pull_pid=$!
+    pull_elapsed=0
+    while kill -0 "$pull_pid" 2>/dev/null; do
+        printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+        sleep 1
+        pull_elapsed=$((SECONDS - pull_start))
+    done
+
+    if wait "$pull_pid"; then
+        container_image="${container_image_primary}"
+    else
+        pull_start=$SECONDS
+        sudo podman pull "${container_image_fallback}" &>/dev/null &
+        pull_pid=$!
+        pull_elapsed=0
+        while kill -0 "$pull_pid" 2>/dev/null; do
+            printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
+            sleep 1
+            pull_elapsed=$((SECONDS - pull_start))
+        done
+
+        if wait "$pull_pid"; then
+            container_image="${container_image_fallback}"
+        else
+            printf "\r\033[K"
+            print_task "Pulling tux2lab-engine container image..."
+            print_task_fail
+            print_error "Failed to pull from both registries."
+            exit 1
+        fi
+    fi
+
+    pull_elapsed=$((SECONDS - pull_start))
+    printf "\r\033[K"
+    printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
+    print_task_done
+fi
+container_nfs_image_check "$container_image" || exit 1
+
+if [[ "$migrate_host_nfs" == true ]]; then
+    sudo bash /tux2lab/setup/migrate-nfs-to-container.sh --check "$container_image" "${migration_options[@]}" || exit 1
+    if ! sudo bash /tux2lab/setup/migrate-nfs-to-container.sh --apply "$container_image" "${migration_options[@]}"; then
+        print_error "NFS migration failed. Inspect the migration output and retained rollback checkpoint before retrying."
+        exit 1
+    fi
+    print_success "First upgrade complete. Container NFS is ready; existing service configs and the rollback checkpoint were retained."
+    print_info "Run 'tux2lab health' to verify all services. Later rebuilds use normal config regeneration."
+    print_info "Rollback: sudo bash /tux2lab/setup/migrate-nfs-to-container.sh --rollback, then restore the previous source checkout."
+    exit 0
 fi
 
 # ====== STEP 0: Ensure infrastructure is up ======
@@ -177,60 +290,6 @@ if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp4-lease1.${pool_domain}"
     done
     sudo bash /tux2lab/named-manage/dnsbinder.sh -c6fy --ttl 86400 --inline "$dhcp6_file" &>/dev/null || true
     rm -f "$dhcp6_file"
-    print_task_done
-fi
-
-# ====== STEP 5: Pull container image (if needed) ======
-container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
-container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
-container_image=""
-
-if [[ -n "${TUX2LAB_ENGINE_IMAGE:-}" ]]; then
-    container_image="$TUX2LAB_ENGINE_IMAGE"
-elif [[ "$pull_image" != "true" ]]; then
-    # Use existing local image
-    container_image=$(engine_image_name "${CONTAINER_NAME}" 2>/dev/null || echo "${container_image_primary}")
-else
-    print_task "Pulling tux2lab-engine container image..."
-    pull_start=$SECONDS
-
-    sudo podman pull "${container_image_primary}" &>/dev/null &
-    pull_pid=$!
-    pull_elapsed=0
-    while kill -0 "$pull_pid" 2>/dev/null; do
-        printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
-        sleep 1
-        pull_elapsed=$((SECONDS - pull_start))
-    done
-
-    if wait "$pull_pid"; then
-        container_image="${container_image_primary}"
-    else
-        # Fallback to Docker Hub
-        pull_start=$SECONDS
-        sudo podman pull "${container_image_fallback}" &>/dev/null &
-        pull_pid=$!
-        pull_elapsed=0
-        while kill -0 "$pull_pid" 2>/dev/null; do
-            printf "\r${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image [%dm %ds]...${RESET_COLOR}\033[K" $((pull_elapsed/60)) $((pull_elapsed%60))
-            sleep 1
-            pull_elapsed=$((SECONDS - pull_start))
-        done
-
-        if wait "$pull_pid"; then
-            container_image="${container_image_fallback}"
-        else
-            printf "\r\033[K"
-            print_task "Pulling tux2lab-engine container image..."
-            print_task_fail
-            print_error "Failed to pull from both registries."
-            exit 1
-        fi
-    fi
-
-    pull_elapsed=$((SECONDS - pull_start))
-    printf "\r\033[K"
-    printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
     print_task_done
 fi
 
