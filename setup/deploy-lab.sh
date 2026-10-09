@@ -215,6 +215,7 @@ collect_credentials() {
   - Generate SSH keypair for lab access
   - Generate self-signed SSL certificate
   - Generate service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
+    - Stop and mask unused native NFS/RPC services (packages retained)
     - Pull and start tux2lab-engine container (DNS, DHCP, NTP, HTTP, TFTP, NFS)
   - Configure host DNS resolution and SSH"
     read -p "Are you sure you want to continue? (yes/no): " confirm
@@ -758,6 +759,7 @@ main() {
     preflight_checks
     capture_network_config
     collect_credentials
+    sudo bash /tux2lab/setup/migrate-nfs-to-container.sh --prepare-fresh
     generate_ssh_keys
     generate_ssl_cert
     generate_lab_environment_json

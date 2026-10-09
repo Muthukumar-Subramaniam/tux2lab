@@ -10,7 +10,82 @@ NFS_MIGRATION_DIR=/var/lib/tux2lab/nfs-migration
 NFS_ENGINE=tux2lab-engine
 NFS_BACKUP=tux2lab-engine-host-nfs-backup
 NFS_DATA=/tux2lab-data
+NFS_HOST_EXPORTS=/etc/exports
+NFS_HOST_EXPORTS_DIR=/etc/exports.d
 NFS_UNITS=(nfs-server.service nfs-kernel-server.service nfs-mountd.service rpc-mountd.service rpc-statd.service nfs-idmapd.service nfsdcld.service rpcbind.socket rpcbind.service proc-fs-nfsd.mount)
+
+prepare_fresh_host_nfs() {
+    local containers guests exports unit load_state active_state registrations
+    local rpc_active=false
+    local -a units=()
+    if [[ -e "$NFS_DATA/lab-config/lab_environment.json" || -L "$NFS_DATA/lab-config/lab_environment.json" ||
+          -e "$NFS_MIGRATION_DIR" || -L "$NFS_MIGRATION_DIR" ]]; then
+        printf 'Existing lab or migration state: use rebuild or resolve the migration first.\n' >&2
+        return 1
+    fi
+    containers=$(sudo podman ps -aq) || return 1
+    guests=$(sudo virsh list --all --name) || return 1
+    [[ -z "$containers" && -z "$guests" ]] || {
+        printf 'Fresh NFS preparation requires no containers or defined VMs.\n' >&2
+        return 1
+    }
+    container_nfs_require_no_client_mounts || return 1
+    exports=$(sudo exportfs -s) || return 1
+    [[ -z "$exports" ]] || { printf 'Active host exports prevent fresh NFS preparation.\n' >&2; return 1; }
+    if [[ -e "$NFS_HOST_EXPORTS" || -L "$NFS_HOST_EXPORTS" ]]; then
+        awk 'NF && $1 !~ /^#/ {exit 1}' "$NFS_HOST_EXPORTS" || {
+            printf 'Configured or unreadable host exports prevent fresh NFS preparation.\n' >&2
+            return 1
+        }
+    fi
+    if [[ -e "$NFS_HOST_EXPORTS_DIR" || -L "$NFS_HOST_EXPORTS_DIR" ]]; then
+        [[ -d "$NFS_HOST_EXPORTS_DIR" ]] || return 1
+        find -L "$NFS_HOST_EXPORTS_DIR" -maxdepth 1 -name '*.exports' \
+            -exec awk 'NF && $1 !~ /^#/ {exit 1}' {} + || {
+            printf 'Configured or unreadable export drop-ins prevent fresh NFS preparation.\n' >&2
+            return 1
+        }
+    fi
+    for unit in "${NFS_UNITS[@]}"; do
+        load_state=$(sudo systemctl show "$unit" -p LoadState --value) || return 1
+        case "$load_state" in
+            not-found) continue ;;
+            loaded|masked) ;;
+            *) printf 'Cannot determine host unit state: %s\n' "$unit" >&2; return 1 ;;
+        esac
+        active_state=$(sudo systemctl show "$unit" -p ActiveState --value) || return 1
+        [[ "$active_state" == active || "$active_state" == inactive ]] || {
+            printf 'Resolve the transitional or failed host unit first: %s\n' "$unit" >&2
+            return 1
+        }
+        units+=("$unit")
+        if [[ "$unit" == rpcbind.service && "$active_state" == active ]]; then rpc_active=true; fi
+    done
+    if [[ "$rpc_active" == true ]]; then
+        registrations=$(sudo timeout --kill-after=5 15 rpcinfo -p) || return 1
+        awk 'NR == 1 {if ($1 != "program") exit 1; next}
+             $1 !~ /^(100000|100003|100005|100021|100024|100227)$/ {exit 1}
+             END {if (NR == 0) exit 1}' <<< "$registrations" || {
+            printf 'Unknown RPC registrations prevent fresh NFS preparation.\n' >&2
+            return 1
+        }
+    fi
+    for unit in "${units[@]}"; do
+        [[ "$unit" == *.socket ]] || continue
+        sudo systemctl stop "$unit" || return 1
+        sudo systemctl mask "$unit" || return 1
+    done
+    for unit in "${units[@]}"; do
+        [[ "$unit" != *.socket ]] || continue
+        sudo systemctl stop "$unit" || return 1
+    done
+    for unit in "${units[@]}"; do
+        [[ "$unit" == *.socket || "$unit" == *.mount ]] || sudo systemctl mask "$unit" || return 1
+    done
+    verify_container_nfs_stopped || return 1
+    container_nfs_host_preflight || return 1
+    printf 'Fresh host NFS/RPC ownership prepared; native packages and configuration retained.\n'
+}
 
 migration_preflight() {
     local image="$1" allow_running_guests="${2:-}" guests exports label unit exists
@@ -226,11 +301,12 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         --help|-h)
             printf 'Usage: sudo bash setup/migrate-nfs-to-container.sh {--check|--apply} IMAGE [--allow-running-guests] | --rollback\n'
             printf 'Use --allow-running-guests only after confirming guests have no NFS dependency and accepting engine-service interruption.\n'
+            printf 'Fresh deployment: --prepare-fresh requires an empty host and retains native NFS packages.\n'
             printf 'Internal: --destroy-engine is called only after tux2lab destroy confirmation.\n'
             exit 0 ;;
         --check|--apply)
             [[ $# == 2 || ( $# == 3 && "${3:-}" == --allow-running-guests ) ]] || exit 2 ;;
-        --rollback|--destroy-engine) [[ $# == 1 ]] || exit 2 ;;
+        --rollback|--destroy-engine|--prepare-fresh) [[ $# == 1 ]] || exit 2 ;;
         *) printf 'Use --help for migration usage.\n' >&2; exit 2 ;;
     esac
     [[ "$EUID" == 0 ]] || { printf 'Run this migration command with sudo.\n' >&2; exit 1; }
@@ -243,6 +319,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
             --apply) apply_nfs_migration "$2" "${3:-}" ;;
             --rollback) restore_host_nfs ;;
             --destroy-engine) destroy_nfs_engine ;;
+            --prepare-fresh) prepare_fresh_host_nfs ;;
         esac
     ) 9>&-
 fi

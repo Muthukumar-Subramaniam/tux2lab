@@ -159,12 +159,19 @@ tux2lab deploy
 
 The interactive wizard handles:
 - Admin password setup
+- Guarded preparation of unused native NFS/RPC services for container ownership
 - SSH key and SSL certificate generation (cert trusted by host)
 - Service configuration generation (DNS, DHCP, NTP, HTTP, TFTP, NFS)
 - Container image pull and startup
 - Host DNS, SSH, and SSL trust configuration
 
 The hostname is fixed to `tux2lab-engine` and the domain is automatically set to `<your-username>.internal`.
+
+Fresh deployment stops and masks native NFS/RPC services only after confirming
+that no containers, defined VMs, NFS client mounts, host exports or migration
+checkpoint exist. Native packages and configuration are retained. Unknown state
+or a failed preparation stops deployment before writing lab configuration;
+existing deployments must use `tux2lab rebuild`.
 
 ### Step 4: Verify Your Lab
 

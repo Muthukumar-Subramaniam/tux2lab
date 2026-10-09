@@ -428,6 +428,63 @@ future compatible registry publication. Main merge, version/image publication,
 packaging and tagging remain separately controlled. The workstation reboot and
 firewall-service exclusions remain unchanged.
 
+#### Fresh-Host Ownership Acceptance (October 9, 2026)
+
+Fresh deployment now invokes the existing migration helper's `--prepare-fresh`
+operation after deployment consent and credential entry, but before SSH keys,
+certificates or lab configuration are written. It uses the same migration lock
+and does not change the existing-lab upgrade path.
+
+Preparation requires no existing lab environment or migration checkpoint, no
+containers or defined VMs, no host NFS client mounts, and no active or configured
+exports. It checks `/etc/exports` and `*.exports` drop-ins, rejects failed or
+transitional native units and unknown RPC registrations, and treats failed
+inspection as refusal. Native packages and configuration are retained. RPC
+sockets are stopped and masked first; all service names and aliases are stopped
+before any service is masked. Kernel threads and listeners must be stopped and
+the ordinary container-NFS preflight must pass before deployment continues.
+Preparation can be repeated while the host remains empty. A failed operation
+may leave units stopped or masked; resolve the reported error before retrying.
+It does not create a migration backup or restart native services automatically.
+
+Live acceptance used a disposable overlay of the dedicated Debian 13 host with
+empty lab data, no engine/VMs/exports, and native NFS/RPC active, including
+verified kernel workers. The actual interactive `tux2lab deploy` command used
+the existing candidate image; passwords were entered directly in the terminal.
+It automatically prepared native services and deployed a healthy engine with
+11/11 deep checks and 6/6 dual-stack services. Subsequent ISO setup, six full
+installer reads across NFSv3/IPv4 and NFSv4.1/IPv4/IPv6, same-engine stop/start,
+ISO remount and final health checks passed. Native configuration hashes,
+management SSH authorization and the persistent network definition were
+unchanged. Native units remained inactive and masked; a new preparation attempt
+correctly refused the existing lab without replacing its engine.
+
+The first live attempt exposed why masking must follow stopping: masking the
+active native unit cleared its stop commands and left kernel NFS listeners.
+After that correction, masking the canonical Debian service before stopping its
+alias caused another safe refusal. Both failed attempts stopped before writing
+lab configuration. The final ordering handles both cases; real preparation and
+repeat runs, persistent masks, and migration-lock contention checks passed.
+Test-owned residual native sockets were cleaned with the native shutdown tool
+only inside the disposable host. The native test fixture also reset inherited
+candidate lockd ports before recreating the native-server baseline.
+
+Rootless `bash container/run-nfs-tests.sh --fresh-host` covers 33 success/refusal/
+failure scenarios, repeat calls, alias ordering and deployment's consent-to-
+preparation-to-configuration sequence. The full rootless suite, touched-shell
+syntax, helper/test warning-level ShellCheck and editor checks pass. Deployment's
+five existing warning-level ShellCheck diagnostics are unchanged.
+
+Private evidence is retained in
+`/home/musubram/nfs-fresh-acceptance.hqUz2j57/results`; old lab credentials were
+not copied into that archive. The original guest disk and firmware hashes and
+domain XML were restored and verified, and the host is off again. The released
+workstation engine and its original seven running guests remained unchanged.
+This closes the fresh-host ownership gap with bounded Debian live acceptance,
+not a claim of fresh installation on every supported distro or release approval.
+No workstation reboot, firewall-service change, package removal, image build or
+publication was performed.
+
 ### Debian 13 Preparation
 
 The dedicated `nfs-host-debian13.musubram.internal` guest reports Debian 13.7,
@@ -1008,8 +1065,9 @@ TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab rebuild
 Keep the backup container and migration checkpoint while rollback may be needed.
 Confirmed destroy removes them as described below. Do not prune all images
 while rollback may still be needed. Do not uninstall
-host NFS utilities. Fresh-host deployment and host service policy still need a
-separate acceptance pass; the migration command expects an existing host export.
+host NFS utilities. Fresh deployment uses the guarded preparation described in
+Fresh-Host Ownership Acceptance above; migration of an existing lab still
+expects an existing host export.
 
 ### Destroy Cleanup
 
@@ -1511,8 +1569,9 @@ The owning code and installed executable inventory establish these boundaries:
   kernel upcalls or prove those helpers unused. Package-free serving and host
   NFS package removal remain unverified and unapproved.
 
-Retain the host packages. The fresh-host RPC conflict and its explicitly approved
-manual preparation remain documented below; no automatic policy fix was added.
+Retain the host packages. At this earlier checkpoint the fresh-host RPC conflict
+required the explicitly approved manual preparation documented below. The later
+Fresh-Host Ownership Acceptance section records the guarded deployment fix.
 Inventory evidence is in `host-dependencies.log` in the same evidence directory.
 
 #### Released-Baseline Migration and Rollback (October 5, 2026)

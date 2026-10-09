@@ -142,6 +142,158 @@ if [[ "${1:-}" == --nfs-generation ]]; then
     exit 0
 fi
 
+test_fresh_host_nfs() (
+    source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
+    fixture=$(mktemp -d)
+    trap 'rm -rf -- "$fixture"' EXIT
+    NFS_DATA="$fixture/data"
+    NFS_MIGRATION_DIR="$fixture/migration"
+    NFS_HOST_EXPORTS="$fixture/exports"
+    NFS_HOST_EXPORTS_DIR="$fixture/exports.d"
+    NFS_UNITS=(nfs-server.service nfs-kernel-server.service rpcbind.socket rpcbind.service)
+    operations="$fixture/operations"
+    sudo() {
+        case "$*" in
+            'podman ps -aq')
+                [[ "$scenario" != container-query-error ]] || return 125
+                [[ "$scenario" != occupied ]] || printf 'other-container\n' ;;
+            'virsh list --all --name')
+                [[ "$scenario" != guest-query-error ]] || return 1
+                [[ "$scenario" != defined-guest ]] || printf 'guest\n' ;;
+            'exportfs -s')
+                [[ "$scenario" != exports-query-error ]] || return 1
+                [[ "$scenario" != active-exports ]] || printf '/unrelated client(ro)\n' ;;
+            'systemctl show '*'-p LoadState --value')
+                [[ "$scenario" != load-error ]] || return 1
+                case "$scenario" in
+                    unknown-load) printf 'error\n' ;;
+                    absent-units) printf 'not-found\n' ;;
+                    masked-units) printf 'masked\n' ;;
+                    *) printf 'loaded\n' ;;
+                esac ;;
+            'systemctl show '*'-p ActiveState --value')
+                [[ "$scenario" != state-error ]] || return 1
+                case "$scenario" in
+                    transitioning) printf 'activating\n' ;;
+                    failed-unit) printf 'failed\n' ;;
+                    masked-units) printf 'inactive\n' ;;
+                    *) if [[ -f "$fixture/stopped" ]]; then printf 'inactive\n'; else printf 'active\n'; fi ;;
+                esac ;;
+            'timeout --kill-after=5 15 rpcinfo -p')
+                [[ "$scenario" != rpc-error ]] || return 1
+                case "$scenario" in
+                    unknown-rpc) printf 'program vers proto port service\n100004 2 tcp 123 ypserv\n' ;;
+                    malformed-rpc) printf 'invalid\n' ;;
+                    empty-rpc) : ;;
+                    *) printf 'program vers proto port service\n100000 4 tcp 111 portmapper\n100005 3 tcp 20048 mountd\n' ;;
+                esac ;;
+            'systemctl mask '*)
+                grep -Fxq "systemctl stop $3" "$operations" || return 99
+                printf 'mask\n' >> "$operations"
+                [[ "$scenario" != mask-error ]] || return 1
+                [[ "$3" != nfs-server.service ]] || touch "$fixture/masked-canonical" ;;
+            'systemctl stop '*)
+                printf '%s\n' "$*" >> "$operations"
+                [[ "$scenario" != socket-stop-error || "$3" != rpcbind.socket ]] || return 1
+                [[ "$scenario" != service-stop-error || "$3" != nfs-server.service ]] || return 1
+                [[ "$3" != nfs-kernel-server.service || ! -e "$fixture/masked-canonical" ]] || return 1
+                touch "$fixture/stopped" ;;
+            *) printf 'Unexpected fresh-host operation: %s\n' "$*" >&2; exit 99 ;;
+        esac
+    }
+    findmnt() {
+        case "$scenario" in
+            mount-query-error) return 1 ;;
+            empty-mounts) : ;;
+            nfs-client) printf 'ext4\nnfs\n' ;;
+            nfs4-client) printf 'ext4\nnfs4\n' ;;
+            *) printf 'ext4\n' ;;
+        esac
+    }
+    verify_container_nfs_stopped() {
+        printf 'verified\n' >> "$operations"
+        [[ "$scenario" != shutdown-error ]]
+    }
+    container_nfs_host_preflight() {
+        printf 'preflight\n' >> "$operations"
+        [[ "$scenario" != preflight-error ]]
+    }
+    expected=$'systemctl stop rpcbind.socket\nmask\nsystemctl stop nfs-server.service\nsystemctl stop nfs-kernel-server.service\nsystemctl stop rpcbind.service\nmask\nmask\nmask\nverified\npreflight'
+    for scenario in empty absent-units masked-units occupied container-query-error defined-guest guest-query-error \
+                    existing-lab checkpoint mount-query-error empty-mounts nfs-client nfs4-client \
+                    active-exports exports-query-error configured-exports configured-dropin broken-exports broken-dropin \
+                    load-error unknown-load state-error transitioning failed-unit rpc-error unknown-rpc malformed-rpc empty-rpc \
+                    mask-error socket-stop-error service-stop-error shutdown-error preflight-error; do
+        rm -rf "$NFS_DATA" "$NFS_MIGRATION_DIR" "$NFS_HOST_EXPORTS_DIR" "$NFS_HOST_EXPORTS" "$fixture/stopped" "$fixture/masked-canonical"
+        mkdir -p "$NFS_DATA/lab-config" "$NFS_HOST_EXPORTS_DIR"
+        printf '# No exports\n\n' > "$NFS_HOST_EXPORTS"
+        : > "$operations"
+        case "$scenario" in
+            existing-lab) touch "$NFS_DATA/lab-config/lab_environment.json" ;;
+            checkpoint) mkdir "$NFS_MIGRATION_DIR" ;;
+            configured-exports) printf '/data client(ro)\n' >> "$NFS_HOST_EXPORTS" ;;
+            configured-dropin) printf '/data client(ro)\n' > "$NFS_HOST_EXPORTS_DIR/other.exports" ;;
+            broken-exports) rm "$NFS_HOST_EXPORTS"; ln -s "$fixture/missing" "$NFS_HOST_EXPORTS" ;;
+            broken-dropin) ln -s "$fixture/missing" "$NFS_HOST_EXPORTS_DIR/other.exports" ;;
+        esac
+        expected_status=1
+        expected_operations=''
+        case "$scenario" in
+            empty|masked-units) expected_status=0; expected_operations="$expected" ;;
+            absent-units) expected_status=0; expected_operations=$'verified\npreflight' ;;
+            mask-error) expected_operations=$'systemctl stop rpcbind.socket\nmask' ;;
+            socket-stop-error) expected_operations='systemctl stop rpcbind.socket' ;;
+            service-stop-error) expected_operations=$'systemctl stop rpcbind.socket\nmask\nsystemctl stop nfs-server.service' ;;
+            shutdown-error) expected_operations="${expected%$'\npreflight'}" ;;
+            preflight-error) expected_operations="$expected" ;;
+        esac
+        status=0
+        prepare_fresh_host_nfs > "$fixture/output" 2>&1 || status=$?
+        if [[ "$status" != "$expected_status" || "$(cat "$operations")" != "$expected_operations" ]]; then
+            printf 'FAIL: fresh-host case %s (status %s, expected %s)\n' "$scenario" "$status" "$expected_status" >&2
+            cat "$fixture/output" "$operations" >&2
+            exit 1
+        fi
+        if [[ "$expected_status" == 0 ]]; then
+            : > "$operations"
+            rm -f "$fixture/masked-canonical"
+            prepare_fresh_host_nfs >/dev/null
+            [[ "$(cat "$operations")" == "$expected_operations" ]]
+        fi
+    done
+    for prepare_status in 0 1; do
+        : > "$operations"
+        status=0
+        (
+            eval "$(sed -n '/^main() {/,/^}/p' "$PROJECT_ROOT/setup/deploy-lab.sh")"
+            REBUILD_MODE=false
+            print_green() { :; }
+            preflight_checks() { :; }
+            capture_network_config() { :; }
+            collect_credentials() { printf 'consent\n' >> "$operations"; }
+            sudo() {
+                [[ "$*" == 'bash /tux2lab/setup/migrate-nfs-to-container.sh --prepare-fresh' ]] || exit 99
+                printf 'prepare\n' >> "$operations"
+                return "$prepare_status"
+            }
+            generate_ssh_keys() { printf 'keys\n' >> "$operations"; exit 0; }
+            export -f main print_green preflight_checks capture_network_config collect_credentials sudo generate_ssh_keys
+            export REBUILD_MODE operations prepare_status
+            bash -euc 'main'
+        ) || status=$?
+        [[ "$status" == "$prepare_status" ]]
+        expected_operations=$'consent\nprepare'
+        [[ "$prepare_status" != 0 ]] || expected_operations+=$'\nkeys'
+        [[ "$(cat "$operations")" == "$expected_operations" ]]
+    done
+    printf 'PASS: fresh-host preparation checks ownership before changes, retries safely and gates deployment before configuration\n'
+)
+
+if [[ "${1:-}" == --fresh-host ]]; then
+    test_fresh_host_nfs
+    exit 0
+fi
+
 test_destroy_nfs_engine() (
     builtin source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
     fixture=$(mktemp -d)
@@ -1548,6 +1700,7 @@ printf 'PASS: failed VM inspection blocks confirmation and shutdown before infra
 
 test_iso_mounts
 test_nfs_generation
+test_fresh_host_nfs
 test_destroy_nfs_engine
 test_rebuild_upgrade
 
