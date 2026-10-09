@@ -47,7 +47,9 @@ check_test_host() {
 
 read_installer() (
     local ipv4="$1" ipv6="$2" expected="$3" protocol server options checksum
+    local relative_file="${4:-os-repos/almalinux/9/images/install.img}"
     local client_dir
+    [[ "$relative_file" == os-repos/* && "/$relative_file/" != *'/../'* ]] || return 1
     client_dir=$(mktemp -d /tmp/tux2lab-migration-client.XXXXXXXX)
     cleanup_reader() {
         local status=$?
@@ -65,7 +67,7 @@ read_installer() (
         esac
         timeout -k 5 180 mount -t nfs -o "ro,soft,timeo=50,retrans=30,retry=0,$options" \
             "$server:/tux2lab-data" "$client_dir"
-        checksum=$(timeout -k 5 180 sha256sum "$client_dir/os-repos/almalinux/9/images/install.img")
+        checksum=$(timeout -k 5 180 sha256sum "$client_dir/$relative_file")
         [[ "${checksum%% *}" == "$expected" ]]
         umount "$client_dir"
         printf 'PASS: full installer checksum over %s\n' "$protocol"
@@ -232,6 +234,11 @@ run_acceptance() (
     sysctl -n fs.nfs.nlm_tcpport > "$EVIDENCE/baseline-lockd-tcp"
     sysctl -n fs.nfs.nlm_udpport > "$EVIDENCE/baseline-lockd-udp"
     verify_baseline | tee "$EVIDENCE/baseline-reads.log"
+    if [[ "${4:-}" == --prepare-rebuild ]]; then
+        trap - EXIT INT TERM
+        printf 'PASS: released baseline ready for CLI rebuild; original engine retained for --restore\n'
+        return 0
+    fi
     bash "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh" --check "$candidate_image"
     bash "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh" --apply "$candidate_image" | tee "$EVIDENCE/apply.log"
     check_engine_nfs tux2lab-engine
@@ -266,23 +273,68 @@ FAILURE
     printf 'PASS: successful migration, explicit rollback, failed-handover rollback and original restoration\n'
 )
 
+run_maintenance() (
+    local expected_host="$1" evidence="$2" image="$3" original_id original_root ipv4 ipv6 checksum
+    local iso_dir=/tux2lab-data/os-repos/almalinux/9
+    [[ "$EUID" != 0 && -d "$evidence" && "$(readlink -e "$evidence")" == "$evidence" ]] || return 1
+    [[ "$evidence" == /home/*/nfs-migration-validation.* ]] || return 1
+    check_test_host "$expected_host"
+    container_nfs_image_check "$image"
+    original_id=$(sudo podman inspect tux2lab-engine --format '{{.Id}}')
+    original_root=$(sudo podman inspect tux2lab-engine --format '{{.Rootfs}}')
+    [[ "$original_root" =~ ^/var/lib/tux2lab/engine-rootfs/engine\.[a-zA-Z0-9]{8}/rootfs$ ]]
+    printf '%s\n' "$original_id" "$original_root" > "$evidence/maintenance-original.txt"
+    sudo virsh net-dumpxml tux2lab --inactive | tee "$evidence/network-before.xml" >/dev/null
+    sha256sum /tux2lab-data/lab-config/lab_environment.json > "$evidence/environment-before.sha256"
+    ipv4=$(jq -er '.network.ipv4.address' /tux2lab-data/lab-config/lab_environment.json)
+    ipv6=$(jq -er '.network.ipv6.address' /tux2lab-data/lab-config/lab_environment.json)
+    checksum=$(sha256sum "$iso_dir/images/install.img")
+    local -a reader=(sudo unshare --mount --propagation private bash "$PROJECT_ROOT/container/run-migration-tests.sh"
+        --read-client "$ipv4" "$ipv6" "${checksum%% *}")
+    tux2lab stop --yes > "$evidence/maintenance-stop.log" 2>&1
+    [[ "$(sudo podman inspect tux2lab-engine --format '{{.State.Running}}')" == false ]]
+    [[ "$(stat -Lc %d "$iso_dir")" == "$(stat -Lc %d "$iso_dir/..")" ]]
+    verify_container_nfs_stopped
+    tux2lab start > "$evidence/maintenance-start.log" 2>&1
+    [[ "$(sudo podman inspect tux2lab-engine --format '{{.Id}}')" == "$original_id" ]]
+    [[ "$(stat -Lc %d "$iso_dir")" != "$(stat -Lc %d "$iso_dir/..")" ]]
+    "${reader[@]}" > "$evidence/maintenance-start-reads.log" 2>&1
+    printf 'PASS: ISO unmount/remount, verified stopped NFS, same-engine restart and protocol reads\n'
+    sudo chown root:root /tux2lab-data/nfs/container.conf /tux2lab-data/nfs/container.exports
+    sudo chmod 644 /tux2lab-data/nfs/container.conf /tux2lab-data/nfs/container.exports
+    sudo stat -c '%U:%G %a %n' /tux2lab-data/nfs/container.conf /tux2lab-data/nfs/container.exports | tee "$evidence/nfs-config-ownership.txt" >/dev/null
+    TUX2LAB_ENGINE_IMAGE="$image" tux2lab rebuild --yes > "$evidence/maintenance-rebuild.log" 2>&1
+    [[ "$(sudo podman inspect tux2lab-engine --format '{{.Id}}')" != "$original_id" ]]
+    sudo test ! -e "${original_root%/rootfs}"
+    sudo virsh net-dumpxml tux2lab --inactive | cmp -s "$evidence/network-before.xml" -
+    sha256sum -c "$evidence/environment-before.sha256"
+    tux2lab health > "$evidence/maintenance-health.log" 2>&1
+    "${reader[@]}" > "$evidence/maintenance-rebuild-reads.log" 2>&1
+    sudo podman inspect tux2lab-engine --format '{{.Id}} {{.Rootfs}} {{.State.StartedAt}}' | tee "$evidence/maintenance-final.txt" >/dev/null
+    [[ -z "$(sudo virsh list --all --name)" ]]
+    printf 'PASS: root-owned NFS config rebuild, old-root removal, unchanged network/environment, health and protocol reads\n'
+)
+
 case "${1:-}" in
     --check)
         [[ $# == 2 ]] || exit 2
         check_test_host "$2" ;;
-    --run)
+    --run|--prepare-rebuild)
         [[ $# == 5 ]] || exit 2
         EVIDENCE="$3"
         (
             flock -n 8 || { printf 'Another acceptance run holds the lock.\n' >&2; exit 1; }
-            run_acceptance "$2" "$4" "$5" 8>&-
+            run_acceptance "$2" "$4" "$5" "$1" 8>&-
         ) 8>/run/lock/tux2lab-nfs-acceptance.lock ;;
     --restore)
         [[ $# == 3 && "$(hostname -f)" == "$2" ]] || exit 2
         EVIDENCE="$3"
         restore_current_engine ;;
+    --maintenance)
+        [[ $# == 4 ]] || exit 2
+        run_maintenance "$2" "$3" "$4" ;;
     --read-client)
-        [[ $# == 4 && "$EUID" == 0 ]] || exit 2
-        read_installer "$2" "$3" "$4" ;;
-    *) printf 'Usage: %s --check HOST | --run HOST EVIDENCE RELEASED_IMAGE CANDIDATE_IMAGE | --restore HOST EVIDENCE\n' "$0" >&2; exit 2 ;;
+        [[ ( $# == 4 || $# == 5 ) && "$EUID" == 0 ]] || exit 2
+        read_installer "$2" "$3" "$4" "${5:-}" ;;
+    *) printf 'Usage: %s --check HOST | {--run|--prepare-rebuild} HOST EVIDENCE RELEASED_IMAGE CANDIDATE_IMAGE | --maintenance HOST EVIDENCE CANDIDATE_IMAGE | --restore HOST EVIDENCE\n' "$0" >&2; exit 2 ;;
 esac

@@ -349,10 +349,84 @@ bash container/run-nfs-tests.sh --rebuild-upgrade
 Focused and full rootless checks pass, as do syntax and editor checks. Rebuild,
 the migration helper and tests pass warning-level ShellCheck. The completion
 file's 76 existing SC2128/SC2178/SC2207 diagnostics exactly match its committed
-baseline; this one-option completion change introduces none. Live acceptance of
-the new `rebuild` entry point, representative-host retests of the latest lifecycle
-changes, and release gates remain outstanding. No runtime maintenance was
-performed for this integration.
+baseline; this one-option completion change introduces none. The source
+integration itself performed no runtime maintenance. The subsequently authorized
+live upgrade and maintenance acceptance is recorded below; release approval
+remains separate.
+
+#### CLI and Maintenance Acceptance (October 9, 2026)
+
+The new CLI paths and focused maintenance fixes passed bounded live acceptance.
+Tests used the existing `localhost/tux2lab-engine:nfs-direct-layout` candidate,
+not a newly published image. No production code or image changes were required.
+Private evidence is retained outside Git in
+`/home/musubram/nfs-cli-acceptance.5lEL7ncI`.
+
+Debian 13 exercised two independent disposable disk overlays, each starting from
+the original dedicated test host. The maintained migration harness prepared the
+verified released `0d0c7dc` source/`2.1.1` image with native NFS, then stopped at
+that baseline. The actual normal-user `tux2lab rebuild --yes` command, with the
+explicit candidate image, performed the first upgrade. Backup ID and stopped
+state matched the original legacy engine; the committed migration checkpoint
+and unchanged environment file were verified.
+
+- The first case passed new ISO hot-mount propagation without restarting the
+  engine, full stop/start with visible ISO unmount/remount, and a subsequent
+  rebuild that removed the superseded managed root while retaining the legacy
+  backup. Health passed 11/11 deep checks and 6/6 dual-stack services.
+- Full confirmed destroy then removed the active engine, retained backup,
+  migration checkpoint, managed roots and lab data. No NFS/RPC listeners
+  remained. A second full confirmed destroy succeeded with the lab already gone.
+- The second fresh case manually removed only the verified stopped legacy
+  backup after upgrade. The active engine ID/start time stayed unchanged;
+  health and all three protocol reads passed. Full confirmed destroy cleaned
+  the remaining engine/checkpoint/data, and a repeat destroy also succeeded.
+- The harness's separately saved original candidate was identified against its
+  recorded ID and removed through the managed-root helper before each destroy.
+  No unrelated containers or inner VMs were present in either case.
+
+An initial probe tried to unmount an ISO while it was still served by NFS. The
+helper refused the busy mount without altering it, and testing stopped there.
+The corrected hot-add check mounted the known ISO at a new repository path;
+that temporary mount was removed only after NFS shutdown. These results do not
+claim live removal of an actively served ISO or continuity across ISO teardown.
+
+Focused maintenance retests also passed on AlmaLinux 9, Ubuntu 24.04, openSUSE
+Leap 16 and Azure Linux 3. Each verified the visible ISO unmount/remount and
+stopped NFS state across CLI stop/start, then exercised normal rebuild with
+explicitly root-owned NFS configuration files. The superseded root was removed,
+the lab environment and persistent network XML were unchanged, health passed
+11/11 and 6/6, and full installer reads passed after restart and rebuild. Together
+with Debian's live lifecycle test, this closes the requested five-host retest.
+Every read stage verified the full installer checksum over NFSv3/IPv4,
+NFSv4.1/IPv4 and NFSv4.1/IPv6.
+
+All tests ran on offline-created external disk overlays. After normal guest
+shutdown, each original domain definition and firmware file was restored;
+original disk/firmware SHA-256 hashes and exact domain XML matched. All five
+test hosts are off again, and the six verified unreferenced overlays were
+removed. Evidence remains in `debian-case1`, `debian-case2` and each other host's
+`results` directory beneath the private evidence directory above.
+
+The workstation retained the same released engine ID/start time, original seven
+running guests, native exports and eight NFS workers. Its released checkout was
+not changed. No workstation reboot, firewall-service reload/restart, rule flush,
+unrelated routing/policy change, package removal or deeper-nested VM occurred.
+
+The existing acceptance harness now supports `--prepare-rebuild` to leave a
+verified legacy baseline ready for the real CLI, `--maintenance` for the focused
+normal-user lifecycle/config tests, and an optional guarded repository-relative
+path for `--read-client`. Preparation retains its saved original candidate and
+restoration evidence; it is intended only for dedicated reversible test hosts.
+Syntax, warning-level ShellCheck, editor checks and the full rootless NFS suite
+pass. The source integration's rootless failure/consent coverage remains relevant;
+these live tests did not create inner guests to repeat running-guest scenarios.
+
+This closes the live rebuild/destroy and focused maintenance acceptance gaps,
+not release approval, exhaustive supported-version certification or a test of a
+future compatible registry publication. Main merge, version/image publication,
+packaging and tagging remain separately controlled. The workstation reboot and
+firewall-service exclusions remain unchanged.
 
 ### Debian 13 Preparation
 
@@ -963,7 +1037,9 @@ This check and the full rootless NFS suite pass. Touched shell files pass syntax
 and editor checks; the migration helper and tests pass warning-level ShellCheck.
 Destroy's two existing unused-address warnings are unchanged. No live destroy
 was run on the workstation; these fixtures are not destructive end-to-end
-acceptance.
+acceptance. The separately authorized dedicated-host live acceptance of both
+destroy paths and repeat cleanup is recorded in CLI and Maintenance Acceptance
+above.
 
 ## Rollback and Failures
 

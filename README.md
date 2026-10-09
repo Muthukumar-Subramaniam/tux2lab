@@ -455,10 +455,12 @@ For authorized development testing, select the local image explicitly:
 TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab rebuild
 ```
 
-The new rebuild route has rootless regression coverage; live end-to-end validation
-of that entry point and release approval remain outstanding. See the
-[migration runbook](docs/nfs-container-migration.md#rebuild-upgrade-integration-october-9-2026)
-for checks, retained rollback state and limitations.
+The new rebuild route and both destroy paths passed live acceptance on a dedicated
+Debian 13 test host. Focused lifecycle/configuration retests passed on all five
+representative hosts. This is not exhaustive version certification or release
+approval. See the
+[migration runbook](docs/nfs-container-migration.md#cli-and-maintenance-acceptance-october-9-2026)
+for evidence, retained rollback state and limitations.
 
 ---
 
