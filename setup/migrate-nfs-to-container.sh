@@ -131,6 +131,43 @@ restore_host_nfs() {
     printf 'Host NFS and the previous engine restored. Restore the previous source version before using legacy lifecycle commands.\n'
 }
 
+destroy_nfs_engine() {
+    local engine_exists backup_exists backup_id='' metadata mounts checkpoint=false
+    engine_exists=$(container_nfs_exists "$NFS_ENGINE") || return 1
+    backup_exists=$(container_nfs_exists "$NFS_BACKUP") || return 1
+    if [[ -e "$NFS_MIGRATION_DIR" || -L "$NFS_MIGRATION_DIR" ]]; then
+        [[ -d "$NFS_MIGRATION_DIR" && "$(readlink -e "$NFS_MIGRATION_DIR")" == "$NFS_MIGRATION_DIR" ]] || return 1
+        mounts=$(findmnt --json -o TARGET) || return 1
+        jq -e --arg path "$NFS_MIGRATION_DIR" '[.. | objects | .target? // empty | select(. == $path or startswith($path + "/"))] | length == 0' <<< "$mounts" >/dev/null || return 1
+        checkpoint=true
+    fi
+    if [[ "$backup_exists" == true ]]; then
+        [[ "$checkpoint" == true ]] || { printf 'Cannot identify the migration backup without its checkpoint.\n' >&2; return 1; }
+        [[ -f "$NFS_MIGRATION_DIR/snapshot-complete" && -f "$NFS_MIGRATION_DIR/committed" ]] || {
+            printf 'Incomplete NFS migration; resolve rollback before destroy.\n' >&2
+            return 1
+        }
+        backup_id=$(cat "$NFS_MIGRATION_DIR/engine-id") || return 1
+        [[ "$backup_id" =~ ^[a-f0-9]{64}$ ]] || return 1
+        metadata=$(sudo podman inspect "$NFS_BACKUP") || return 1
+        jq -e --arg id "$backup_id" 'length == 1 and (.[0] | .Id == $id and .State.Running == false and .State.Pid == 0 and (.State.Restarting // false) == false)' <<< "$metadata" >/dev/null || {
+            printf 'Migration backup identity or stopped state could not be verified.\n' >&2
+            return 1
+        }
+    fi
+    stop_engine_nfs "$NFS_ENGINE" || return 1
+    if [[ "$engine_exists" == true ]]; then
+        remove_engine_container "$NFS_ENGINE" || return 1
+    fi
+    if [[ "$backup_exists" == true ]]; then
+        remove_engine_container "$backup_id" || return 1
+    fi
+    if [[ "$checkpoint" == true ]]; then
+        sudo rm -rf --one-file-system -- "$NFS_MIGRATION_DIR" || return 1
+    fi
+    printf 'Engine cleanup complete; no active migration backup or checkpoint remains.\n'
+}
+
 apply_nfs_migration() {
     local image="$1" allow_running_guests="${2:-}" unit active enabled ipv4 ipv6 ipv4_network ipv6_network bridge hostname domain
     migration_preflight "$image" "$allow_running_guests" || return 1
@@ -189,10 +226,11 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         --help|-h)
             printf 'Usage: sudo bash setup/migrate-nfs-to-container.sh {--check|--apply} IMAGE [--allow-running-guests] | --rollback\n'
             printf 'Use --allow-running-guests only after confirming guests have no NFS dependency and accepting engine-service interruption.\n'
+            printf 'Internal: --destroy-engine is called only after tux2lab destroy confirmation.\n'
             exit 0 ;;
         --check|--apply)
             [[ $# == 2 || ( $# == 3 && "${3:-}" == --allow-running-guests ) ]] || exit 2 ;;
-        --rollback) [[ $# == 1 ]] || exit 2 ;;
+        --rollback|--destroy-engine) [[ $# == 1 ]] || exit 2 ;;
         *) printf 'Use --help for migration usage.\n' >&2; exit 2 ;;
     esac
     [[ "$EUID" == 0 ]] || { printf 'Run this migration command with sudo.\n' >&2; exit 1; }
@@ -204,6 +242,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
             --check) migration_preflight "$2" "${3:-}" ;;
             --apply) apply_nfs_migration "$2" "${3:-}" ;;
             --rollback) restore_host_nfs ;;
+            --destroy-engine) destroy_nfs_engine ;;
         esac
     ) 9>&-
 fi

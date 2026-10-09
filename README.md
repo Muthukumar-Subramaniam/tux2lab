@@ -435,6 +435,13 @@ engine and native service checkpoint for rollback. Subsequent rebuilds use norma
 config regeneration and engine replacement. Do not run concurrent lifecycle
 commands, and finish provisioning and NFS-dependent work before maintenance.
 
+The stopped backup and migration checkpoint remain for rollback; there is no
+automatic deletion or separate finalization command. Confirmed `tux2lab destroy`
+removes the active engine, verified backup if present, and active checkpoint.
+This cleanup tolerates missing items and retries after partial removal. Manually
+deleting only the stopped backup does not affect the new engine or VMs, but
+removes automatic rollback capability.
+
 Running guests require explicit confirmation that their storage and guest OS do
 not depend on NFS and that engine-service interruption is acceptable. Interactive
 rebuild asks for this acknowledgement; unattended first migration requires both

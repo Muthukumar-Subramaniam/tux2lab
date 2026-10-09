@@ -86,7 +86,7 @@ if [[ -d /tux2lab-data/iso-files ]] && compgen -G "/tux2lab-data/iso-files/*" >/
 fi
 
 print_yellow "This operation will PERMANENTLY DESTROY:
-  • The tux2lab-engine container and all services
+    • The tux2lab-engine container, any migration backup and all services
   • All virtual machines and their data
   • Lab network bridge and virtual network
   • Lab config, SSH keys, SSL certificates
@@ -117,24 +117,13 @@ fi
 print_cyan "═══════════════════════════════════════════════════════════════════"
 
 # ====== STEP 1: STOP AND REMOVE CONTAINER ======
-source /tux2lab/shared-functions/container-nfs.sh
-if sudo podman container exists "${CONTAINER_NAME}-host-nfs-backup"; then
-    print_error "An NFS migration backup is retained. Resolve migration acceptance or rollback before destroy."
-    exit 1
-fi
-if ! stop_engine_nfs "${CONTAINER_NAME}"; then
-    print_error "Cannot verify NFS shutdown. Nothing will be destroyed."
-    exit 1
-fi
-print_task "Stopping and removing tux2lab-engine container..."
-if sudo podman container exists "${CONTAINER_NAME}" 2>/dev/null; then
-    if ! remove_engine_container "${CONTAINER_NAME}"; then
-        print_error "Engine removal was not verified. Remaining lab data has been retained."
-        exit 1
-    fi
+print_task "Stopping and removing lab engine containers..."
+if sudo bash /tux2lab/setup/migrate-nfs-to-container.sh --destroy-engine; then
     print_task_done
 else
-    print_task_skip
+    print_task_fail
+    print_error "Engine/NFS cleanup failed. Remaining lab data has been retained; resolve the error before retrying destroy."
+    exit 1
 fi
 
 # ====== STEP 2: FORCE STOP ALL RUNNING VMs ======

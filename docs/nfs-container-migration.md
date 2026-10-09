@@ -322,9 +322,11 @@ run other lifecycle commands concurrently with migration.
 This first rebuild intentionally reuses the existing service configs and returns
 after successful handover. It does not run normal config generation or immediately
 replace the newly migrated engine. This keeps the original engine's rollback
-inputs intact. Later rebuilds regenerate configs normally. Keep
-`tux2lab-engine-host-nfs-backup` and `/var/lib/tux2lab/nfs-migration` until
-acceptance; native NFS packages and host configuration remain installed.
+inputs intact. Later rebuilds regenerate configs normally. The stopped
+`tux2lab-engine-host-nfs-backup` and `/var/lib/tux2lab/nfs-migration` remain
+for rollback, including after acceptance. There is no automatic backup deletion
+or separate finalization command; native NFS packages and host configuration
+remain installed.
 Rollback uses the same helper, followed by restoring the previous source version:
 
 ```bash
@@ -929,11 +931,39 @@ For subsequent rebuilds, select the development image explicitly:
 TUX2LAB_ENGINE_IMAGE=localhost/tux2lab-engine:nfs-direct-layout tux2lab rebuild
 ```
 
-Keep the backup container and migration checkpoint through acceptance. Destroy
-refuses to proceed while the migration backup exists. Do not prune all images
+Keep the backup container and migration checkpoint while rollback may be needed.
+Confirmed destroy removes them as described below. Do not prune all images
 while rollback may still be needed. Do not uninstall
 host NFS utilities. Fresh-host deployment and host service policy still need a
 separate acceptance pass; the migration command expects an existing host export.
+
+### Destroy Cleanup
+
+After the existing full-destruction confirmation, `destroy` uses the migration
+lock to verify the backup's recorded identity and stopped state, stop and verify
+container NFS, remove the active engine and any verified backup, then remove the
+active migration checkpoint. It does not restart or restore native NFS. An
+unidentified, running or incomplete-migration backup is refused. Lookup,
+inspection, shutdown or removal failures stop destroy before VM and lab-data
+teardown; remaining artifacts are kept for inspection or retry.
+
+The migration cleanup is idempotent: absent engines, a manually deleted backup,
+an absent checkpoint, and retries after partial container or checkpoint removal
+are supported. Removing only the stopped backup does not affect the new engine
+or VMs, but removes automatic rollback capability. Destroy does not recreate it.
+
+The focused rootless check covers 25 cleanup scenarios, repeat/retry calls and
+the destroy entry-point gate before further teardown:
+
+```bash
+bash container/run-nfs-tests.sh --destroy-cleanup
+```
+
+This check and the full rootless NFS suite pass. Touched shell files pass syntax
+and editor checks; the migration helper and tests pass warning-level ShellCheck.
+Destroy's two existing unused-address warnings are unchanged. No live destroy
+was run on the workstation; these fixtures are not destructive end-to-end
+acceptance.
 
 ## Rollback and Failures
 

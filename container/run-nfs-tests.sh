@@ -142,6 +142,155 @@ if [[ "${1:-}" == --nfs-generation ]]; then
     exit 0
 fi
 
+test_destroy_nfs_engine() (
+    builtin source "$PROJECT_ROOT/setup/migrate-nfs-to-container.sh"
+    fixture=$(mktemp -d)
+    trap 'rm -rf -- "$fixture"' EXIT
+    expected_id=$(printf '%064d' 1)
+    sudo() {
+        case "$*" in
+            "podman container exists $NFS_ENGINE")
+                [[ "$scenario" != engine-query-error ]] || return 125
+                [[ -f "$case_dir/engine" ]] ;;
+            "podman container exists $NFS_BACKUP")
+                [[ "$scenario" != backup-query-error ]] || return 125
+                [[ -f "$case_dir/backup" ]] ;;
+            "podman inspect $NFS_BACKUP")
+                [[ "$scenario" != inspect-error ]] || return 1
+                if [[ "$scenario" == malformed-inspect ]]; then printf 'invalid\n'; return; fi
+                jq -n --arg id "$expected_id" --arg scenario "$scenario" \
+                    '[{Id:(if $scenario == "wrong-id" then "unknown" else $id end),State:{Running:($scenario == "running"),Pid:(if $scenario == "live-pid" then 123 else 0 end),Restarting:($scenario == "restarting")}}]' ;;
+            "rm -rf --one-file-system -- $NFS_MIGRATION_DIR")
+                printf 'checkpoint\n' >> "$operations"
+                [[ "$scenario" != checkpoint-remove-error ]] || return 1
+                if [[ "$scenario" == checkpoint-partial-error ]]; then
+                    rm "$NFS_MIGRATION_DIR/engine-id" "$NFS_MIGRATION_DIR/committed"
+                    return 1
+                fi
+                command "$@" ;;
+            *) printf 'Unexpected cleanup operation: %s\n' "$*" >&2; exit 99 ;;
+        esac
+    }
+    findmnt() {
+        [[ "$scenario" != mount-query-error ]] || return 1
+        if [[ "$scenario" == mounted-record ]]; then
+            jq -n --arg target "$NFS_MIGRATION_DIR/nested" '{filesystems:[{target:$target}]}'
+        else
+            printf '{"filesystems":[]}\n'
+        fi
+    }
+    stop_engine_nfs() {
+        printf 'stop-verified\n' >> "$operations"
+        [[ "$scenario" != stop-error ]]
+    }
+    remove_engine_container() {
+        if [[ "$1" == "$NFS_ENGINE" ]]; then
+            printf 'engine\n' >> "$operations"
+            [[ "$scenario" != engine-remove-error ]] || return 1
+            rm "$case_dir/engine"
+        elif [[ "$1" == "$expected_id" ]]; then
+            printf 'backup\n' >> "$operations"
+            [[ "$scenario" != backup-remove-error ]] || return 1
+            rm "$case_dir/backup"
+        else
+            exit 99
+        fi
+    }
+    for scenario in complete missing-backup missing-engine checkpoint-only no-migration empty \
+                    engine-query-error backup-query-error inspect-error malformed-inspect \
+                    wrong-id running live-pid restarting missing-record incomplete bad-id \
+                    linked-record mounted-record mount-query-error stop-error engine-remove-error \
+                    backup-remove-error checkpoint-remove-error checkpoint-partial-error; do
+        case_dir="$fixture/$scenario"
+        NFS_MIGRATION_DIR="$case_dir/migration"
+        mkdir -p "$NFS_MIGRATION_DIR"
+        printf '%s\n' "$expected_id" > "$NFS_MIGRATION_DIR/engine-id"
+        touch "$NFS_MIGRATION_DIR/snapshot-complete" "$NFS_MIGRATION_DIR/committed" "$case_dir/engine" "$case_dir/backup"
+        case "$scenario" in
+            missing-backup) rm "$case_dir/backup" ;;
+            missing-engine) rm "$case_dir/engine" ;;
+            checkpoint-only) rm "$case_dir/engine" "$case_dir/backup" ;;
+            no-migration|empty)
+                rm -rf "$NFS_MIGRATION_DIR" "$case_dir/backup"
+                [[ "$scenario" != empty ]] || rm "$case_dir/engine" ;;
+            missing-record) rm -rf "$NFS_MIGRATION_DIR" ;;
+            incomplete) rm "$NFS_MIGRATION_DIR/committed" ;;
+            bad-id) printf 'invalid\n' > "$NFS_MIGRATION_DIR/engine-id" ;;
+            linked-record) mv "$NFS_MIGRATION_DIR" "$case_dir/saved"; ln -s "$case_dir/saved" "$NFS_MIGRATION_DIR" ;;
+        esac
+        operations="$case_dir/operations"
+        : > "$operations"
+        expected=$'stop-verified\nengine\nbackup\ncheckpoint'
+        expected_status=0
+        case "$scenario" in
+            complete) ;;
+            missing-backup) expected=$'stop-verified\nengine\ncheckpoint' ;;
+            missing-engine) expected=$'stop-verified\nbackup\ncheckpoint' ;;
+            checkpoint-only) expected=$'stop-verified\ncheckpoint' ;;
+            no-migration) expected=$'stop-verified\nengine' ;;
+            empty) expected=stop-verified ;;
+            stop-error) expected=stop-verified; expected_status=1 ;;
+            engine-remove-error) expected=$'stop-verified\nengine'; expected_status=1 ;;
+            backup-remove-error) expected=$'stop-verified\nengine\nbackup'; expected_status=1 ;;
+            checkpoint-remove-error|checkpoint-partial-error) expected_status=1 ;;
+            *) expected=''; expected_status=1 ;;
+        esac
+        status=0
+        destroy_nfs_engine > "$case_dir/output" 2>&1 || status=$?
+        if [[ "$status" != "$expected_status" || "$(cat "$operations")" != "$expected" ]]; then
+            printf 'FAIL: destroy cleanup %s (status %s, expected %s)\n' "$scenario" "$status" "$expected_status" >&2
+            cat "$case_dir/output" "$operations" >&2
+            exit 1
+        fi
+        if [[ "$expected_status" == 0 ]]; then
+            [[ ! -e "$NFS_MIGRATION_DIR" && ! -e "$case_dir/engine" && ! -e "$case_dir/backup" ]]
+        elif [[ "$scenario" != missing-record ]]; then
+            [[ -e "$NFS_MIGRATION_DIR" ]]
+        fi
+        case "$scenario" in
+            complete|missing-backup|missing-engine|checkpoint-only|no-migration|empty|stop-error|engine-remove-error|backup-remove-error|checkpoint-remove-error|checkpoint-partial-error)
+                scenario=retry
+                : > "$operations"
+                destroy_nfs_engine >/dev/null
+                [[ ! -e "$NFS_MIGRATION_DIR" && ! -e "$case_dir/engine" && ! -e "$case_dir/backup" ]]
+                : > "$operations"
+                destroy_nfs_engine >/dev/null
+                [[ "$(cat "$operations")" == stop-verified ]] ;;
+        esac
+    done
+    for cleanup_status in 0 1; do
+        operations="$fixture/entry-operations"
+        : > "$operations"
+        print_task() { :; }
+        print_task_done() { :; }
+        print_task_fail() { :; }
+        print_error() { :; }
+        sudo() {
+            [[ "$*" == 'bash /tux2lab/setup/migrate-nfs-to-container.sh --destroy-engine' ]] || exit 99
+            printf 'cleanup\n' >> "$operations"
+            return "$cleanup_status"
+        }
+        status=0
+        (
+            builtin source <(sed -n '/^# ====== STEP 1: STOP AND REMOVE CONTAINER/,/^# ====== STEP 2: FORCE/{ /^# ====== STEP 2: FORCE/d; p; }' \
+                "$PROJECT_ROOT/qemu-kvm-manage/scripts-to-manage-vms/destroy.sh")
+            printf 'continue\n' >> "$operations"
+        ) || status=$?
+        [[ "$status" == "$cleanup_status" ]]
+        if [[ "$status" == 0 ]]; then
+            [[ "$(cat "$operations")" == $'cleanup\ncontinue' ]]
+        else
+            [[ "$(cat "$operations")" == cleanup ]]
+        fi
+    done
+    printf 'PASS: destroy cleanup tolerates missing/repeated state, retries partial removal and refuses unsafe/unknown state before data teardown\n'
+)
+
+if [[ "${1:-}" == --destroy-cleanup ]]; then
+    test_destroy_nfs_engine
+    exit 0
+fi
+
 test_rebuild_upgrade() (
     fixture=$(mktemp -d)
     trap 'rm -rf -- "$fixture"' EXIT
@@ -1399,6 +1548,7 @@ printf 'PASS: failed VM inspection blocks confirmation and shutdown before infra
 
 test_iso_mounts
 test_nfs_generation
+test_destroy_nfs_engine
 test_rebuild_upgrade
 
 for data_mount_case in directory mounted bind-error private-error share-error inspect-error empty-target verify-error private symlink; do
