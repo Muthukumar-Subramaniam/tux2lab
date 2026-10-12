@@ -93,7 +93,12 @@ print_task "Enabling passwordless sudo for $USER..."
 sudoers_file="/etc/sudoers.d/${USER//./_}"
 # Staged under a dotted name so sudo ignores it until it is validated and renamed
 sudoers_stage="$sudoers_file.tux2lab-tmp"
-if ! printf '%s ALL=(ALL) NOPASSWD: ALL\nDefaults:%s !authenticate\n' "$USER" "$USER" \
+sudoers_content="$USER ALL=(ALL) NOPASSWD: ALL"$'\n'
+# sudo-rs has no 'authenticate' setting and rejects the whole file if it is present
+if [[ "$(sudo --version 2>/dev/null)" != sudo-rs* ]]; then
+    sudoers_content+="Defaults:$USER !authenticate"$'\n'
+fi
+if ! printf '%s' "$sudoers_content" \
         | sudo tee "$sudoers_stage" >/dev/null 2>&1 \
     || ! sudo chmod 0440 "$sudoers_stage" 2>/dev/null \
     || ! sudo visudo -cqf "$sudoers_stage" >/dev/null 2>&1 \
