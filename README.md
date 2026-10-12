@@ -93,7 +93,7 @@ lab bridge interface, providing seamless network access for all guest VMs.
 
 **Guest VMs (each):** 2 GiB RAM · 2 vCPUs · 30 GiB disk
 
-**KVM Host:** RHEL-based, Ubuntu, or openSUSE (hardware virtualization required).
+**KVM Host:** x86_64 running RHEL-based, Azure Linux 3, Ubuntu, or openSUSE (hardware virtualization required).
 Podman must be available (installed automatically by setup).
 
 ---

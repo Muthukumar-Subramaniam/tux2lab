@@ -31,6 +31,12 @@ case "${1:-}" in
         ;;
 esac
 
+host_arch=$(uname -m)
+if [[ "$host_arch" != "x86_64" ]]; then
+    print_error "Unsupported host architecture: $host_arch. tux2lab requires an x86_64 host."
+    exit 1
+fi
+
 if [[ "$EUID" -eq 0 ]]; then
     print_error "Running as root user is not allowed."
     print_info "This script should be run as a user with sudo privileges, not as root."
@@ -104,11 +110,11 @@ print_task_done
 # INSTALL PACKAGES
 # ============================================================================
 REQUIRED_PACKAGES_APT=(
-    qemu-kvm qemu-utils libvirt-daemon-system libvirt-clients
+    qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients
     python3-requests python3-libxml2 python3-libvirt
-    libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-gobject-2.0
+    libosinfo-bin python3-gi gir1.2-libosinfo-1.0 gir1.2-glib-2.0
     ovmf ed git openssl
-    podman jq dnsutils
+    podman jq bind9-dnsutils
     nfs-kernel-server rsync
 )
 REQUIRED_PACKAGES_DNF=(
@@ -132,15 +138,33 @@ if command -v apt-get &>/dev/null; then
     pkg_manager="apt"
     missing_pkgs=()
     for pkg in "${REQUIRED_PACKAGES_APT[@]}"; do
-        if ! dpkg -s "$pkg" &>/dev/null; then
+        # Removed-but-not-purged packages pass 'dpkg -s'; the prefix match tolerates multiarch duplicates
+        if [[ "$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null)" != installed* ]]; then
             missing_pkgs+=("$pkg")
         fi
     done
 elif command -v dnf &>/dev/null; then
     pkg_manager="dnf"
+    os_id=$(. /etc/os-release 2>/dev/null; echo "${ID:-}")
+    # Azure Linux ships libosinfo, podman and crun only in its extended repository
+    if [[ "$os_id" == "azurelinux" ]]; then
+        REQUIRED_PACKAGES_DNF+=(crun netavark)
+        print_task "Enabling Azure Linux extended repository..."
+        if rpm -q azurelinux-repos-extended &>/dev/null; then
+            print_task_skip
+        elif sudo dnf install -y azurelinux-repos-extended &>/dev/null; then
+            print_task_done
+        else
+            print_task_fail
+            print_error "Failed to install azurelinux-repos-extended."
+            print_info "Diagnose with: sudo dnf install azurelinux-repos-extended"
+            exit 1
+        fi
+    fi
     missing_pkgs=()
     for pkg in "${REQUIRED_PACKAGES_DNF[@]}"; do
-        if ! rpm -q "$pkg" &>/dev/null; then
+        # --whatprovides also matches virtual names that resolve to a differently named package
+        if ! rpm -q --whatprovides "$pkg" &>/dev/null; then
             missing_pkgs+=("$pkg")
         fi
     done
@@ -148,7 +172,8 @@ elif command -v zypper &>/dev/null; then
     pkg_manager="zypper"
     missing_pkgs=()
     for pkg in "${REQUIRED_PACKAGES_ZYPPER[@]}"; do
-        if ! rpm -q "$pkg" &>/dev/null; then
+        # Leap installs qemu-kvm as qemu and nfs-utils as nfs-kernel-server
+        if ! rpm -q --whatprovides "$pkg" &>/dev/null; then
             missing_pkgs+=("$pkg")
         fi
     done
@@ -165,9 +190,16 @@ if [[ ${#missing_pkgs[@]} -eq 0 ]]; then
 else
     print_task "Installing required packages..."
 
-    pkg_log=$(mktemp)
+    pkg_log=$(mktemp) || {
+        print_task_fail
+        print_error "Could not create a temporary log file."
+        exit 1
+    }
     if [[ "$pkg_manager" == "apt" ]]; then
-        (sudo apt-get update && sudo apt-get install -y "${missing_pkgs[@]}") &>"$pkg_log" &
+        (sudo apt-get update \
+            && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+                "${missing_pkgs[@]}") &>"$pkg_log" &
         pkg_pid=$!
     elif [[ "$pkg_manager" == "dnf" ]]; then
         sudo dnf install -y "${missing_pkgs[@]}" &>"$pkg_log" &
