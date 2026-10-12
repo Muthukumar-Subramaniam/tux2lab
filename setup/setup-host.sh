@@ -82,10 +82,21 @@ fi
 # PASSWORDLESS SUDO
 # ============================================================================
 print_task "Enabling passwordless sudo for $USER..."
-cat <<EOF | sudo tee "/etc/sudoers.d/$USER" &>/dev/null
-$USER ALL=(ALL) NOPASSWD: ALL
-Defaults:$USER !authenticate
-EOF
+# sudo skips sudoers.d files whose names contain '.', so map dots in the username
+sudoers_file="/etc/sudoers.d/${USER//./_}"
+# Staged under a dotted name so sudo ignores it until it is validated and renamed
+sudoers_stage="$sudoers_file.tux2lab-tmp"
+if ! printf '%s ALL=(ALL) NOPASSWD: ALL\nDefaults:%s !authenticate\n' "$USER" "$USER" \
+        | sudo tee "$sudoers_stage" >/dev/null 2>&1 \
+    || ! sudo chmod 0440 "$sudoers_stage" 2>/dev/null \
+    || ! sudo visudo -cqf "$sudoers_stage" >/dev/null 2>&1 \
+    || ! sudo mv -f "$sudoers_stage" "$sudoers_file" 2>/dev/null; then
+    sudo rm -f "$sudoers_stage" 2>/dev/null || true
+    print_task_fail
+    print_error "Could not install $sudoers_file; existing sudo configuration was left untouched."
+    print_info "Diagnose with: sudo visudo -c"
+    exit 1
+fi
 print_task_done
 
 # ============================================================================
