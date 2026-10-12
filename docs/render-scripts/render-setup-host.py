@@ -10,6 +10,8 @@ lines.append(whole("  - Install QEMU/KVM, libvirt, podman, and dependencies", YE
 lines.append(whole("  - Enable and configure libvirtd", YELLOW))
 lines.append(whole("  - Create /tux2lab-data directory", YELLOW))
 lines.append(whole("  - Set up labbr0 bridge network with dual-stack (IPv4/IPv6)", YELLOW))
+lines.append(whole("  - Remove the libvirt 'default' network (virbr0)", YELLOW))
+lines.append(whole("  - Trust labbr0 in the host firewall", YELLOW))
 lines.append(whole("  - Enable IPv6 forwarding", YELLOW))
 lines.append(whole("  - Install tux2lab CLI and bash completion", YELLOW))
 lines.append(whole("Are you sure you want to continue? (yes/no): yes", DEFAULT))

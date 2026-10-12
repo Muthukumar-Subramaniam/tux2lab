@@ -66,10 +66,12 @@ The following actions will be performed:
   - Enable and configure libvirtd
   - Create /tux2lab-data directory
   - Set up labbr0 bridge network with dual-stack (IPv4/IPv6)
+  - Remove the libvirt 'default' network (virbr0)
+  - Trust labbr0 in the host firewall
   - Enable IPv6 forwarding
   - Install tux2lab CLI and bash completion"
 if ! $AUTO_YES; then
-    read -p "Are you sure you want to continue? (yes/no): " confirm
+    read -rp "Are you sure you want to continue? (yes/no): " confirm || { [[ -t 0 ]] && echo; confirm=""; }
     if [[ "$confirm" != "yes" ]]; then
         print_info "Setup cancelled by user."
         exit 0
