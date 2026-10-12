@@ -48,14 +48,13 @@ if ! sudo -v; then
     exit 1
 fi
 
-# Verify KVM kernel module is loaded
-if [[ ! -d /sys/module/kvm ]]; then
-    sudo modprobe kvm 2>/dev/null || true
+# /dev/kvm only exists once kvm_intel or kvm_amd initialises; the kvm core module alone proves nothing
+if [[ ! -c /dev/kvm ]]; then
     sudo modprobe kvm_intel 2>/dev/null || sudo modprobe kvm_amd 2>/dev/null || true
-    if [[ ! -d /sys/module/kvm ]]; then
-        print_error "KVM kernel module is not loaded and could not be loaded."
-        print_info "Hardware virtualization (VT-x/AMD-V) must be enabled in your BIOS/UEFI settings."
-        print_info "After enabling it, reboot and verify with: lsmod | grep kvm"
+    if [[ ! -c /dev/kvm ]]; then
+        print_error "KVM is not available: /dev/kvm is missing."
+        print_info "Enable hardware virtualization (VT-x/AMD-V) in BIOS/UEFI, or nested virtualization if this host is a VM."
+        print_info "Diagnose with: grep -Ec 'vmx|svm' /proc/cpuinfo; sudo dmesg | grep -i kvm"
         exit 1
     fi
 fi
