@@ -42,7 +42,8 @@ if ! command -v sudo &>/dev/null; then
     print_info "As root, install sudo and grant '$USER' sudo rights, then rerun setup."
     exit 1
 fi
-if ! sudo -v; then
+# sudo -v prompts whenever any matching rule needs a password, even if a NOPASSWD rule also matches
+if ! sudo -n true 2>/dev/null && ! sudo -v; then
     print_error "User '$USER' cannot use sudo."
     print_info "Grant '$USER' sudo rights, then rerun setup."
     exit 1
