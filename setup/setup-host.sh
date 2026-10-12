@@ -13,14 +13,38 @@
 source /tux2lab/common-utils/color-functions.sh
 set -euo pipefail
 
+usage="Usage: /tux2lab/setup/setup-host.sh [--yes]"
 AUTO_YES=false
-if [[ "${1:-}" == "--yes" ]]; then
-    AUTO_YES=true
+if [[ $# -gt 1 ]]; then
+    print_error "Too many arguments."
+    print_info "$usage"
+    exit 1
 fi
+case "${1:-}" in
+    "") ;;
+    --yes) AUTO_YES=true ;;
+    -h|--help) print_info "$usage"; exit 0 ;;
+    *)
+        print_error "Unknown option: $1"
+        print_info "$usage"
+        exit 1
+        ;;
+esac
 
 if [[ "$EUID" -eq 0 ]]; then
     print_error "Running as root user is not allowed."
     print_info "This script should be run as a user with sudo privileges, not as root."
+    exit 1
+fi
+
+if ! command -v sudo &>/dev/null; then
+    print_error "sudo is not installed."
+    print_info "As root, install sudo and grant '$USER' sudo rights, then rerun setup."
+    exit 1
+fi
+if ! sudo -v; then
+    print_error "User '$USER' cannot use sudo."
+    print_info "Grant '$USER' sudo rights, then rerun setup."
     exit 1
 fi
 
