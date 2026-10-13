@@ -239,28 +239,61 @@ fi
 # CONFIGURE LIBVIRTD
 # ============================================================================
 print_task "Disabling libvirtd-tls and libvirtd-tcp sockets..."
-sudo systemctl disable --now libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
-sudo systemctl mask libvirtd-tls.socket libvirtd-tcp.socket 2>/dev/null || true
-print_task_done
+remote_sockets=(libvirtd-tls.socket libvirtd-tcp.socket)
+if [[ "$(systemctl is-enabled "${remote_sockets[@]}" 2>/dev/null | sort -u)" == "masked" ]] \
+    && ! systemctl is-active --quiet "${remote_sockets[@]}"; then
+    print_task_skip
+elif sudo systemctl disable --now "${remote_sockets[@]}" &>/dev/null \
+    && sudo systemctl mask "${remote_sockets[@]}" &>/dev/null; then
+    print_task_done
+else
+    print_task_fail
+    print_error "Failed to disable and mask ${remote_sockets[*]}."
+    exit 1
+fi
 
-print_task "Enabling and restarting libvirtd..."
-sudo systemctl enable libvirtd &>/dev/null
-sudo systemctl restart libvirtd &>/dev/null
+# tux2lab drives the monolithic libvirtd; the modular daemons claim the same sockets and must stay off
+print_task "Disabling libvirt modular daemons..."
+mapfile -t modular_units < <( {
+    systemctl list-unit-files --no-legend --plain --state=enabled,enabled-runtime 'virt*d.service' 'virt*d*.socket'
+    systemctl list-units --no-legend --plain --state=active 'virt*d.service' 'virt*d*.socket'
+} 2>/dev/null | awk '$1 !~ /^virtlo(g|ck)d/ {print $1}' | sort -u)
+if (( ${#modular_units[@]} == 0 )); then
+    print_task_skip
+elif sudo systemctl disable --now "${modular_units[@]}" &>/dev/null; then
+    print_task_done
+else
+    print_task_fail
+    print_error "Failed to disable libvirt modular daemons: ${modular_units[*]}"
+    exit 1
+fi
+
+print_task "Enabling and starting libvirtd..."
+# systemd refuses to open libvirtd's sockets while the service is already running without them
+if systemctl is-active --quiet libvirtd.service && ! systemctl is-active --quiet libvirtd.socket; then
+    sudo systemctl stop libvirtd.service &>/dev/null || true
+fi
+if ! sudo systemctl enable --now libvirtd.service libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket &>/dev/null; then
+    print_task_fail
+    print_error "Failed to enable and start libvirtd."
+    print_info "Diagnose with: sudo systemctl status libvirtd"
+    exit 1
+fi
 retries=0
 while ! sudo virsh version &>/dev/null; do
     retries=$((retries + 1))
     if [[ $retries -ge 30 ]]; then
         printf "\r\033[K"
-        print_task "Enabling and restarting libvirtd..."
+        print_task "Enabling and starting libvirtd..."
         print_task_fail
-        print_error "libvirtd failed to become ready after restart."
+        print_error "libvirtd failed to become ready after start."
         exit 1
     fi
-    printf "\r${MAKE_IT_CYAN}[TASK] Enabling and restarting libvirtd [%dm %ds]...${RESET_COLOR}\033[K" $((retries/60)) $((retries%60))
+    printf "\r${MAKE_IT_CYAN}[TASK] Enabling and starting libvirtd [%dm %ds]...${RESET_COLOR}\033[K" $((retries/60)) $((retries%60))
     sleep 1
 done
 printf "\r\033[K"
-printf "${MAKE_IT_CYAN}[TASK] Enabling and restarting libvirtd (%dm %ds)...${RESET_COLOR}" $((retries/60)) $((retries%60))
+printf "${MAKE_IT_CYAN}[TASK] Enabling and starting libvirtd (%dm %ds)...${RESET_COLOR}" $((retries/60)) $((retries%60))
 print_task_done
 
 # ============================================================================
