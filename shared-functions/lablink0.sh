@@ -1,9 +1,9 @@
 # lablink0 management functions
 # Provides ensure_lablink0 and remove_lablink0 for bridge carrier management.
-# Source this file — do not execute directly.
+# Source this file; do not execute directly.
 
 # Create lablink0 dummy interface to keep the bridge in UP state.
-# Idempotent — skips if already exists. Waits for bridge UP + IPv6 DAD.
+# Idempotent: skips if already attached. Waits for bridge UP + IPv6 DAD.
 ensure_lablink0() {
     local bridge_if="${1:-labbr0}"
 
@@ -12,15 +12,20 @@ ensure_lablink0() {
         return 1
     fi
 
-    if ! ip link show lablink0 &>/dev/null; then
-        print_task "Creating lablink0 to keep ${bridge_if} UP..."
-        sudo ip link add name lablink0 type dummy
-        sudo ip link set lablink0 master "${bridge_if}"
-        sudo ip link set lablink0 up
+    print_task "Creating lablink0 to keep ${bridge_if} UP..."
+    # A rebuilt bridge leaves an existing lablink0 detached, so check the attachment, not just existence
+    if ip -o link show lablink0 2>/dev/null | grep -q "[<,]UP[,>].* master ${bridge_if} "; then
+        print_task_skip
+    elif { ip link show lablink0 &>/dev/null || sudo ip link add name lablink0 type dummy; } \
+        && sudo ip link set lablink0 master "${bridge_if}" \
+        && sudo ip link set lablink0 up; then
         print_task_done
+    else
+        print_task_fail
+        print_error "Failed to attach lablink0 to ${bridge_if}."
+        return 1
     fi
 
-    # Wait for bridge to reach UP state
     local timeout=10
     # Wait for bridge to reach UP state
     print_task "Waiting for ${bridge_if} to be UP..."
@@ -53,7 +58,7 @@ ensure_lablink0() {
     fi
 }
 
-# Remove lablink0 dummy interface. Idempotent — skips if not present.
+# Remove lablink0 dummy interface. Idempotent: skips if not present.
 remove_lablink0() {
     if ip link show lablink0 &>/dev/null; then
         print_task "Removing lablink0 interface..."
