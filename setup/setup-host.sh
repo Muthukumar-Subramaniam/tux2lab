@@ -268,6 +268,22 @@ else
     exit 1
 fi
 
+# Newer libvirt units dropped this ordering; a firewall restore after libvirtd starts wipes its chains and network autostart fails
+print_task "Ordering libvirtd after firewall services..."
+firewall_order_dropin="/etc/systemd/system/libvirtd.service.d/10-tux2lab-firewall-order.conf"
+firewall_order_content=$'[Unit]\nAfter=iptables.service ip6tables.service nftables.service firewalld.service'
+if [[ "$(cat "$firewall_order_dropin" 2>/dev/null)" == "$firewall_order_content" ]]; then
+    print_task_skip
+elif sudo mkdir -p "${firewall_order_dropin%/*}" \
+    && printf '%s\n' "$firewall_order_content" | sudo tee "$firewall_order_dropin" >/dev/null \
+    && sudo systemctl daemon-reload; then
+    print_task_done
+else
+    print_task_fail
+    print_error "Failed to install $firewall_order_dropin."
+    exit 1
+fi
+
 print_task "Enabling and starting libvirtd..."
 # systemd refuses to open libvirtd's sockets while the service is already running without them
 if systemctl is-active --quiet libvirtd.service && ! systemctl is-active --quiet libvirtd.socket; then
@@ -310,7 +326,7 @@ sudo chown "$USER":"$(id -g)" /tux2lab-data /tux2lab-data/vms || {
 print_task_done
 
 # ============================================================================
-# SETUP BRIDGE NETWORK (labbr0 — dual-stack)
+# SETUP BRIDGE NETWORK (labbr0, dual-stack)
 # ============================================================================
 virsh_network_name="tux2lab"
 virsh_network_definition="/tux2lab/qemu-kvm-manage/labbr0.xml"
@@ -336,23 +352,56 @@ run_virsh_cmd() {
     sudo virsh "$@" &>/dev/null
 }
 
-if ( ip link show labbr0 &>/dev/null && ip addr show labbr0 | grep -q "$ipv4_labbr0" && ip addr show labbr0 | grep -q "$ipv6_labbr0" ) && \
-   sudo virsh net-info "$virsh_network_name" &>/dev/null; then
-    print_task "Setting up bridge network labbr0..."
-    print_task_skip
+run_virsh_or_fail() {
+    local virsh_error
+    virsh_error=$(sudo virsh "$@" 2>&1 >/dev/null) && return 0
+    print_task_fail
+    print_error "virsh $* failed: ${virsh_error:-no error output}"
+    exit 1
+}
+
+# libvirt refuses a forwarding network while an uplink holds kernel RA routes with accept_ra below 2
+print_task "Keeping IPv6 router advertisements on uplinks..."
+ra_sysctl_file="/etc/sysctl.d/90-tux2lab-accept-ra.conf"
+mapfile -t ra_ifaces < <(ip -6 route show proto ra 2>/dev/null \
+    | awk '{for (n = 1; n < NF; n++) if ($n == "dev") print $(n + 1)}' | sort -u)
+ra_changed=false
+for iface in "${ra_ifaces[@]}"; do
+    [[ "$(cat "/proc/sys/net/ipv6/conf/$iface/accept_ra" 2>/dev/null)" == "2" ]] && continue
+    # Slash form keeps interface names containing dots (VLANs) unambiguous
+    ra_sysctl_line="net/ipv6/conf/$iface/accept_ra = 2"
+    if ! echo 2 | sudo tee "/proc/sys/net/ipv6/conf/$iface/accept_ra" >/dev/null \
+        || ! { grep -qxF "$ra_sysctl_line" "$ra_sysctl_file" 2>/dev/null \
+               || echo "$ra_sysctl_line" | sudo tee -a "$ra_sysctl_file" >/dev/null; }; then
+        print_task_fail
+        print_error "Failed to set accept_ra=2 on $iface."
+        exit 1
+    fi
+    ra_changed=true
+done
+if $ra_changed; then print_task_done; else print_task_skip; fi
+
+print_task "Setting up bridge network labbr0..."
+# Both lookups fail on a fresh host where neither the bridge nor the network exists yet
+labbr0_addrs=$(ip -o addr show dev labbr0 2>/dev/null | awk '{split($4, a, "/"); print a[1]}') || true
+net_state=$(sudo virsh net-info "$virsh_network_name" 2>/dev/null \
+    | awk '$1 == "Active:" {a = $2} $1 == "Autostart:" {s = $2} END {print a, s}') || true
+if [[ "${net_state% *}" == "yes" ]] \
+    && grep -qxF "$ipv4_labbr0" <<< "$labbr0_addrs" \
+    && grep -qxF "$ipv6_labbr0" <<< "$labbr0_addrs"; then
+    # A running network is never destroyed here: that would detach every running VM
+    if [[ "${net_state#* }" == "yes" ]]; then
+        print_task_skip
+    else
+        run_virsh_or_fail net-autostart "$virsh_network_name"
+        print_task_done
+    fi
 else
-    print_task "Setting up bridge network labbr0..."
     run_virsh_cmd net-destroy "$virsh_network_name" || true
     run_virsh_cmd net-undefine "$virsh_network_name" || true
-    run_virsh_cmd net-define "$virsh_network_definition" || {
-        print_error "Failed to define network from $virsh_network_definition"
-        exit 1
-    }
-    run_virsh_cmd net-start "$virsh_network_name" || {
-        print_error "Failed to start network $virsh_network_name"
-        exit 1
-    }
-    run_virsh_cmd net-autostart "$virsh_network_name"
+    run_virsh_or_fail net-define "$virsh_network_definition"
+    run_virsh_or_fail net-start "$virsh_network_name"
+    run_virsh_or_fail net-autostart "$virsh_network_name"
     print_task_done
 fi
 
