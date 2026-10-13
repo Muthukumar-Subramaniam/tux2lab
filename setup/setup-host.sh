@@ -268,7 +268,8 @@ print_task_done
 # ============================================================================
 print_task "Creating /tux2lab-data directory..."
 sudo mkdir -p /tux2lab-data/vms
-sudo chown -R "$USER":"$(id -g)" /tux2lab-data || {
+# Not recursive: on a rerun the tree holds files owned by service accounts (named's logs) that must keep their owner
+sudo chown "$USER":"$(id -g)" /tux2lab-data /tux2lab-data/vms || {
     print_task_fail
     print_error "Failed to set ownership of /tux2lab-data."
     exit 1
