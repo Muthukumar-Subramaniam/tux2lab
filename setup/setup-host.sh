@@ -363,11 +363,13 @@ run_virsh_or_fail() {
 # libvirt refuses a forwarding network while an uplink holds kernel RA routes with accept_ra below 2
 print_task "Keeping IPv6 router advertisements on uplinks..."
 ra_sysctl_file="/etc/sysctl.d/90-tux2lab-accept-ra.conf"
-mapfile -t ra_ifaces < <(ip -6 route show proto ra 2>/dev/null \
+# Kernel RA routes come and go, so judge uplinks by accept_ra rather than by routes present right now
+mapfile -t ra_ifaces < <({ ip -4 route show default; ip -6 route show default; ip -6 route show proto ra; } 2>/dev/null \
     | awk '{for (n = 1; n < NF; n++) if ($n == "dev") print $(n + 1)}' | sort -u)
 ra_changed=false
 for iface in "${ra_ifaces[@]}"; do
-    [[ "$(cat "/proc/sys/net/ipv6/conf/$iface/accept_ra" 2>/dev/null)" == "2" ]] && continue
+    # 0 means a userspace manager (NetworkManager, networkd) owns RAs and libvirt ignores those routes
+    [[ "$(cat "/proc/sys/net/ipv6/conf/$iface/accept_ra" 2>/dev/null)" == "1" ]] || continue
     # Slash form keeps interface names containing dots (VLANs) unambiguous
     ra_sysctl_line="net/ipv6/conf/$iface/accept_ra = 2"
     if ! echo 2 | sudo tee "/proc/sys/net/ipv6/conf/$iface/accept_ra" >/dev/null \
