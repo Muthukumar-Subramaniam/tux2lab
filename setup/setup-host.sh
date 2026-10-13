@@ -405,11 +405,13 @@ else
     print_task_done
 fi
 
-# Remove libvirt default network (virbr0 + dnsmasq conflicts with kea)
-if sudo virsh net-info default &>/dev/null; then
-    print_task "Removing libvirt default network (virbr0)..."
+# tux2lab never uses libvirt's default network; drop its bridge and dnsmasq
+print_task "Removing libvirt default network (virbr0)..."
+if ! sudo virsh net-info default &>/dev/null; then
+    print_task_skip
+else
     run_virsh_cmd net-destroy default || true
-    run_virsh_cmd net-undefine default || true
+    run_virsh_or_fail net-undefine default
     print_task_done
 fi
 
