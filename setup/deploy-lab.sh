@@ -65,6 +65,15 @@ preflight_checks() {
         bash /tux2lab/setup/setup-host.sh --yes || { print_error "setup-host.sh failed."; exit 1; }
     fi
 
+    ADMIN_USERNAME="$USER"
+    # dnsbinder accepts only letters and digits here, so jon_doe and jon.doe both become jondoe
+    ADMIN_DOMAIN="${USER//[^a-zA-Z0-9]/}.internal"
+    if [[ "${ADMIN_DOMAIN}" == ".internal" ]]; then
+        print_error "Cannot derive a lab domain from username '${USER}'."
+        exit 1
+    fi
+    INFRA_FQDN="${INFRA_HOSTNAME}.${ADMIN_DOMAIN}"
+
     print_info "Pre-flight checks passed."
 }
 
@@ -179,17 +188,18 @@ capture_network_config() {
   ${MAKE_IT_CYAN}✓ IPv6 Address     :${RESET_COLOR} ${IPV6_ADDRESS}
   ${MAKE_IT_CYAN}✓ IPv6 Network     :${RESET_COLOR} ${IPV6_ULA_SUBNET}
   ${MAKE_IT_CYAN}✓ DHCPv6 Pool      :${RESET_COLOR} ${DHCPV6_RANGE_START} - ${DHCPV6_RANGE_END}
-  ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${INFRA_HOSTNAME}.${USER}.internal
-  ${MAKE_IT_CYAN}✓ Admin User       :${RESET_COLOR} ${USER}"
+  ${MAKE_IT_CYAN}✓ Lab Infra Server :${RESET_COLOR} ${INFRA_FQDN}
+  ${MAKE_IT_CYAN}✓ Admin User       :${RESET_COLOR} ${ADMIN_USERNAME}"
 }
 
 # ============================================================================
 # COLLECT CREDENTIALS (only user prompt: password)
 # ============================================================================
 collect_credentials() {
-    ADMIN_USERNAME="$USER"
-    ADMIN_DOMAIN="${USER}.internal"
-    INFRA_FQDN="${INFRA_HOSTNAME}.${ADMIN_DOMAIN}"
+    if [[ ! -t 0 ]]; then
+        print_error "Deploy is interactive. Run 'tux2lab deploy' from a terminal."
+        exit 1
+    fi
 
     print_yellow "The following will be configured:
   - Generate SSH keypair for lab access
@@ -198,7 +208,7 @@ collect_credentials() {
   - Pull and start tux2lab-engine container (DNS, DHCP, NTP, HTTP, TFTP)
   - Start NFS server on host (bound to lab bridge)
   - Configure host DNS resolution and SSH"
-    read -p "Are you sure you want to continue? (yes/no): " confirm
+    read -rp "Are you sure you want to continue? (yes/no): " confirm
     if [[ "$confirm" != "yes" ]]; then
         print_info "Deploy cancelled by user."
         exit 0
@@ -208,7 +218,7 @@ collect_credentials() {
     local password_plain=""
     local confirm_password=""
     while true; do
-        read -s -p "Enter your Lab Infra Global password: " password_plain
+        IFS= read -rsp "Enter your Lab Infra Global password: " password_plain
         echo
         if [[ -z "$password_plain" ]]; then
             print_error "Password cannot be empty."
@@ -221,7 +231,7 @@ collect_credentials() {
             fi
         fi
 
-        read -s -p "Re-enter Lab Infra Global password: " confirm_password
+        IFS= read -rsp "Re-enter Lab Infra Global password: " confirm_password
         echo
         if [[ "$password_plain" != "$confirm_password" ]]; then
             print_error "Passwords do not match."
