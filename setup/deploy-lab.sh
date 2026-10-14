@@ -47,68 +47,22 @@ fi
 preflight_checks() {
     print_info "Running pre-flight checks..."
 
-    # Check podman
-    if ! command -v podman &>/dev/null; then
-        print_warning "podman is not installed. Running setup-host.sh..."
-        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
-            bash /tux2lab/setup/setup-host.sh --yes || { print_error "setup-host.sh failed."; exit 1; }
-        else
-            print_error "setup-host.sh not found. Install podman manually."
-            exit 1
-        fi
-    fi
-
-    # Check /tux2lab-data exists
-    if [[ ! -d "${TUX2LAB_DATA_DIR}" ]]; then
-        print_warning "Directory ${TUX2LAB_DATA_DIR} does not exist. Running setup-host.sh..."
-        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
-            bash /tux2lab/setup/setup-host.sh --yes || { print_error "setup-host.sh failed."; exit 1; }
-        else
-            print_error "setup-host.sh not found."
-            exit 1
-        fi
-    fi
-
-    # Check labbr0 bridge exists — auto-recover by running setup-host.sh
-    if ! ip link show "${BRIDGE_INTERFACE}" &>/dev/null; then
-        print_warning "Bridge ${BRIDGE_INTERFACE} does not exist. Running setup-host.sh to create it..."
-        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
-            bash /tux2lab/setup/setup-host.sh --yes || {
-                print_error "setup-host.sh failed."
-                exit 1
-            }
-        else
-            print_error "setup-host.sh not found at /tux2lab/setup/setup-host.sh"
-            exit 1
-        fi
-    fi
-
-    # Check libvirt network exists (for reading network config)
-    if ! sudo virsh net-info "${LIBVIRT_NETWORK_NAME}" &>/dev/null 2>&1; then
-        print_warning "Libvirt network '${LIBVIRT_NETWORK_NAME}' not found. Running setup-host.sh..."
-        if [[ -x /tux2lab/setup/setup-host.sh ]]; then
-            bash /tux2lab/setup/setup-host.sh --yes || {
-                print_error "setup-host.sh failed."
-                exit 1
-            }
-        else
-            print_error "setup-host.sh not found at /tux2lab/setup/setup-host.sh"
-            exit 1
-        fi
-    fi
-
-    # Check jq
-    if ! command -v jq &>/dev/null; then
-        print_error "jq is not installed."
-        print_info "Install jq: sudo dnf install jq (or apt install jq)"
-        exit 1
-    fi
-
-    # Check for existing deployment
     if [[ -f "${LAB_ENV_JSON}" ]]; then
         print_warning "Existing lab deployment detected: ${LAB_ENV_JSON}"
         print_info "Use 'tux2lab rebuild' to redeploy, or 'tux2lab destroy' to remove."
         exit 0
+    fi
+
+    local missing=()
+    command -v podman &>/dev/null || missing+=("podman")
+    command -v jq &>/dev/null || missing+=("jq")
+    [[ -d "${TUX2LAB_DATA_DIR}" ]] || missing+=("${TUX2LAB_DATA_DIR}")
+    ip link show "${BRIDGE_INTERFACE}" &>/dev/null || missing+=("bridge ${BRIDGE_INTERFACE}")
+    sudo virsh net-info "${LIBVIRT_NETWORK_NAME}" &>/dev/null || missing+=("libvirt network ${LIBVIRT_NETWORK_NAME}")
+
+    if (( ${#missing[@]} > 0 )); then
+        print_warning "Host is not fully set up (missing: ${missing[*]}). Running setup-host.sh..."
+        bash /tux2lab/setup/setup-host.sh --yes || { print_error "setup-host.sh failed."; exit 1; }
     fi
 
     print_info "Pre-flight checks passed."
