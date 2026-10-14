@@ -82,10 +82,15 @@ capture_network_config() {
     }
 
     # IPv4 — gateway is the host's IP on labbr0 (also the infra services IP in v2.0.0)
-    IPV4_GATEWAY=$(echo "$net_xml" | awk -F"'" '/<ip address=/ {print $2}')
-    IPV4_NETMASK=$(echo "$net_xml" | awk -F"'" '/<ip address=/ {print $4}')
+    # Attributes are read by name: libvirt accepts either netmask= or prefix= for IPv4
+    local ipv4_line ipv6_line
+    ipv4_line=$(grep "<ip " <<< "$net_xml" | grep -v -m1 "family='ipv6'" || true)
+    ipv6_line=$(grep -m1 "<ip family='ipv6'" <<< "$net_xml" || true)
+    IPV4_GATEWAY=$(sed -n "s/.* address='\([^']*\)'.*/\1/p" <<< "$ipv4_line")
+    IPV4_NETMASK=$(sed -n "s/.* netmask='\([^']*\)'.*/\1/p" <<< "$ipv4_line")
+    IPV4_PREFIX=$(sed -n "s/.* prefix='\([^']*\)'.*/\1/p" <<< "$ipv4_line")
 
-    if [[ -z "$IPV4_GATEWAY" || -z "$IPV4_NETMASK" ]]; then
+    if [[ -z "$IPV4_GATEWAY" || ( -z "$IPV4_NETMASK" && -z "$IPV4_PREFIX" ) ]]; then
         print_task_fail
         print_error "Failed to extract IPv4 config from libvirt network."
         exit 1
@@ -94,18 +99,26 @@ capture_network_config() {
     # In v2.0.0: services run on the GATEWAY IP (.1) — no separate .2
     IPV4_ADDRESS="${IPV4_GATEWAY}"
 
-    # Calculate CIDR prefix from netmask (count the 1-bits)
-    local mask_binary=""
-    IFS=. read -r mm1 mm2 mm3 mm4 <<< "$IPV4_NETMASK"
-    for octet in $mm1 $mm2 $mm3 $mm4; do
-        local val=$octet
-        for _ in {1..8}; do
-            mask_binary+=$((val / 128))
-            val=$(( (val % 128) * 2 ))
+    local mask
+    if [[ -n "$IPV4_NETMASK" ]]; then
+        IFS=. read -r m1 m2 m3 m4 <<< "$IPV4_NETMASK"
+        mask=$(( (m1 << 24) | (m2 << 16) | (m3 << 8) | m4 ))
+        IPV4_PREFIX=0
+        while (( mask & 0x80000000 )); do
+            IPV4_PREFIX=$((IPV4_PREFIX + 1))
+            mask=$(( (mask << 1) & 0xFFFFFFFF ))
         done
-    done
-    local ones_only="${mask_binary//0/}"
-    IPV4_PREFIX="${#ones_only}"
+    fi
+
+    # dnsbinder and the DHCP pool in the last /24 both need a /16 to /24 network
+    if ! [[ "$IPV4_PREFIX" =~ ^[0-9]+$ ]] || (( IPV4_PREFIX < 16 || IPV4_PREFIX > 24 )); then
+        print_task_fail
+        print_error "IPv4 prefix /${IPV4_PREFIX} on ${LIBVIRT_NETWORK_NAME} is not supported. Use a /16 to /24 network in labbr0.xml."
+        exit 1
+    fi
+
+    mask=$(( (0xFFFFFFFF << (32 - IPV4_PREFIX)) & 0xFFFFFFFF ))
+    IPV4_NETMASK="$(( (mask >> 24) & 255 )).$(( (mask >> 16) & 255 )).$(( (mask >> 8) & 255 )).$(( mask & 255 ))"
 
     # Calculate network address
     IFS=. read -r g1 g2 g3 g4 <<< "$IPV4_GATEWAY"
@@ -128,8 +141,8 @@ capture_network_config() {
     DHCP_RANGE_END="${IPV4_LAST24}.254"
 
     # IPv6 — ULA from libvirt network
-    IPV6_GATEWAY=$(echo "$net_xml" | awk -F"'" '/<ip family=.ipv6/ {print $4}')
-    IPV6_PREFIX=$(echo "$net_xml" | awk -F"'" '/<ip family=.ipv6/ {print $6}')
+    IPV6_GATEWAY=$(sed -n "s/.* address='\([^']*\)'.*/\1/p" <<< "$ipv6_line")
+    IPV6_PREFIX=$(sed -n "s/.* prefix='\([^']*\)'.*/\1/p" <<< "$ipv6_line")
 
     if [[ -z "$IPV6_GATEWAY" || -z "$IPV6_PREFIX" ]]; then
         print_task_fail
@@ -142,6 +155,14 @@ capture_network_config() {
 
     # Extract ULA subnet prefix (e.g., fd28:2808:2020:3000)
     IPV6_PREFIX_BASE=$(echo "$IPV6_GATEWAY" | sed 's/::[^:]*$//')
+
+    # Everything downstream assumes a /64 whose first four groups form the base
+    if [[ "$IPV6_PREFIX" != "64" || ! "$IPV6_PREFIX_BASE" =~ ^[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){3}$ ]]; then
+        print_task_fail
+        print_error "IPv6 ${IPV6_GATEWAY}/${IPV6_PREFIX} on ${LIBVIRT_NETWORK_NAME} is not supported. Use a /64 with an address like fd28:2808:2020:3000::1 in labbr0.xml."
+        exit 1
+    fi
+
     IPV6_ULA_SUBNET="${IPV6_PREFIX_BASE}::/${IPV6_PREFIX}"
 
     # DHCPv6 pool range (matches generate-service-configs.sh)
