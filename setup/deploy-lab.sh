@@ -21,7 +21,12 @@ readonly LAB_CONFIG_DIR="${TUX2LAB_DATA_DIR}/lab-config"
 readonly LAB_ENV_JSON="${LAB_CONFIG_DIR}/lab_environment.json"
 readonly CERTS_DIR="${LAB_CONFIG_DIR}/certs"
 readonly SSH_KEYS_DIR="${LAB_CONFIG_DIR}/ssh-keys"
-readonly PROJECT_VERSION=$(jq -r '.version' /tux2lab/project_version.json)
+PROJECT_VERSION=$(grep -o '"version": *"[^"]*"' /tux2lab/project_version.json 2>/dev/null | cut -d'"' -f4) || true
+if [[ -z "${PROJECT_VERSION}" ]]; then
+    print_error "Could not read the version from /tux2lab/project_version.json."
+    exit 1
+fi
+readonly PROJECT_VERSION
 readonly CONTAINER_IMAGE_PRIMARY="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${PROJECT_VERSION}"
 readonly CONTAINER_IMAGE_FALLBACK="docker.io/musubram/tux2lab-engine:${PROJECT_VERSION}"
 readonly CONTAINER_NAME="tux2lab-engine"
