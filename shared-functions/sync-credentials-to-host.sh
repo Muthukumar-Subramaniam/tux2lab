@@ -90,7 +90,7 @@ EOF
             _host_cert="/etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt"
         elif [[ -d /etc/pki/trust/anchors ]]; then
             _host_cert="/etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt"
-        elif command -v update-ca-certificates &>/dev/null; then
+        elif [[ -d /usr/local/share/ca-certificates ]]; then
             _host_cert="/usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt"
         fi
         if [[ -n "$_host_cert" ]] && ! diff -q "${_lab_config}/certs/tux2lab-nginx-selfsigned.crt" "$_host_cert" &>/dev/null; then

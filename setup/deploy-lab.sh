@@ -300,41 +300,58 @@ generate_ssl_cert() {
     mkdir -p "${CERTS_DIR}"
     local key_file="${CERTS_DIR}/tux2lab-nginx-selfsigned.key"
     local cert_file="${CERTS_DIR}/tux2lab-nginx-selfsigned.crt"
+    local err
 
     if [[ -f "$cert_file" && -f "$key_file" ]]; then
         print_task_skip
         print_info "SSL certificate already exists."
+    else
+        if ! err=$(openssl req -x509 -nodes -days 3650 \
+            -newkey rsa:4096 \
+            -keyout "$key_file" \
+            -out "$cert_file" \
+            -subj "/CN=${INFRA_FQDN}" \
+            -addext "subjectAltName=DNS:${INFRA_FQDN},DNS:${INFRA_HOSTNAME},IP:${IPV4_ADDRESS},IP:${IPV6_ADDRESS}" \
+            2>&1); then
+            rm -f "$key_file" "$cert_file"
+            print_task_fail
+            # Drop key-generation progress lines (-quiet needs OpenSSL 3.2+)
+            print_error "Failed to generate SSL certificate: $(grep -v '^[.+*]*$' <<<"$err")"
+            exit 1
+        fi
+
+        chmod 600 "$key_file"
+        chmod 644 "$cert_file"
+        print_task_done
+    fi
+
+    # Runs on every deploy so a run interrupted after cert generation still gets trust (curl/wget without -k)
+    print_task "Adding SSL certificate to host trust store..."
+    local anchor_dir update_cmd
+    if command -v update-ca-trust &>/dev/null; then
+        # RHEL/Fedora/Azure Linux
+        anchor_dir="/etc/pki/ca-trust/source/anchors"
+        update_cmd="update-ca-trust"
+    elif [[ -d /etc/pki/trust/anchors ]]; then
+        # openSUSE/SLES
+        anchor_dir="/etc/pki/trust/anchors"
+        update_cmd="update-ca-certificates"
+    elif [[ -d /usr/local/share/ca-certificates ]]; then
+        # Debian/Ubuntu
+        anchor_dir="/usr/local/share/ca-certificates"
+        update_cmd="update-ca-certificates"
+    else
+        print_task_skip
+        print_warning "No supported CA trust store found; host tools will not trust the lab certificate."
         return
     fi
 
-    openssl req -x509 -nodes -days 3650 \
-        -newkey rsa:4096 \
-        -keyout "$key_file" \
-        -out "$cert_file" \
-        -subj "/CN=${INFRA_FQDN}" \
-        -addext "subjectAltName=DNS:${INFRA_FQDN},DNS:${INFRA_HOSTNAME},IP:${IPV4_ADDRESS},IP:${IPV6_ADDRESS}" \
-        &>/dev/null
-
-    chmod 600 "$key_file"
-    chmod 644 "$cert_file"
-
-    # Install cert into host CA trust store (so curl/wget work without -k)
-    if command -v update-ca-trust &>/dev/null; then
-        # RHEL/Fedora/CentOS
-        sudo cp "$cert_file" /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
-        sudo update-ca-trust &>/dev/null
-    elif [[ -d /etc/pki/trust/anchors ]]; then
-        # openSUSE/SLES
-        sudo cp "$cert_file" /etc/pki/trust/anchors/tux2lab-nginx-selfsigned.crt
-        sudo update-ca-certificates &>/dev/null
-    elif [[ -d /usr/local/share/ca-certificates ]]; then
-        # Debian/Ubuntu
-        sudo cp "$cert_file" /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt
-        sudo update-ca-certificates &>/dev/null
+    if ! err=$(sudo cp "$cert_file" "${anchor_dir}/tux2lab-nginx-selfsigned.crt" 2>&1 && sudo "$update_cmd" 2>&1); then
+        print_task_fail
+        print_error "Failed to add SSL certificate to host trust store: ${err}"
+        exit 1
     fi
-
     print_task_done
-    print_info "SSL certificate generated and trusted by host."
 }
 
 # ============================================================================
