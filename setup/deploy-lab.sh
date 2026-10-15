@@ -265,7 +265,11 @@ generate_ssh_keys() {
         return
     fi
 
-    ssh-keygen -t ed25519 -N "" -f "$key_file" -C "${ADMIN_DOMAIN}" &>/dev/null
+    if ! ssh-keygen -q -t ed25519 -N "" -f "$key_file" -C "${ADMIN_DOMAIN}"; then
+        print_task_fail
+        print_error "ssh-keygen failed to create ${key_file}."
+        exit 1
+    fi
     cp "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
     # Lab keys are served via HTTP to VMs — readable by nginx
     chmod 644 "$key_file" "${key_file}.pub" "${SSH_KEYS_DIR}/authorized_keys"
