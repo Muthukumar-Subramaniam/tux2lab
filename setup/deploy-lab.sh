@@ -447,11 +447,9 @@ EOVARS
 generate_service_configs() {
     print_info "Generating service configurations..."
 
-    if [[ -x /tux2lab/setup/generate-service-configs.sh ]]; then
-        bash /tux2lab/setup/generate-service-configs.sh
-    else
-        print_warning "Config generator not yet implemented — skipping."
-        print_info "Service configs will need to be created manually for testing."
+    if ! bash /tux2lab/setup/generate-service-configs.sh; then
+        print_error "Service configuration generation failed."
+        exit 1
     fi
 }
 
