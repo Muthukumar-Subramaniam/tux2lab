@@ -94,9 +94,9 @@ credentials_password() {
         print_cyan "Aborted."
         exit 0
     fi
-    read -rsp "Enter new password: " new_password
+    IFS= read -rsp "Enter new password: " new_password
     echo ""
-    read -rsp "Confirm new password: " confirm_password
+    IFS= read -rsp "Confirm new password: " confirm_password
     echo ""
 
     if [[ "$new_password" != "$confirm_password" ]]; then
@@ -119,6 +119,11 @@ credentials_password() {
     if [[ -f "$lab_env_json" ]]; then
         jq --arg hash "$hash" '.admin.password_hash = $hash' "$lab_env_json" > "${lab_env_json}.tmp" \
             && mv "${lab_env_json}.tmp" "$lab_env_json"
+    fi
+    # ksmanager bakes the hash into new VMs from this file
+    local lab_env_vars="/tux2lab-data/lab_environment_vars"
+    if [[ -f "$lab_env_vars" ]]; then
+        sed -i "s|^lab_admin_shadow_password=.*|lab_admin_shadow_password='${hash}'|" "$lab_env_vars"
     fi
     print_success "Password updated."
     print_sync_info
