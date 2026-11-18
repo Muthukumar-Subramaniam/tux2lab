@@ -743,13 +743,14 @@ main() {
 
     preflight_checks
     capture_network_config
+    # Before any lab state is written, so a bridge failure leaves nothing half-deployed
+    ensure_bridge_up
     collect_credentials
     generate_ssh_keys
     generate_ssl_cert
     generate_lab_environment_json
     generate_service_configs
     setup_dns
-    ensure_bridge_up
     start_container
     create_dhcp_pool_dns_records
     source /tux2lab/shared-functions/host-nfs.sh
