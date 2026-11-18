@@ -46,12 +46,22 @@ fi
 # ====== VERSION + INFO ======
 local_version=$(jq -r '.version' /tux2lab/project_version.json)
 print_info "Rebuilding tux2lab v${local_version}..."
-
-# Auto-detect version mismatch: if running container's image tag doesn't match project version, pull
+container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
+container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
+container_image=""
+# Images are pinned to the project version, so a local copy is used as is (works offline)
 if [[ "$pull_image" != "true" ]]; then
-    current_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "")
-    if [[ -n "$current_image" ]] && [[ "$current_image" != *":${local_version}" ]]; then
-        print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
+    for candidate in "${container_image_primary}" "${container_image_fallback}"; do
+        if sudo podman image exists "${candidate}"; then
+            container_image="${candidate}"
+            break
+        fi
+    done
+    if [[ -z "${container_image}" ]]; then
+        current_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "")
+        if [[ -n "$current_image" ]] && [[ "$current_image" != *":${local_version}" ]]; then
+            print_info "Version mismatch detected (container: ${current_image##*:}, project: ${local_version}). Will pull new image."
+        fi
         pull_image=true
     fi
 fi
@@ -152,14 +162,7 @@ fi
 print_task_done
 
 # ====== STEP 5: Pull container image (if needed) ======
-container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
-container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
-container_image=""
-
-if [[ "$pull_image" != "true" ]]; then
-    # Use existing local image
-    container_image=$(sudo podman inspect "${CONTAINER_NAME}" --format '{{.ImageName}}' 2>/dev/null || echo "${container_image_primary}")
-else
+if [[ -z "${container_image}" ]]; then
     print_task "Pulling tux2lab-engine container image..."
     pull_start=$SECONDS
 
