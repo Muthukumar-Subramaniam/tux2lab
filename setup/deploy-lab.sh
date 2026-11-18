@@ -205,7 +205,7 @@ collect_credentials() {
   - Generate SSH keypair for lab access
   - Generate self-signed SSL certificate
   - Generate service configurations (DNS, DHCP, NTP, HTTP, TFTP, NFS)
-  - Pull and start tux2lab-engine container (DNS, DHCP, NTP, HTTP, TFTP)
+  - Start tux2lab-engine container (DNS, DHCP, NTP, HTTP, TFTP)
   - Start NFS server on host (bound to lab bridge)
   - Configure host DNS resolution and SSH"
     read -rp "Are you sure you want to continue? (yes/no): " confirm
@@ -491,23 +491,25 @@ ensure_bridge_up() {
 }
 
 # ============================================================================
-# START CONTAINER
+# ENSURE CONTAINER IMAGE
 # ============================================================================
-start_container() {
+CONTAINER_IMAGE=""
+
+ensure_container_image() {
     print_task "Pulling tux2lab-engine container image..."
 
     # Images are pinned to the project version, so a local copy is used as is (works offline)
-    local container_image="" candidate
+    local candidate
     for candidate in "${CONTAINER_IMAGE_PRIMARY}" "${CONTAINER_IMAGE_FALLBACK}"; do
         if sudo podman image exists "${candidate}"; then
-            container_image="${candidate}"
+            CONTAINER_IMAGE="${candidate}"
             break
         fi
     done
 
-    if [[ -n "${container_image}" ]]; then
+    if [[ -n "${CONTAINER_IMAGE}" ]]; then
         print_task_skip
-        print_info "Using local image ${container_image}"
+        print_info "Using local image ${CONTAINER_IMAGE}"
     else
         # Try primary registry (ghcr.io), fallback to Docker Hub
         local pull_start=$SECONDS
@@ -524,7 +526,7 @@ start_container() {
         done
 
         if wait "$pull_pid"; then
-            container_image="${CONTAINER_IMAGE_PRIMARY}"
+            CONTAINER_IMAGE="${CONTAINER_IMAGE_PRIMARY}"
             pull_elapsed=$((SECONDS - pull_start))
             printf "\r\033[K"
             printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
@@ -542,7 +544,7 @@ start_container() {
             done
 
             if wait "$pull_pid"; then
-                container_image="${CONTAINER_IMAGE_FALLBACK}"
+                CONTAINER_IMAGE="${CONTAINER_IMAGE_FALLBACK}"
                 pull_elapsed=$((SECONDS - pull_start))
                 printf "\r\033[K"
                 printf "${MAKE_IT_CYAN}[TASK] Pulling tux2lab-engine container image (%dm %ds)...${RESET_COLOR}" $((pull_elapsed/60)) $((pull_elapsed%60))
@@ -562,9 +564,16 @@ start_container() {
         fi
         rm -f "$pull_log"
     fi
+}
 
+# ============================================================================
+# START CONTAINER
+# ============================================================================
+start_container() {
     print_task "Starting tux2lab-engine container..."
     local start_begin=$SECONDS
+    local run_log
+    run_log=$(mktemp)
 
     (
         # Remove existing container if present (from failed previous run)
@@ -572,8 +581,8 @@ start_container() {
             sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
         fi
         source /tux2lab/shared-functions/run-container.sh
-        run_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${INFRA_FQDN}" "${TUX2LAB_DATA_DIR}" "${IPV4_ADDRESS}" "${BRIDGE_INTERFACE}"
-    ) &
+        run_tux2lab_container "${CONTAINER_NAME}" "${CONTAINER_IMAGE}" "${INFRA_FQDN}" "${TUX2LAB_DATA_DIR}" "${IPV4_ADDRESS}" "${BRIDGE_INTERFACE}"
+    ) &>"$run_log" &
     local run_pid=$!
 
     # Live timer while container is being created
@@ -593,12 +602,15 @@ start_container() {
         printf "${MAKE_IT_CYAN}[TASK] Starting tux2lab-engine container (%dm %ds)...${RESET_COLOR}" $((start_elapsed/60)) $((start_elapsed%60))
         print_task_done
         print_info "Container '${CONTAINER_NAME}' is running."
+        rm -f "$run_log"
     else
         printf "\r\033[K"
         print_task "Starting tux2lab-engine container..."
         print_task_fail
-        print_error "Container failed to start. Check logs:"
-        print_info "  sudo podman logs ${CONTAINER_NAME}"
+        print_error "Container failed to start."
+        tail -n 3 "$run_log" >&2
+        rm -f "$run_log"
+        print_info "If it started and then exited, check: sudo podman logs ${CONTAINER_NAME}"
         exit 1
     fi
 }
@@ -712,6 +724,7 @@ rebuild_lab() {
 
     # Ensure bridge is UP and start container
     ensure_bridge_up
+    ensure_container_image
     start_container
     source /tux2lab/shared-functions/host-nfs.sh
     start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
@@ -725,6 +738,13 @@ rebuild_lab() {
     print_green "═══════════════════════════════════════════════════════════════════
   Lab infrastructure rebuilt successfully!
 ═══════════════════════════════════════════════════════════════════"
+}
+
+on_deploy_exit() {
+    local rc=$?
+    if (( rc != 0 )) && [[ -f "${LAB_ENV_JSON}" ]]; then
+        print_warning "Deployment did not finish. Fix the cause above, then run 'tux2lab rebuild' to complete it."
+    fi
 }
 
 # ============================================================================
@@ -743,11 +763,13 @@ main() {
 
     preflight_checks
     capture_network_config
-    # Before any lab state is written, so a bridge failure leaves nothing half-deployed
+    # Before any lab state is written, so these failures leave nothing half-deployed
     ensure_bridge_up
+    ensure_container_image
     collect_credentials
     generate_ssh_keys
     generate_ssl_cert
+    trap on_deploy_exit EXIT
     generate_lab_environment_json
     generate_service_configs
     setup_dns
@@ -757,6 +779,7 @@ main() {
     start_host_nfs "${IPV4_ADDRESS}" "${IPV6_ADDRESS}"
     configure_host_dns
     configure_host_ssh
+    trap - EXIT
 
     # Run health check
     print_info "Running health check..."

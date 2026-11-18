@@ -35,5 +35,5 @@ run_tux2lab_container() {
         -e "TUX2LAB_BRIDGE_IP=${bridge_ip}" \
         -e "TUX2LAB_BRIDGE_IF=${bridge_if}" \
         -e "TUX2LAB_BRIDGE_IPV6=${bridge_ipv6}" \
-        "${image}" &>/dev/null
+        "${image}" >/dev/null
 }

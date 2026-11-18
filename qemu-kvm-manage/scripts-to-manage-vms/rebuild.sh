@@ -215,13 +215,14 @@ ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
 bridge_interface=$(jq -r '.network.bridge_interface' "${LAB_ENV_JSON}")
 infra_fqdn=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
 data_dir="/tux2lab-data"
+run_log=$(mktemp)
 
 # Destroy and recreate in background subshell
 (
     sudo podman rm -f "${CONTAINER_NAME}" &>/dev/null || true
     source /tux2lab/shared-functions/run-container.sh
     run_tux2lab_container "${CONTAINER_NAME}" "${container_image}" "${infra_fqdn}" "${data_dir}" "${ipv4_address}" "${bridge_interface}"
-) &
+) &>"$run_log" &
 run_pid=$!
 
 # Live timer
@@ -240,11 +241,15 @@ if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/de
     printf "\r\033[K"
     printf "${MAKE_IT_CYAN}[TASK] Recreating tux2lab-engine container (%dm %ds)...${RESET_COLOR}" $((recreate_elapsed/60)) $((recreate_elapsed%60))
     print_task_done
+    rm -f "$run_log"
 else
     printf "\r\033[K"
     print_task "Recreating tux2lab-engine container..."
     print_task_fail
-    print_error "Container failed to start. Check: sudo podman logs ${CONTAINER_NAME}"
+    print_error "Container failed to start."
+    tail -n 3 "$run_log" >&2
+    rm -f "$run_log"
+    print_info "If it started and then exited, check: sudo podman logs ${CONTAINER_NAME}"
     exit 1
 fi
 
