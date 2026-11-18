@@ -147,6 +147,8 @@ credentials_ssh_keys() {
     mkdir -p "$ssh_dir"
 
     # Generate new keypair with lab domain as comment
+    local old_key_blob
+    old_key_blob=$(awk '{print $2}' "${ssh_dir}/tux2lab_id_rsa.pub" 2>/dev/null) || true
     rm -f "${ssh_dir}/tux2lab_id_rsa" "${ssh_dir}/tux2lab_id_rsa.pub"
     ssh-keygen -t ed25519 -f "${ssh_dir}/tux2lab_id_rsa" -N "" -C "${lab_domain}" -q
     cp "${ssh_dir}/tux2lab_id_rsa.pub" "${ssh_dir}/authorized_keys"
@@ -158,10 +160,12 @@ credentials_ssh_keys() {
     mkdir -p "/home/${admin_user}/.ssh"
     cp "${ssh_dir}/tux2lab_id_rsa" "/home/${admin_user}/.ssh/"
     cp "${ssh_dir}/tux2lab_id_rsa.pub" "/home/${admin_user}/.ssh/"
-    # Lab key is never authorized on the host; strip entries from earlier deployments
+    # Lab key is never authorized on the host; strip the old key if an earlier version added it
     local auth_file="/home/${admin_user}/.ssh/authorized_keys"
     touch "$auth_file"
-    sed -i "/ ${lab_domain}$/d" "$auth_file"
+    if [[ -n "$old_key_blob" ]]; then
+        sed -i "\#${old_key_blob}#d" "$auth_file"
+    fi
     chmod 600 "/home/${admin_user}/.ssh/tux2lab_id_rsa"
     chmod 644 "/home/${admin_user}/.ssh/tux2lab_id_rsa.pub" "$auth_file"
     chown -R "${admin_user}:$(id -g "$admin_user")" "/home/${admin_user}/.ssh"

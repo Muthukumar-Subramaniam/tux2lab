@@ -25,11 +25,12 @@ sync_credentials_to_host() {
         fi
     fi
 
-    # The lab key is published over HTTP for provisioning, so it is never authorized on
-    # the host. Checked on every sync so "tux2lab rebuild" clears older deployments.
+    # The lab key is served over HTTP, so never authorize it here; match by key so a parent lab's key survives
     local _auth_file="${_host_ssh_dir}/authorized_keys"
-    if [[ -f "$_auth_file" ]] && grep -q " ${_lab_domain}$" "$_auth_file"; then
-        sed -i "/ ${_lab_domain}$/d" "$_auth_file"
+    local _lab_key_blob
+    _lab_key_blob=$(awk '{print $2}' "${_lab_config}/ssh-keys/tux2lab_id_rsa.pub" 2>/dev/null) || true
+    if [[ -n "$_lab_key_blob" && -f "$_auth_file" ]] && grep -qF -- "$_lab_key_blob" "$_auth_file"; then
+        sed -i "\#${_lab_key_blob}#d" "$_auth_file"
         chown "${_admin_user}:$(id -g "$_admin_user")" "$_auth_file"
         _changed=true
     fi

@@ -281,12 +281,6 @@ generate_ssh_keys() {
     cp "${key_file}.pub" "${host_ssh_dir}/tux2lab_id_rsa.pub"
     chmod 600 "${host_ssh_dir}/tux2lab_id_rsa"
 
-    # Lab key is published over HTTP for provisioning, so it is never authorized on the
-    # host. Strip any entry left by earlier deployments.
-    local auth_keys="${host_ssh_dir}/authorized_keys"
-    touch "$auth_keys" && chmod 600 "$auth_keys"
-    sed -i "/ ${ADMIN_DOMAIN}$/d" "$auth_keys"
-
     print_task_done
     print_info "SSH keys generated at ${SSH_KEYS_DIR}/"
 }

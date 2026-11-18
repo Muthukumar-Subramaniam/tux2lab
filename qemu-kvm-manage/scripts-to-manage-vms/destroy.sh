@@ -52,11 +52,9 @@ readonly CONTAINER_NAME="tux2lab-engine"
 readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
 
 # ====== READ CONFIG IF AVAILABLE ======
-lab_domain=""
 lab_ipv4=""
 lab_ipv6=""
 if [[ -f "$LAB_ENV_JSON" ]]; then
-    lab_domain=$(jq -r '.lab.domain' "$LAB_ENV_JSON")
     lab_ipv4=$(jq -r '.network.ipv4.address' "$LAB_ENV_JSON")
     lab_ipv6=$(jq -r '.network.ipv6.address' "$LAB_ENV_JSON")
 fi
@@ -205,6 +203,12 @@ grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null && has_artifact
 [[ -f /usr/local/share/ca-certificates/tux2lab-nginx-selfsigned.crt ]] && has_artifacts=true
 
 if $has_artifacts; then
+    if [[ -f "$HOME/.ssh/authorized_keys" && -f "$HOME/.ssh/tux2lab_id_rsa.pub" ]]; then
+        lab_key_blob=$(awk '{print $2}' "$HOME/.ssh/tux2lab_id_rsa.pub")
+        if [[ -n "$lab_key_blob" ]]; then
+            sed -i "\#${lab_key_blob}#d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+        fi
+    fi
     rm -f "$HOME/.ssh/tux2lab_id_rsa" "$HOME/.ssh/tux2lab_id_rsa.pub" 2>/dev/null || true
     # Remove tux2lab block from config.custom
     if grep -q "# BEGIN tux2lab" "$HOME/.ssh/config.custom" 2>/dev/null; then
@@ -212,10 +216,6 @@ if $has_artifacts; then
     fi
     # Legacy cleanup
     rm -f "$HOME/.ssh/config.d/tux2lab.conf" 2>/dev/null || true
-    if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -n "$lab_domain" ]]; then
-        escaped_domain="${lab_domain//./\\.}"
-        sed -i "/${escaped_domain}/d" "$HOME/.ssh/authorized_keys" 2>/dev/null || true
-    fi
     # Remove SSL cert from host trust store
     if [[ -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt ]]; then
         sudo rm -f /etc/pki/ca-trust/source/anchors/tux2lab-nginx-selfsigned.crt
