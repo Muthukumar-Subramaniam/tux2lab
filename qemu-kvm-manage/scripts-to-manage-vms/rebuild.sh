@@ -151,30 +151,6 @@ if sudo podman ps --filter "name=${CONTAINER_NAME}" --format "{{.Status}}" 2>/de
 fi
 print_task_done
 
-# Ensure DHCP pool DNS records exist (idempotent)
-pool_ipv4=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
-pool_domain=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
-pool_last24=$(jq -r '.network.ipv4.last24_subnet' "${LAB_ENV_JSON}")
-if ! dig @"${pool_ipv4}" +short +time=1 +tries=1 A "dhcp4-lease1.${pool_domain}" 2>/dev/null | grep -q '^[0-9]'; then
-    print_task "Creating IPv4 DNS records for DHCPv4 pool..."
-    dhcp4_file="$(mktemp /tmp/dhcp4-lease-records.XXXXXXXXXX)"
-    for i in $(seq 1 99); do
-        echo "dhcp4-lease${i} ${pool_last24}.$(( i + 155 ))" >> "$dhcp4_file"
-    done
-    sudo bash /tux2lab/named-manage/dnsbinder.sh -cify --ipv4-only --ttl 86400 --inline "$dhcp4_file" &>/dev/null || true
-    rm -f "$dhcp4_file"
-    print_task_done
-
-    print_task "Creating IPv6 DNS records for DHCPv6 pool..."
-    dhcp6_file="$(mktemp /tmp/dhcp6-lease-records.XXXXXXXXXX)"
-    for i in $(seq 1 99); do
-        echo "dhcp6-lease${i}" >> "$dhcp6_file"
-    done
-    sudo bash /tux2lab/named-manage/dnsbinder.sh -c6fy --ttl 86400 --inline "$dhcp6_file" &>/dev/null || true
-    rm -f "$dhcp6_file"
-    print_task_done
-fi
-
 # ====== STEP 5: Pull container image (if needed) ======
 container_image_primary="ghcr.io/muthukumar-subramaniam/tux2lab-engine:${local_version}"
 container_image_fallback="docker.io/musubram/tux2lab-engine:${local_version}"
@@ -268,6 +244,12 @@ else
     print_error "Container failed to start. Check: sudo podman logs ${CONTAINER_NAME}"
     exit 1
 fi
+
+source /tux2lab/shared-functions/dhcp-pool-dns.sh
+ensure_dhcp_pool_dns_records "$(jq -r '.lab.domain' "${LAB_ENV_JSON}")" \
+    "$(jq -r '.network.ipv4.dhcp_range_start' "${LAB_ENV_JSON}")" \
+    "$(jq -r '.network.ipv4.dhcp_range_end' "${LAB_ENV_JSON}")" \
+    "$(jq -r '.network.ipv6.prefix_base' "${LAB_ENV_JSON}")" || exit 1
 
 # ====== STEP 7: Mount ISOs ======
 print_task "Mounting ISO images..."

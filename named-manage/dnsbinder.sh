@@ -11,20 +11,11 @@ source /tux2lab/common-utils/color-functions.sh
 # Read lab environment from JSON (v2.0.0)
 readonly LAB_ENV_JSON="/tux2lab-data/lab-config/lab_environment.json"
 if [[ -f "${LAB_ENV_JSON}" ]]; then
-    dnsbinder_domain=$(jq -r '.lab.domain' "${LAB_ENV_JSON}")
     dnsbinder_server_ipv4_address=$(jq -r '.network.ipv4.address' "${LAB_ENV_JSON}")
     dnsbinder_server_ipv6_address=$(jq -r '.network.ipv6.address' "${LAB_ENV_JSON}")
-    dnsbinder_server_fqdn=$(jq -r '.lab.engine_fqdn' "${LAB_ENV_JSON}")
     dnsbinder_server_short_name=$(jq -r '.lab.engine_hostname' "${LAB_ENV_JSON}")
-    dnsbinder_gateway=$(jq -r '.network.ipv4.gateway' "${LAB_ENV_JSON}")
     dnsbinder_network_cidr=$(jq -r '.network.ipv4.cidr' "${LAB_ENV_JSON}")
-    dnsbinder_cidr_prefix=$(jq -r '.network.ipv4.prefix' "${LAB_ENV_JSON}")
-    dnsbinder_netmask=$(jq -r '.network.ipv4.netmask' "${LAB_ENV_JSON}")
-    dnsbinder_broadcast=$(jq -r '.network.ipv4.broadcast' "${LAB_ENV_JSON}")
-    dnsbinder_first24_subnet=$(jq -r '.network.ipv4.first24_subnet' "${LAB_ENV_JSON}")
-    dnsbinder_last24_subnet=$(jq -r '.network.ipv4.last24_subnet' "${LAB_ENV_JSON}")
     dnsbinder_ipv6_gateway=$(jq -r '.network.ipv6.gateway' "${LAB_ENV_JSON}")
-    dnsbinder_ipv6_prefix=$(jq -r '.network.ipv6.prefix' "${LAB_ENV_JSON}")
     dnsbinder_ipv6_ula_subnet=$(jq -r '.network.ipv6.ula_subnet' "${LAB_ENV_JSON}")
 fi
 
@@ -234,113 +225,6 @@ fn_check_existence_of_domain() {
     fi
 }
 
-fn_calculate_network_cidr() {
-    local ipv4_address="${1}"
-    local subnet_mask="${2}"
-
-    IFS=. read -r ipv4_octet1 ipv4_octet2 ipv4_octet3 ipv4_octet4 <<< "${ipv4_address}"
-    IFS=. read -r mask_octet1 mask_octet2 mask_octet3 mask_octet4 <<< "${subnet_mask}"
-
-    # Perform bitwise AND operation using arithmetic expansion
-    local network_octet1=$((ipv4_octet1 & mask_octet1))
-    local network_octet2=$((ipv4_octet2 & mask_octet2))
-    local network_octet3=$((ipv4_octet3 & mask_octet3))
-    local network_octet4=$((ipv4_octet4 & mask_octet4))
-
-    local network_cidr=0
-    for octet in ${mask_octet1} ${mask_octet2} ${mask_octet3} ${mask_octet4}; do
-        for bit in {7..0}; do
-            if (( (octet >> bit) & 1 )); then
-                ((network_cidr++))
-            fi
-        done
-    done
-
-    echo "${network_octet1}.${network_octet2}.${network_octet3}.${network_octet4}/${network_cidr}"
-}
-
-fn_cidr_prefix_to_netmask() {
-    local cidr_prefix=$1
-    
-    local binary_mask=$(printf '%*s' "$cidr_prefix" '' | tr ' ' '1')
-    binary_mask=$(printf '%-32s' "$binary_mask" | tr ' ' '0')
-
-    dnsbinder_netmask=""
-    for i in {0..3}; do
-        local octet_decimal=$((2#${binary_mask:$((i * 8)):8}))
-        dnsbinder_netmask+=$octet_decimal
-        [[ $i -lt 3 ]] && dnsbinder_netmask+=.
-    done
-}
-
-fn_calculate_ipv6_network() {
-    local ipv6_address="${1}"
-    local prefix_length="${2}"
-    
-    # Expand IPv6 address to full form (handle :: compression)
-    local addr="${ipv6_address}"
-    
-    # Count existing colons
-    local colon_count=$(echo "${addr}" | tr -cd ':' | wc -c)
-    
-    # Handle :: expansion
-    if [[ "${addr}" == *"::"* ]]; then
-        local missing_groups=$((7 - colon_count + 1))
-        local replacement=":"
-        for ((i=0; i<missing_groups; i++)); do
-            replacement+=":0"
-        done
-        addr="${addr/::/${replacement}:}"
-    fi
-    
-    # Handle leading/trailing colons after expansion
-    addr="${addr#:}"
-    addr="${addr%:}"
-    
-    # Split into groups and pad with zeros
-    IFS=':' read -ra groups <<< "${addr}"
-    local expanded=""
-    for group in "${groups[@]}"; do
-        expanded+=$(printf "%04x" $((16#${group:-0})))
-    done
-    
-    # Calculate how many hex digits to keep (4 bits per hex digit)
-    local hex_digits_to_keep=$((prefix_length / 4))
-    local remaining_bits=$((prefix_length % 4))
-    
-    # Extract network portion
-    local network_hex="${expanded:0:$hex_digits_to_keep}"
-    
-    # Handle remaining bits if prefix is not a multiple of 4
-    if [[ $remaining_bits -gt 0 ]]; then
-        local next_hex_char="${expanded:$hex_digits_to_keep:1}"
-        local next_value=$((16#${next_hex_char:-0}))
-        # Create mask for remaining bits (e.g., 3 bits = 1110 = 0xe)
-        local mask=$(( (0xf << (4 - remaining_bits)) & 0xf ))
-        local masked_value=$((next_value & mask))
-        network_hex+=$(printf "%x" $masked_value)
-    fi
-    
-    # Pad with zeros to get full 32 hex digits
-    network_hex=$(printf "%-32s" "$network_hex" | tr ' ' '0')
-    
-    # Format as IPv6 (insert colons every 4 chars)
-    local formatted=""
-    for ((i=0; i<32; i+=4)); do
-        formatted+="${network_hex:$i:4}"
-        [[ $i -lt 28 ]] && formatted+=":"
-    done
-    
-    # Compress consecutive zeros (find longest run of :0000: groups)
-    local compressed="${formatted}"
-    # Replace leading zeros in each group
-    compressed=$(echo "${compressed}" | sed 's/:0\{1,3\}\([0-9a-f]\)/:\1/g; s/^0\{1,3\}\([0-9a-f]\)/\1/')
-    # Replace longest sequence of :0: with ::
-    compressed=$(echo "${compressed}" | sed 's/\(:\(0:\)\{2,\}\)/::/' | sed 's/^0::/::/' | sed 's/::0$/::/')
-    
-    echo "${compressed}"
-}
-
 fn_split_network_into_cidr24subnets() {
 
     v_network_and_cidr="${1}"
@@ -381,17 +265,10 @@ fn_split_network_into_cidr24subnets() {
         done
     }
 
-    if [[ -z "${v_network_and_cidr}" ]];
-    then
-        v_network_and_cidr=$(ip r | awk -v iface="${v_primary_interface}" '!/default/ && $0 ~ iface {print $1; exit}')
-    fi
-
     # Extract network and CIDR from input
     v_network="${v_network_and_cidr%/*}"
     v_cidr="${v_network_and_cidr#*/}"
 
-    fn_cidr_prefix_to_netmask "${v_cidr}"
-    
     # Check if CIDR is valid
     if ! [[ "${v_cidr}" =~ ^[0-9]+$ ]] || [[ "${v_cidr}" -lt 16 ]] || [[ "${v_cidr}" -gt 24 ]]; then
         print_error "Invalid CIDR. Only Networks with CIDR between 16 and 24 is allowed ! "
@@ -586,6 +463,7 @@ fn_update_record_ttl() {
 fn_create_ipv6_only_record() {
     local hostname="${1:-}"
     local auto_mode="${2:-}"
+    local requested_ipv6="${3:-}"
 
     if [[ -z "$hostname" && "$auto_mode" != "Automated-Execution" ]]; then
         read -rp "Enter hostname for IPv6-only record: " hostname
@@ -612,40 +490,60 @@ fn_create_ipv6_only_record() {
         return 8
     fi
 
-    # Find next available IPv6 offset >= 1023 (0x3ff)
     local ipv6_prefix_base
     ipv6_prefix_base=$(fn_ipv6_prefix "${dnsbinder_ipv6_gateway}")
 
     local next_offset=1023
-    local existing_offsets
-    existing_offsets=$(awk '
-        function hex2dec(h,    i,c,d) {
-            d=0; h=tolower(h)
-            for (i=1; i<=length(h); i++) { c=substr(h,i,1); d=d*16+index("0123456789abcdef",c)-1 }
-            return d
-        }
-        /IN AAAA/ {
-            addr=$NF
-            if (index(addr,"::")) { split(addr,ab,"::"); hex_part=ab[2]; gsub(/:/,"",hex_part) }
-            else { n=split(addr,g,":"); hex_part=g[5] g[6] g[7] g[8] }
-            offset=hex2dec(hex_part)
-            if (offset >= 1023) print offset
-        }
-    ' "${v_fw_zone}" | sort -n)
-
-    if [[ -n "$existing_offsets" ]]; then
-        local max_offset
-        max_offset=$(echo "$existing_offsets" | tail -1)
-        next_offset=$((max_offset + 1))
-        # Guard against bash 63-bit integer overflow
-        if [[ $next_offset -lt 0 ]]; then
+    if [[ -n "$requested_ipv6" ]]; then
+        if [[ "$requested_ipv6" =~ ^${ipv6_prefix_base}::([0-9a-fA-F]{1,4})$ ]] && (( 16#${BASH_REMATCH[1]} >= 1023 )); then
+            next_offset=$((16#${BASH_REMATCH[1]}))
+        else
             if [[ "$auto_mode" != "Automated-Execution" ]]; then
-                print_error "IPv6-only address space exhausted!"
+                print_error "IPv6 address '${requested_ipv6}' must be ${ipv6_prefix_base}::3ff to ${ipv6_prefix_base}::ffff."
                 fn_release_zone_lock
             fi
-            return 255
+            return 1
         fi
-        [[ $next_offset -lt 1023 ]] && next_offset=1023
+        requested_ipv6="${ipv6_prefix_base}::$(printf '%x' "$next_offset")"
+        if awk -v a="$requested_ipv6" '/IN AAAA/ && $NF == a { f = 1 } END { exit !f }' "${v_fw_zone}"; then
+            if [[ "$auto_mode" != "Automated-Execution" ]]; then
+                print_error "IPv6 address '${requested_ipv6}' is already in use."
+                fn_release_zone_lock
+            fi
+            return 8
+        fi
+    else
+        # Find next available IPv6 offset >= 1023 (0x3ff)
+        local existing_offsets
+        existing_offsets=$(awk '
+            function hex2dec(h,    i,c,d) {
+                d=0; h=tolower(h)
+                for (i=1; i<=length(h); i++) { c=substr(h,i,1); d=d*16+index("0123456789abcdef",c)-1 }
+                return d
+            }
+            /IN AAAA/ {
+                addr=$NF
+                if (index(addr,"::")) { split(addr,ab,"::"); hex_part=ab[2]; gsub(/:/,"",hex_part) }
+                else { n=split(addr,g,":"); hex_part=g[5] g[6] g[7] g[8] }
+                offset=hex2dec(hex_part)
+                if (offset >= 1023) print offset
+            }
+        ' "${v_fw_zone}" | sort -n)
+
+        if [[ -n "$existing_offsets" ]]; then
+            local max_offset
+            max_offset=$(echo "$existing_offsets" | tail -1)
+            next_offset=$((max_offset + 1))
+            # Guard against bash 63-bit integer overflow
+            if [[ $next_offset -lt 0 ]]; then
+                if [[ "$auto_mode" != "Automated-Execution" ]]; then
+                    print_error "IPv6-only address space exhausted!"
+                    fn_release_zone_lock
+                fi
+                return 255
+            fi
+            [[ $next_offset -lt 1023 ]] && next_offset=1023
+        fi
     fi
 
     local offset_hex=$(printf "%x" $next_offset)
@@ -827,7 +725,6 @@ fn_configure_named_dns_server() {
 
     # v2.0.0: Always read from lab_environment.json (no VM/host mode distinction)
     v_dns_host_short_name="${dnsbinder_server_short_name}"
-    v_primary_interface='labbr0'
     v_primary_ip="${dnsbinder_server_ipv4_address}"
 
     if [[ -z "${v_primary_ip}" ]]; then
@@ -836,20 +733,17 @@ fn_configure_named_dns_server() {
         exit 1
     fi
 
-    v_network_gateway="${dnsbinder_gateway}"
     v_ipv6_address="${dnsbinder_server_ipv6_address:-}"
-    v_ipv6_gateway="${dnsbinder_ipv6_gateway:-}"
-    v_ipv6_prefix="${dnsbinder_ipv6_prefix:-}"
     v_ipv6_ula_subnet="${dnsbinder_ipv6_ula_subnet:-}"
 
     # Verify dual-stack configuration is present
     if [[ -z "${v_ipv6_ula_subnet}" ]]; then
         print_error "IPv6 configuration not found. Dual-stack (IPv4+IPv6) is required."
-        print_error "Please configure IPv6 on ${v_primary_interface} before running this script."
+        print_error "Please configure IPv6 on labbr0 before running this script."
         exit 1
     fi
 
-    fn_split_network_into_cidr24subnets
+    fn_split_network_into_cidr24subnets "${dnsbinder_network_cidr}"
 
     print_task_done
 
@@ -937,20 +831,8 @@ EOF
 
     # Add IPv6 reverse zone if IPv6 is configured
     if [[ -n "${v_ipv6_ula_subnet}" ]]; then
-        # Extract IPv6 prefix for reverse zone (e.g., fd28:2808:2020:3000::/64)
-        # Convert to reverse DNS format
-        v_ipv6_base=$(echo "${v_ipv6_ula_subnet}" | cut -d'/' -f1 | sed 's/::$//')
-        # For fd28:2808:2020:3000::, reverse is 0.0.0.3.0.2.0.2.8.0.8.2.8.2.d.f.ip6.arpa
-        v_ipv6_reverse_zone=$(echo "${v_ipv6_base}" | awk -F':' '{
-            for(i=NF; i>=1; i--) {
-                if($i != "") {
-                    len=length($i)
-                    for(j=len; j>=1; j--) {
-                        printf "%s.", substr($i,j,1)
-                    }
-                }
-            }
-        }' | sed 's/\.$//')
+        # /64 prefix: first 16 nibbles of the expanded address, e.g. fd28:2808:2020:3000::/64 -> 0.0.0.3.0.2.0.2.8.0.8.2.8.2.d.f
+        v_ipv6_reverse_zone=$(fn_expand_ipv6 "${v_ipv6_ula_subnet%/*}" | tr -d ':' | cut -c1-16 | rev | sed 's/./&./g; s/\.$//')
         
         tee -a /tux2lab-data/named/named.conf > /dev/null << EOF
 //IPv6 Reverse Zone
@@ -974,7 +856,7 @@ EOF
         v_file_name="${1}"
         local serial_number=$(date +%s)
         sed "s/DNS_HOST_SHORT_NAME/${v_dns_host_short_name}/g; s/DNS_DOMAIN/${v_given_domain}/g; s/0000000000/${serial_number}/g" \
-            "${v_script_dir}/zone-header.template" >> "${v_file_name}"
+            "${v_script_dir}/zone-header.template" > "${v_file_name}"
     }
 
     v_zone_file_name="${var_zone_dir}/${v_given_domain}-forward.db"
@@ -2374,9 +2256,9 @@ fn_handle_multiple_host_record_with_ip() {
         read -e v_host_list_file
     fi
 
-    if [[ ! -f "${v_host_list_file}" ]]; then print_error "File \"${v_host_list_file}\" doesn't exist!\n"; fn_release_zone_lock; exit; fi
+    if [[ ! -f "${v_host_list_file}" ]]; then print_error "File \"${v_host_list_file}\" doesn't exist!\n"; fn_release_zone_lock; exit 1; fi
 
-    if [[ ! -s "${v_host_list_file}" ]]; then print_error "File \"${v_host_list_file}\" is empty!\n"; fn_release_zone_lock; exit; fi
+    if [[ ! -s "${v_host_list_file}" ]]; then print_error "File \"${v_host_list_file}\" is empty!\n"; fn_release_zone_lock; exit 1; fi
 
     # Work on a copy to avoid modifying the user's original file
     local v_work_file
@@ -2538,6 +2420,7 @@ fn_handle_multiple_host_record_with_ip() {
         clear
     fi
 
+    local v_reload_failed=false
     if [[ ${v_count_successfull} -gt 0 ]]; then
         v_if_autorun_false=true
         fn_update_serial_number_of_zones
@@ -2547,6 +2430,7 @@ fn_handle_multiple_host_record_with_ip() {
             print_task_done
         else
             print_task_fail
+            v_reload_failed=true
         fi
     else
         print_yellow "No changes done! Nothing to do!"
@@ -2594,6 +2478,8 @@ fn_handle_multiple_host_record_with_ip() {
     rm -f "${v_tmp_file_dnsbinder}"
 
     fn_release_zone_lock
+
+    [[ ${v_count_failed} -eq 0 ]] && ! ${v_reload_failed}
 }
 
 fn_handle_multiple_host_record() {      
@@ -2630,9 +2516,9 @@ fn_handle_multiple_host_record() {
         read -e v_host_list_file
     fi
     
-    if [[ ! -f "${v_host_list_file}" ]];then print_error "File \"${v_host_list_file}\" doesn't exist!\n";fn_release_zone_lock;exit;fi 
+    if [[ ! -f "${v_host_list_file}" ]];then print_error "File \"${v_host_list_file}\" doesn't exist!\n";fn_release_zone_lock;exit 1;fi
     
-    if [[ ! -s "${v_host_list_file}" ]];then print_error "File \"${v_host_list_file}\" is empty!\n";fn_release_zone_lock;exit;fi
+    if [[ ! -s "${v_host_list_file}" ]];then print_error "File \"${v_host_list_file}\" is empty!\n";fn_release_zone_lock;exit 1;fi
     
     # Work on a copy to avoid modifying the user's original file
     local v_work_file
@@ -2702,6 +2588,10 @@ fn_handle_multiple_host_record() {
     
     while read -r v_host_record
     do
+        local v_requested_ipv6=""
+        if [[ ${v_action_required} == "create" && "${record_stack}" == "ipv6" ]]; then
+            read -r v_host_record v_requested_ipv6 <<< "${v_host_record}"
+        fi
         # Update progress header in place (move cursor to top)
         if ! $inline_mode; then
             tput cup 1 0
@@ -2734,7 +2624,7 @@ fn_handle_multiple_host_record() {
         if [[ ${v_action_required} == "create" ]]
                 then
             if [[ "${record_stack}" == "ipv6" ]]; then
-                fn_create_ipv6_only_record "${v_host_record}" "Automated-Execution"
+                fn_create_ipv6_only_record "${v_host_record}" "Automated-Execution" "${v_requested_ipv6}"
             else
                 fn_create_host_record "${v_host_record}" "Automated-Execution"
             fi
@@ -2849,6 +2739,7 @@ fn_handle_multiple_host_record() {
         clear
     fi
 
+    local v_reload_failed=false
     if [[ ${v_count_successfull} -gt 0 ]]
     then
         v_if_autorun_false=true
@@ -2862,6 +2753,7 @@ fn_handle_multiple_host_record() {
             print_task_done
         else
             print_task_fail
+            v_reload_failed=true
         fi
     else
         print_yellow "No changes done! Nothing to do!"
@@ -2918,6 +2810,8 @@ fn_handle_multiple_host_record() {
     rm -f "${v_tmp_file_dnsbinder}"
 
     fn_release_zone_lock
+
+    [[ ${v_count_failed} -eq 0 ]] && ! ${v_reload_failed}
 }
 
 fn_get_cname_record() {
@@ -3228,7 +3122,7 @@ Use one of the following Options :
     -cfy                         caution ! To do the above without any confirmation
     -c4f                         To create multiple IPv4-only host records from a file
     -c4fy                        caution ! To do the above without any confirmation
-    -c6f                         To create multiple IPv6-only host records from a file
+    -c6f                         To create multiple IPv6-only host records from a file (hostname [ipv6])
     -c6fy                        caution ! To do the above without any confirmation
     -cif,  --create-with-ip-file To create multiple host records with specific IPs from a file (hostname ipv4)
     -cify                        caution ! To do the above without any confirmation

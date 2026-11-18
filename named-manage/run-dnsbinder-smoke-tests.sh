@@ -113,6 +113,16 @@ if [[ -z "$SETUP_DOMAIN" || "$SETUP_DOMAIN" == "null" ]]; then
     exit 1
 fi
 
+IFS=. read -r NET_O1 NET_O2 NET_O3 _ <<< "$(jq -r '.network.ipv4.network' /tux2lab-data/lab-config/lab_environment.json)"
+V6=$(jq -r '.network.ipv6.prefix_base' /tux2lab-data/lab-config/lab_environment.json)
+if [[ ! "$NET_O3" =~ ^[0-9]+$ || -z "$V6" || "$V6" == "null" ]]; then
+    echo "Cannot determine the lab network from lab_environment.json."
+    exit 1
+fi
+SUBNET1="${NET_O1}.${NET_O2}.${NET_O3}"
+SUBNET2="${NET_O1}.${NET_O2}.$((NET_O3 + 1))"
+SUBNET3="${NET_O1}.${NET_O2}.$((NET_O3 + 2))"
+
 printf "${YELLOW}dnsbinder smoke test suite${NC}\n"
 printf "Domain: ${SETUP_DOMAIN}\n\n"
 
@@ -152,7 +162,7 @@ assert "--setup adds gateway CNAME" "$(grep -c '^gateway .*IN CNAME' "$FW_ZONE_F
 assert "--setup adds server IPv6 PTR" "$(grep -c 'IN PTR tux2lab-engine' "$IPV6_ZONE_FILE")" "1"
 
 # Verify IPv4 reverse zone exists
-ptr_zone=$(find "$FW_ZONE" -name "10.28.28.*-reverse.db" 2>/dev/null | head -1)
+ptr_zone=$(find "$FW_ZONE" -name "${SUBNET1}.*-reverse.db" 2>/dev/null | head -1)
 assert "--setup creates IPv4 reverse zone" "$(test -n "$ptr_zone" && echo yes)" "yes"
 
 # Verify server PTR in IPv4 reverse
@@ -183,7 +193,7 @@ assert "AAAA record in zone" "$(grep -c '^smoke-dual .*IN AAAA' "$FW_ZONE_FILE")
 
 # IPv6 offset check (first host after server = offset 2 = ::2)
 ipv6=$(awk '/^smoke-dual .*IN AAAA/ {print $NF}' "$FW_ZONE_FILE")
-assert "IPv6 offset correct (::2)" "$ipv6" "fd28:2808:2020:3000::2"
+assert "IPv6 offset correct (::2)" "$ipv6" "${V6}::2"
 
 # IPv6 PTR exists
 assert "IPv6 PTR record exists" "$(grep -c 'smoke-dual' "$IPV6_ZONE_FILE")" "1"
@@ -217,7 +227,7 @@ assert "AAAA record exists" "$(grep -c '^smoke-v6only .*IN AAAA' "$FW_ZONE_FILE"
 
 # Offset >= 1023 (0x3ff)
 ipv6=$(awk '/^smoke-v6only .*IN AAAA/ {print $NF}' "$FW_ZONE_FILE")
-assert "IPv6 offset >= 0x3ff" "$ipv6" "fd28:2808:2020:3000::3ff"
+assert "IPv6 offset >= 0x3ff" "$ipv6" "${V6}::3ff"
 
 # IPv6 PTR exists
 assert "IPv6 PTR record exists" "$(grep -c 'smoke-v6only' "$IPV6_ZONE_FILE")" "1"
@@ -230,14 +240,14 @@ assert_contains "-c6 duplicate detected" "$out" "already exists"
 section "4. CREATE WITH SPECIFIC IP (-ci)"
 # ═══════════════════════════════════════════════════════════════════════
 
-out=$(sudo "$DNSBINDER" -ci smoke-ci 10.28.29.50 -y 2>&1)
+out=$(sudo "$DNSBINDER" -ci smoke-ci "${SUBNET2}.50" -y 2>&1)
 assert_contains "-ci creates record" "$out" "Created host record"
 ip=$(awk '/^smoke-ci .*IN A / {print $NF}' "$FW_ZONE_FILE")
-assert "Specific IP assigned" "$ip" "10.28.29.50"
+assert "Specific IP assigned" "$ip" "${SUBNET2}.50"
 
-# Offset = (29-28)*256+50 = 306 = 0x132
+# Offset = 1*256+50 = 306 = 0x132 (second /24 of the lab network)
 ipv6=$(awk '/^smoke-ci .*IN AAAA/ {print $NF}' "$FW_ZONE_FILE")
-assert "IPv6 offset matches IPv4 (0x132)" "$ipv6" "fd28:2808:2020:3000::132"
+assert "IPv6 offset matches IPv4 (0x132)" "$ipv6" "${V6}::132"
 
 # Out-of-range IP
 out=$(sudo "$DNSBINDER" -ci smoke-oor 192.168.1.1 -y 2>&1); rc=$?
@@ -249,7 +259,7 @@ out=$(sudo "$DNSBINDER" -ci smoke-badip 999.1.2.3 -y 2>&1); rc=$?
 assert_contains "-ci rejects invalid IP format" "$out" "Invalid input"
 
 # Duplicate host with -ci
-out=$(sudo "$DNSBINDER" -ci smoke-ci 10.28.29.51 -y 2>&1)
+out=$(sudo "$DNSBINDER" -ci smoke-ci "${SUBNET2}.51" -y 2>&1)
 assert_contains "-ci duplicate detected" "$out" "already exists"
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -401,10 +411,22 @@ assert_contains "-c6fy creates records" "$out" "Successful : 2"
 assert "No A for bulk v6" "$(grep -c '^smoke-bv6[ab] .*IN A ' "$FW_ZONE_FILE")" "0"
 assert "AAAA for bulk v6" "$(grep -c '^smoke-bv6[ab] .*IN AAAA' "$FW_ZONE_FILE")" "2"
 
+# IPv6-only bulk with explicit addresses (in use, out of range, valid)
+cat > /tmp/smoke-bulk-v6x.txt << EOF
+smoke-bv6x1 $(awk '/^smoke-bv6a .*IN AAAA/ {print $NF}' "$FW_ZONE_FILE")
+smoke-bv6x2 ${V6}::10
+smoke-bv6x3 ${V6}::05ff
+EOF
+out=$(sudo "$DNSBINDER" -c6fy /tmp/smoke-bulk-v6x.txt --inline 2>&1); rc=$?
+assert_contains "-c6fy explicit: creates valid one" "$out" "Successful : 1"
+assert_exit_code "-c6fy explicit: exits non-zero on failures" "$rc" "1"
+assert "-c6fy explicit: address normalised" "$(awk '/^smoke-bv6x3 .*IN AAAA/ {print $NF}' "$FW_ZONE_FILE")" "${V6}::5ff"
+assert "-c6fy explicit: rejected names not created" "$(grep -c '^smoke-bv6x[12] ' "$FW_ZONE_FILE")" "0"
+
 # Bulk with IP
-cat > /tmp/smoke-bulk-ci.txt << 'EOF'
-smoke-bci1 10.28.30.20
-smoke-bci2 10.28.30.21
+cat > /tmp/smoke-bulk-ci.txt << EOF
+smoke-bci1 ${SUBNET3}.20
+smoke-bci2 ${SUBNET3}.21
 smoke-bci3 192.168.1.1
 EOF
 out=$(sudo "$DNSBINDER" -cify /tmp/smoke-bulk-ci.txt --inline 2>&1)
